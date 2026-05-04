@@ -1,0 +1,45 @@
+# Environnement local
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Builds
+dist/
+build/
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Backups
+*.bak
+*.backup
+*~
+
+# Netlify
+.netlify/
+
+# Tests
+coverage/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Fichiers temporaires de développement
+backup/
+old/
+old_versions/
+*.old.html

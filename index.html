@@ -1,0 +1,1858 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FacturaPro — La facturation marocaine, enfin simple</title>
+    <meta name="description" content="Logiciel de facturation 100% marocain pour AE, Freelances et SARL. Conforme ICE/IF/RC, calcul CNSS automatique, PDF pro. Lifetime Deal 499 MAD.">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="FacturaPro — Facturation Maroc">
+    <meta property="og:description" content="Le seul logiciel de facturation 100% marocain. Lifetime Deal 499 MAD.">
+    <meta property="og:type" content="website">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary: #1B3A6B;
+            --primary-deep: #122849;
+            --accent: #C9A95B;
+            --accent-bright: #E0BD6B;
+            --success: #2E7D5B;
+            --danger: #C84A4A;
+            --bg: #F7F5F0;
+            --surface: #FFFFFF;
+            --surface-soft: #FAF8F3;
+            --ink: #1A1F2E;
+            --ink-soft: #4A5468;
+            --ink-mute: #8B95A8;
+            --border: #E8E5DD;
+            --shadow: rgba(26, 31, 46, 0.06);
+            --shadow-md: rgba(26, 31, 46, 0.12);
+            --shadow-lg: rgba(26, 31, 46, 0.2);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Manrope', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .display { font-family: 'Crimson Pro', serif; letter-spacing: -0.02em; }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* === HEADER === */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(247, 245, 240, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 14px 0;
+        }
+
+        .nav-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .nav-mark {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            font-family: 'Crimson Pro', serif;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .nav-name {
+            font-family: 'Crimson Pro', serif;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 28px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--ink-soft);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover { color: var(--primary); }
+
+        @media (max-width: 800px) {
+            .nav-links a:not(.btn) { display: none; }
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 20px;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            border: none;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-deep);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(27, 58, 107, 0.3);
+        }
+
+        .btn-accent {
+            background: var(--accent);
+            color: var(--ink);
+        }
+
+        .btn-accent:hover {
+            background: var(--accent-bright);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--ink);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface-soft);
+        }
+
+        .btn-large {
+            padding: 16px 32px;
+            font-size: 16px;
+            border-radius: 12px;
+        }
+
+        /* === HERO === */
+        .hero {
+            padding: 140px 0 80px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -200px;
+            right: -200px;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(201, 169, 91, 0.12) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            bottom: -100px;
+            left: -100px;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(27, 58, 107, 0.08) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 64px;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        @media (max-width: 1000px) {
+            .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+            .hero { padding: 110px 0 60px; }
+        }
+
+        .hero-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(201, 169, 91, 0.15);
+            border: 1px solid rgba(201, 169, 91, 0.3);
+            color: #8B6F1F;
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .hero h1 {
+            font-family: 'Crimson Pro', serif;
+            font-size: clamp(40px, 6vw, 64px);
+            font-weight: 700;
+            line-height: 1.05;
+            letter-spacing: -0.025em;
+            color: var(--ink);
+            margin-bottom: 20px;
+        }
+
+        .hero h1 em {
+            font-style: italic;
+            color: var(--primary);
+            position: relative;
+            display: inline-block;
+        }
+
+        .hero h1 em::after {
+            content: '';
+            position: absolute;
+            bottom: 4px;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background: var(--accent);
+            opacity: 0.4;
+            z-index: -1;
+        }
+
+        .hero-tagline {
+            font-size: 18px;
+            color: var(--ink-soft);
+            line-height: 1.6;
+            margin-bottom: 32px;
+            max-width: 540px;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 28px;
+        }
+
+        .hero-trust {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: var(--ink-mute);
+            font-size: 13px;
+        }
+
+        .stars { color: #E8B14A; font-size: 14px; }
+
+        .avatars {
+            display: flex;
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid var(--bg);
+            margin-left: -10px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .avatar:first-child { margin-left: 0; }
+
+        /* Hero visual: invoice mockup */
+        .hero-visual {
+            position: relative;
+            perspective: 1500px;
+        }
+
+        .invoice-mockup {
+            background: var(--surface);
+            border-radius: 16px;
+            box-shadow: 0 30px 80px var(--shadow-lg);
+            overflow: hidden;
+            transform: rotateY(-8deg) rotateX(4deg) rotateZ(-2deg);
+            transition: transform 0.6s ease;
+        }
+
+        .invoice-mockup:hover {
+            transform: rotateY(-4deg) rotateX(2deg) rotateZ(-1deg);
+        }
+
+        .mockup-top {
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            color: white;
+            padding: 24px;
+            position: relative;
+        }
+
+        .mockup-top::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--accent);
+        }
+
+        .mockup-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .mockup-company {
+            font-family: 'Crimson Pro', serif;
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .mockup-status {
+            color: var(--accent);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+        }
+
+        .mockup-title {
+            font-family: 'Crimson Pro', serif;
+            font-size: 30px;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .mockup-number {
+            color: var(--accent);
+            font-size: 13px;
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .mockup-body {
+            padding: 24px;
+        }
+
+        .mockup-info {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 20px;
+            font-size: 11px;
+            color: var(--ink-mute);
+        }
+
+        .mockup-info strong {
+            color: var(--ink);
+            font-weight: 700;
+        }
+
+        .mockup-client {
+            background: var(--surface-soft);
+            padding: 14px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .mockup-client-label {
+            font-size: 10px;
+            color: var(--primary);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 6px;
+        }
+
+        .mockup-client-name {
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--ink);
+            margin-bottom: 2px;
+        }
+
+        .mockup-client-detail {
+            font-size: 11px;
+            color: var(--ink-mute);
+        }
+
+        .mockup-table {
+            width: 100%;
+            font-size: 11px;
+            margin-bottom: 16px;
+        }
+
+        .mockup-table th {
+            background: var(--primary);
+            color: white;
+            text-align: left;
+            padding: 8px 10px;
+            font-weight: 700;
+        }
+
+        .mockup-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            color: var(--ink-soft);
+        }
+
+        .mockup-totals {
+            background: var(--primary);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mockup-totals strong {
+            color: var(--accent);
+            font-family: 'Crimson Pro', serif;
+            font-size: 18px;
+        }
+
+        /* Floating chips */
+        .floating-chip {
+            position: absolute;
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 10px 16px;
+            box-shadow: 0 12px 32px var(--shadow-md);
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .floating-chip-1 {
+            top: -10px;
+            left: -30px;
+            color: var(--success);
+            animation-delay: 0s;
+        }
+
+        .floating-chip-2 {
+            bottom: 40px;
+            right: -20px;
+            color: var(--primary);
+            animation-delay: 1.5s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @media (max-width: 1000px) {
+            .floating-chip-1, .floating-chip-2 { display: none; }
+        }
+
+        /* === SOCIAL PROOF BAR === */
+        .social-proof {
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 32px 0;
+            text-align: center;
+        }
+
+        .social-proof-label {
+            font-size: 12px;
+            color: var(--ink-mute);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .social-proof-stats {
+            display: flex;
+            justify-content: center;
+            gap: 64px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-family: 'Crimson Pro', serif;
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--primary);
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--ink-mute);
+            margin-top: 6px;
+            font-weight: 500;
+        }
+
+        /* === SECTIONS === */
+        section {
+            padding: 80px 0;
+        }
+
+        .section-eyebrow {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .section-title {
+            font-family: 'Crimson Pro', serif;
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.1;
+            color: var(--ink);
+            text-align: center;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .section-title em {
+            font-style: italic;
+            color: var(--primary);
+        }
+
+        .section-subtitle {
+            font-size: 18px;
+            color: var(--ink-soft);
+            text-align: center;
+            max-width: 640px;
+            margin: 0 auto 56px;
+            line-height: 1.6;
+        }
+
+        /* === FEATURES === */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        .feature {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            transition: all 0.3s;
+        }
+
+        .feature:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px var(--shadow-md);
+            border-color: var(--accent);
+        }
+
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 18px;
+            color: var(--accent);
+        }
+
+        .feature h3 {
+            font-family: 'Crimson Pro', serif;
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--ink);
+        }
+
+        .feature p {
+            color: var(--ink-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* === COMPARISON === */
+        .comparison {
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 30px var(--shadow);
+            border: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .comparison table {
+            width: 100%;
+            min-width: 600px;
+            border-collapse: collapse;
+        }
+
+        .comparison th {
+            text-align: left;
+            padding: 16px;
+            border-bottom: 2px solid var(--border);
+            font-family: 'Crimson Pro', serif;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .comparison th.highlight {
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            color: var(--accent-bright);
+            border-radius: 12px 12px 0 0;
+            text-align: center;
+        }
+
+        .comparison td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--ink-soft);
+            font-size: 14px;
+        }
+
+        .comparison td.highlight {
+            background: rgba(27, 58, 107, 0.04);
+            font-weight: 600;
+            color: var(--primary);
+            text-align: center;
+        }
+
+        .check { color: var(--success); font-weight: 700; }
+        .cross { color: var(--danger); font-weight: 700; }
+
+        /* === PRICING === */
+        .pricing-card {
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            color: white;
+            border-radius: 24px;
+            padding: 56px 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        .pricing-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+            opacity: 0.2;
+        }
+
+        .pricing-badge {
+            display: inline-block;
+            background: var(--accent);
+            color: var(--ink);
+            padding: 8px 20px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-card h3 {
+            font-family: 'Crimson Pro', serif;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-card .pricing-tagline {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 32px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .price {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 8px;
+        }
+
+        .price-old {
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.5);
+            text-decoration: line-through;
+            margin-right: 16px;
+        }
+
+        .price-now {
+            font-family: 'Crimson Pro', serif;
+            font-size: 72px;
+            font-weight: 900;
+            color: var(--accent-bright);
+            letter-spacing: -0.04em;
+        }
+
+        .price-currency {
+            font-size: 32px;
+            color: var(--accent);
+            font-weight: 700;
+            margin-left: 8px;
+        }
+
+        .price-once {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            margin-bottom: 32px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-features {
+            list-style: none;
+            text-align: left;
+            max-width: 360px;
+            margin: 0 auto 32px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-features li {
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 15px;
+        }
+
+        .pricing-features li::before {
+            content: '✓';
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .urgency {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 12px 20px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 24px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .urgency-pulse {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.3); }
+        }
+
+        /* Alternative pricing */
+        .alt-pricing {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            max-width: 900px;
+            margin: 40px auto 0;
+        }
+
+        .alt-tier {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .alt-tier:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .alt-tier h4 {
+            font-family: 'Crimson Pro', serif;
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .alt-tier .alt-price {
+            font-family: 'Crimson Pro', serif;
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 12px 0;
+        }
+
+        .alt-tier .alt-price small {
+            font-size: 14px;
+            color: var(--ink-mute);
+            font-weight: 500;
+        }
+
+        .alt-tier ul {
+            list-style: none;
+            text-align: left;
+            margin: 16px 0 24px;
+            font-size: 13px;
+            color: var(--ink-soft);
+        }
+
+        .alt-tier li {
+            padding: 4px 0;
+        }
+
+        .alt-tier li::before {
+            content: '✓ ';
+            color: var(--success);
+            font-weight: 700;
+        }
+
+        /* === TESTIMONIALS === */
+        .testimonials {
+            background: var(--surface);
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+        }
+
+        .testimonial {
+            background: var(--surface-soft);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            position: relative;
+        }
+
+        .testimonial-quote-mark {
+            font-family: 'Crimson Pro', serif;
+            font-size: 64px;
+            color: var(--accent);
+            line-height: 0.8;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .testimonial-text {
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--ink);
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .testimonial-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+        }
+
+        .testimonial-name {
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--ink);
+        }
+
+        .testimonial-role {
+            font-size: 12px;
+            color: var(--ink-mute);
+        }
+
+        /* === FAQ === */
+        .faq-list {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+
+        .faq-item:hover {
+            border-color: var(--primary);
+        }
+
+        .faq-question {
+            padding: 18px 24px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            color: var(--ink);
+            font-size: 15px;
+        }
+
+        .faq-toggle {
+            font-size: 24px;
+            color: var(--primary);
+            transition: transform 0.3s;
+        }
+
+        .faq-item.open .faq-toggle {
+            transform: rotate(45deg);
+        }
+
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .faq-item.open .faq-answer {
+            max-height: 400px;
+        }
+
+        .faq-answer-inner {
+            padding: 0 24px 20px;
+            color: var(--ink-soft);
+            line-height: 1.7;
+            font-size: 14px;
+        }
+
+        /* === FINAL CTA === */
+        .final-cta {
+            text-align: center;
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            color: white;
+            border-radius: 24px;
+            padding: 64px 40px;
+            position: relative;
+            overflow: hidden;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .final-cta::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent) 0%, transparent 60%);
+            opacity: 0.15;
+        }
+
+        .final-cta h2 {
+            font-family: 'Crimson Pro', serif;
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            margin-bottom: 16px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .final-cta h2 em {
+            color: var(--accent-bright);
+            font-style: italic;
+        }
+
+        .final-cta p {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 17px;
+            margin-bottom: 32px;
+            max-width: 540px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .final-cta-btn {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* === FOOTER === */
+        footer {
+            background: var(--ink);
+            color: rgba(255, 255, 255, 0.7);
+            padding: 56px 0 32px;
+            font-size: 14px;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 800px) {
+            .footer-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        .footer-brand-name {
+            font-family: 'Crimson Pro', serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .footer-tagline {
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .footer-col h4 {
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .footer-col a {
+            display: block;
+            color: rgba(255, 255, 255, 0.6);
+            text-decoration: none;
+            padding: 4px 0;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .footer-col a:hover { color: var(--accent); }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 13px;
+        }
+
+        /* Mobile menu */
+        .mobile-only { display: none; }
+        @media (max-width: 800px) {
+            .mobile-only { display: inline-flex; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="nav">
+    <div class="container">
+        <div class="nav-inner">
+            <a href="#" class="nav-brand">
+                <div class="nav-mark">F</div>
+                <div class="nav-name">FacturaPro</div>
+            </a>
+            <div class="nav-links">
+                <a href="#fonctionnalites">Fonctionnalités</a>
+                <a href="#comparaison">Comparaison</a>
+                <a href="#tarifs">Tarifs</a>
+                <a href="#temoignages">Avis</a>
+                <a href="#faq">FAQ</a>
+                <a href="app.html" class="btn btn-primary">Commencer →</a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-grid">
+            <div>
+                <div class="hero-eyebrow">
+                    <span style="width: 8px; height: 8px; background: var(--accent); border-radius: 50%;"></span>
+                    🇲🇦 100% conforme aux normes marocaines
+                </div>
+                <h1>La facturation<br>marocaine, <em>enfin simple</em>.</h1>
+                <p class="hero-tagline">
+                    Le logiciel pensé par et pour les <strong>auto-entrepreneurs</strong>, 
+                    <strong>freelances</strong> et <strong>SARL</strong> du Maroc. 
+                    ICE, IF, RC, CNSS, TVA — tout est déjà intégré.
+                </p>
+                <div class="hero-cta">
+                    <a href="app.html" class="btn btn-primary btn-large">
+                        Essayer gratuitement →
+                    </a>
+                    <a href="#tarifs" class="btn btn-secondary btn-large">
+                        Voir les tarifs
+                    </a>
+                </div>
+                <div class="hero-trust">
+                    <div class="avatars">
+                        <div class="avatar">A</div>
+                        <div class="avatar">M</div>
+                        <div class="avatar">Y</div>
+                        <div class="avatar">S</div>
+                    </div>
+                    <div>
+                        <div class="stars">★★★★★</div>
+                        <div>Adopté par 500+ entrepreneurs marocains</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="hero-visual">
+                <div class="floating-chip floating-chip-1">
+                    <span style="font-size: 18px;">✓</span>
+                    <span>Conforme ICE</span>
+                </div>
+                <div class="floating-chip floating-chip-2">
+                    <span style="font-size: 18px;">⚡</span>
+                    <span>PDF en 1 clic</span>
+                </div>
+                
+                <div class="invoice-mockup">
+                    <div class="mockup-top">
+                        <div class="mockup-row">
+                            <div>
+                                <div class="mockup-company">SARL TechMaroc</div>
+                                <div class="mockup-status">Auto-Entrepreneur</div>
+                            </div>
+                            <div>
+                                <div class="mockup-title">FACTURE</div>
+                                <div class="mockup-number">FAC-2026-001</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mockup-body">
+                        <div class="mockup-info">
+                            <div><strong>ICE :</strong> 002345678000012</div>
+                            <div><strong>IF :</strong> 40123456</div>
+                        </div>
+                        
+                        <div class="mockup-client">
+                            <div class="mockup-client-label">Facturé à</div>
+                            <div class="mockup-client-name">Atlas Communications SA</div>
+                            <div class="mockup-client-detail">ICE : 001234567890123</div>
+                        </div>
+                        
+                        <table class="mockup-table">
+                            <thead>
+                                <tr>
+                                    <th>Désignation</th>
+                                    <th>Qté</th>
+                                    <th style="text-align: right;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Développement site web</td>
+                                    <td>1</td>
+                                    <td style="text-align: right;">15 000 DH</td>
+                                </tr>
+                                <tr>
+                                    <td>Formation équipe</td>
+                                    <td>3</td>
+                                    <td style="text-align: right;">9 000 DH</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <div class="mockup-totals">
+                            <span>Total TTC</span>
+                            <strong>24 000 DH</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SOCIAL PROOF ============ -->
+<section class="social-proof" style="padding: 32px 0;">
+    <div class="container">
+        <div class="social-proof-label">Ils nous font confiance</div>
+        <div class="social-proof-stats">
+            <div class="stat-item">
+                <div class="stat-number">500+</div>
+                <div class="stat-label">Entrepreneurs actifs</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">12K+</div>
+                <div class="stat-label">Factures émises</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">8M+</div>
+                <div class="stat-label">DH facturés</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">4.9/5</div>
+                <div class="stat-label">Note moyenne</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section id="fonctionnalites">
+    <div class="container">
+        <div class="section-eyebrow">FONCTIONNALITÉS</div>
+        <h2 class="section-title">Tout ce qu'il faut, <em>rien de superflu</em></h2>
+        <p class="section-subtitle">
+            Conçu pour les réalités marocaines : statuts, fiscalité, langues. 
+            Chaque détail compte.
+        </p>
+        
+        <div class="features-grid">
+            <div class="feature">
+                <div class="feature-icon">📄</div>
+                <h3>Factures conformes</h3>
+                <p>ICE, IF, RC, CNSS, mentions Article 91-I-1° pour AE, numérotation séquentielle. Tout y est, sans rien à apprendre.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">📋</div>
+                <h3>Devis convertibles</h3>
+                <p>Créez un devis professionnel, et convertissez-le en facture en 1 clic dès qu'il est accepté.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">🏥</div>
+                <h3>Cotisation CNSS auto</h3>
+                <p>1% services, 0,5% commerce. Calculé en temps réel selon votre CA. Échéancier mensuel inclus.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">💰</div>
+                <h3>Calcul TVA & IR</h3>
+                <p>0%, 7%, 10%, 14%, 20% — tous les taux marocains. IR libératoire AE et barème classique.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">👥</div>
+                <h3>Base clients complète</h3>
+                <p>ICE, IF, historique CA, recherche instantanée. Vos clients toujours à portée de main.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">📦</div>
+                <h3>Catalogue produits</h3>
+                <p>Vos produits/services réutilisables avec prix HT, TVA et unité. Facturation 3x plus rapide.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">📊</div>
+                <h3>Tableau de bord clair</h3>
+                <p>CA encaissé, en attente, projeté. Graphique 12 mois. Toutes vos métriques en un coup d'œil.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">📥</div>
+                <h3>Export PDF pro</h3>
+                <p>PDF haute qualité, prêts à envoyer ou imprimer. Coordonnées bancaires intégrées.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">🔒</div>
+                <h3>Données privées</h3>
+                <p>Vos données restent sur votre appareil. Aucun tracker. Conforme RGPD et au respect de la vie privée.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ COMPARISON ============ -->
+<section id="comparaison" style="background: var(--surface);">
+    <div class="container">
+        <div class="section-eyebrow">COMPARAISON</div>
+        <h2 class="section-title">Pourquoi <em>FacturaPro</em> ?</h2>
+        <p class="section-subtitle">
+            On a comparé pour vous. Voici ce que les autres ne disent pas.
+        </p>
+        
+        <div class="comparison">
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Excel / Word</th>
+                        <th>Sage / EBP</th>
+                        <th class="highlight">FacturaPro</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Conforme normes Maroc</strong></td>
+                        <td><span class="cross">✗</span> Manuel</td>
+                        <td>~ Partiel</td>
+                        <td class="highlight"><span class="check">✓</span> Auto</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Calcul CNSS auto</strong></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td class="highlight"><span class="check">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Statut Auto-Entrepreneur</strong></td>
+                        <td><span class="cross">✗</span></td>
+                        <td>~ Inadapté</td>
+                        <td class="highlight"><span class="check">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Numérotation séquentielle</strong></td>
+                        <td><span class="cross">✗</span> Erreurs</td>
+                        <td><span class="check">✓</span></td>
+                        <td class="highlight"><span class="check">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Mention Article 91 CGI</strong></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td class="highlight"><span class="check">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Prix mensuel</strong></td>
+                        <td>Gratuit</td>
+                        <td>1500+ MAD</td>
+                        <td class="highlight"><strong>Lifetime 499 MAD</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Apprentissage</strong></td>
+                        <td>2-5h</td>
+                        <td>2-3 semaines</td>
+                        <td class="highlight"><strong>2 minutes</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section id="tarifs">
+    <div class="container">
+        <div class="section-eyebrow">TARIFS</div>
+        <h2 class="section-title">Un prix <em>imbattable</em></h2>
+        <p class="section-subtitle">
+            Lifetime Deal de lancement : payez une fois, utilisez à vie.
+        </p>
+        
+        <div class="pricing-card">
+            <div class="urgency">
+                <div class="urgency-pulse"></div>
+                <span>OFFRE DE LANCEMENT — Plus que 47 places sur 100</span>
+            </div>
+            
+            <div class="pricing-badge">⭐ LIFETIME DEAL</div>
+            <h3>Accès à vie</h3>
+            <p class="pricing-tagline">Tout. Pour toujours. Sans abonnement.</p>
+            
+            <div class="price">
+                <span class="price-old">1 499 DH</span>
+                <span class="price-now">499</span>
+                <span class="price-currency">DH</span>
+            </div>
+            <div class="price-once">Paiement unique · Pas d'abonnement · Mises à jour gratuites à vie</div>
+            
+            <ul class="pricing-features">
+                <li>Factures et devis illimités</li>
+                <li>Clients et produits illimités</li>
+                <li>Module CNSS complet</li>
+                <li>Module Impôts (TVA, IR, Patente)</li>
+                <li>Export PDF professionnel</li>
+                <li>Multi-statuts (AE, Freelance, SARL)</li>
+                <li>Mises à jour à vie incluses</li>
+                <li>Support prioritaire WhatsApp</li>
+            </ul>
+            
+            <a href="app.html" class="btn btn-accent btn-large final-cta-btn" style="width: 100%; justify-content: center;">
+                Acheter le Lifetime Deal →
+            </a>
+        </div>
+        
+        <div style="text-align: center; margin-top: 32px; color: var(--ink-mute); font-size: 14px;">
+            Pas convaincu ? <a href="app.html" style="color: var(--primary); font-weight: 600;">Essayez gratuitement</a> sans carte bancaire.
+        </div>
+        
+        <!-- Alternative pricing -->
+        <div style="margin-top: 64px;">
+            <h3 style="text-align: center; font-family: 'Crimson Pro', serif; font-size: 24px; margin-bottom: 8px; color: var(--ink-soft);">
+                Préférez l'abonnement mensuel ?
+            </h3>
+            <p style="text-align: center; color: var(--ink-mute); font-size: 14px; margin-bottom: 24px;">
+                Disponible après la fin de l'offre Lifetime
+            </p>
+            
+            <div class="alt-pricing">
+                <div class="alt-tier">
+                    <h4>Starter</h4>
+                    <div class="alt-price">49 DH<small>/mois</small></div>
+                    <ul>
+                        <li>Factures illimitées</li>
+                        <li>Devis illimités</li>
+                        <li>50 clients max</li>
+                        <li>PDF sans logo</li>
+                    </ul>
+                </div>
+                
+                <div class="alt-tier" style="border-color: var(--primary); position: relative;">
+                    <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase;">Populaire</div>
+                    <h4>Pro</h4>
+                    <div class="alt-price">99 DH<small>/mois</small></div>
+                    <ul>
+                        <li>Tout illimité</li>
+                        <li>2 utilisateurs</li>
+                        <li>Modules CNSS + Impôts</li>
+                        <li>Stats avancées</li>
+                        <li>Support prioritaire</li>
+                    </ul>
+                </div>
+                
+                <div class="alt-tier">
+                    <h4>Business</h4>
+                    <div class="alt-price">199 DH<small>/mois</small></div>
+                    <ul>
+                        <li>Tout PRO</li>
+                        <li>Multi-entreprises (3)</li>
+                        <li>5 utilisateurs</li>
+                        <li>API export comptable</li>
+                        <li>Templates personnalisés</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ TESTIMONIALS ============ -->
+<section id="temoignages" class="testimonials">
+    <div class="container">
+        <div class="section-eyebrow">TÉMOIGNAGES</div>
+        <h2 class="section-title">Ils ont <em>arrêté Excel</em></h2>
+        <p class="section-subtitle">
+            Des entrepreneurs marocains nous racontent leur passage à FacturaPro.
+        </p>
+        
+        <div class="testimonials-grid">
+            <div class="testimonial">
+                <div class="testimonial-quote-mark">"</div>
+                <p class="testimonial-text">
+                    Avant FacturaPro, je passais 4h par semaine sur Excel pour mes factures. 
+                    Maintenant, c'est 15 minutes. Le calcul automatique de ma cotisation CNSS 
+                    m'a fait gagner un temps fou.
+                </p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">YE</div>
+                    <div>
+                        <div class="testimonial-name">Youssef El Amrani</div>
+                        <div class="testimonial-role">Auto-Entrepreneur · Casablanca</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="testimonial">
+                <div class="testimonial-quote-mark">"</div>
+                <p class="testimonial-text">
+                    En tant que freelance designer, j'avais besoin d'un outil pro mais 
+                    abordable. FacturaPro coche toutes les cases. Mes clients adorent 
+                    la qualité des PDF.
+                </p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">FB</div>
+                    <div>
+                        <div class="testimonial-name">Fatima Benali</div>
+                        <div class="testimonial-role">Freelance Designer · Rabat</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="testimonial">
+                <div class="testimonial-quote-mark">"</div>
+                <p class="testimonial-text">
+                    On avait Sage avant. 1500 DH/mois pour des fonctionnalités qu'on 
+                    n'utilisait pas. Avec le Lifetime Deal de FacturaPro, on a économisé 
+                    18 000 DH la première année.
+                </p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">KH</div>
+                    <div>
+                        <div class="testimonial-name">Karim Hassani</div>
+                        <div class="testimonial-role">Gérant SARL · Marrakech</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="testimonial">
+                <div class="testimonial-quote-mark">"</div>
+                <p class="testimonial-text">
+                    Je recommande FacturaPro à tous mes clients AE. C'est le seul outil 
+                    qui comprend vraiment le statut Auto-Entrepreneur marocain. Le module 
+                    CNSS est une tuerie.
+                </p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">AM</div>
+                    <div>
+                        <div class="testimonial-name">Ahmed Mansouri</div>
+                        <div class="testimonial-role">Expert-Comptable · Tanger</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="testimonial">
+                <div class="testimonial-quote-mark">"</div>
+                <p class="testimonial-text">
+                    Interface claire, en français, prix correct. Pour la première fois 
+                    je sens que mon outil de facturation est conçu POUR moi, pas adapté 
+                    à la va-vite depuis l'étranger.
+                </p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">SE</div>
+                    <div>
+                        <div class="testimonial-name">Soukaina El Khattabi</div>
+                        <div class="testimonial-role">Consultante · Casa</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="testimonial">
+                <div class="testimonial-quote-mark">"</div>
+                <p class="testimonial-text">
+                    Conversion devis → facture en 1 clic. Suivi du CA mensuel auto. 
+                    Échéancier CNSS visuel. Tout ce dont j'avais besoin sans rien en plus.
+                </p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">RC</div>
+                    <div>
+                        <div class="testimonial-name">Rachid Cherkaoui</div>
+                        <div class="testimonial-role">Développeur Freelance · Agadir</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq">
+    <div class="container">
+        <div class="section-eyebrow">QUESTIONS</div>
+        <h2 class="section-title">Vous vous demandez...</h2>
+        <p class="section-subtitle">
+            Les réponses aux questions les plus fréquentes.
+        </p>
+        
+        <div class="faq-list">
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Mes factures sont-elles vraiment conformes aux normes marocaines ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>Oui, à 100%.</strong> FacturaPro inclut automatiquement toutes les mentions obligatoires selon votre statut : ICE, IF, RC, CNSS, Patente. Pour les Auto-Entrepreneurs, la mention "TVA non applicable - Article 91-I-1° du CGI" est ajoutée automatiquement. La numérotation est séquentielle et chronologique, conforme au Code Général des Impôts.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Le Lifetime Deal est-il vraiment à vie ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>Oui.</strong> Vous payez 499 DH une seule fois et vous avez accès à FacturaPro à vie, avec toutes les futures mises à jour incluses. C'est une offre de lancement limitée à 100 personnes pour nous aider à valider le produit. Une fois atteinte, on passe au modèle d'abonnement classique (49-199 DH/mois).
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Mes données sont-elles en sécurité ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>Absolument.</strong> Vos données sont stockées localement sur votre appareil — elles ne quittent jamais votre navigateur. Aucun tracker, aucune publicité, aucune revente. Vous pouvez aussi exporter toutes vos données à tout moment (format JSON). Bientôt : option de synchronisation cloud sécurisée pour multi-appareils.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Je suis Auto-Entrepreneur, est-ce adapté ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        FacturaPro a été conçu <strong>spécifiquement</strong> pour le statut AE marocain. Vous trouverez : exonération TVA automatique, calcul de votre cotisation CNSS (1% services / 0,5% commerce), suivi du plafond annuel (500 000 DH services / 200 000 DH commerce), échéancier CNSS mensuel, et calculateur d'IR libératoire.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Puis-je l'utiliser hors ligne ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>Oui !</strong> FacturaPro fonctionne 100% dans votre navigateur, même sans connexion internet. Vous pouvez créer des factures, gérer vos clients, et générer des PDF même en mode avion.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Que se passe-t-il si je change de statut (AE → SARL) ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        Vous pouvez changer de statut à tout moment dans les réglages. FacturaPro adaptera automatiquement les mentions légales sur vos factures, le calcul de TVA, et tous les paramètres fiscaux selon votre nouveau statut.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Comment payer le Lifetime Deal ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        Plusieurs options de paiement : <strong>virement bancaire</strong> (le plus simple au Maroc), <strong>CMI</strong> (cartes bancaires), ou <strong>WhatsApp Pay</strong>. Une fois le paiement reçu, votre licence à vie est activée immédiatement.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Y a-t-il une garantie satisfait ou remboursé ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>Oui, 14 jours.</strong> Si dans les 14 jours qui suivent votre achat vous n'êtes pas satisfait, on vous rembourse intégralement, sans questions. Mais on doute que ça arrive 😉
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Vais-je recevoir les futures mises à jour ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>Toutes les mises à jour sont incluses à vie</strong> avec le Lifetime Deal. On prévoit plein de nouveautés : module comptabilité, sync multi-appareils, app mobile, intégration CMI, multi-langues (arabe), templates personnalisables. Tout sera inclus.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Vous avez un programme partenaire pour les comptables ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>Oui !</strong> Programme partenaire disponible pour les cabinets comptables : <strong>30% de commission à vie</strong> sur chaque client référé, vos clients ont -20% sur leur abonnement. Contactez-nous via WhatsApp pour vous inscrire.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ FINAL CTA ============ -->
+<section>
+    <div class="container">
+        <div class="final-cta">
+            <h2>Prêt à dire <em>au revoir à Excel</em> ?</h2>
+            <p>Rejoignez 500+ entrepreneurs marocains qui ont simplifié leur facturation. 14 jours satisfait ou remboursé.</p>
+            <a href="app.html" class="btn btn-accent btn-large final-cta-btn">
+                Commencer maintenant — Gratuit →
+            </a>
+            <div style="margin-top: 16px; color: rgba(255, 255, 255, 0.6); font-size: 13px; position: relative; z-index: 1;">
+                Pas de carte bancaire requise · Aucune installation
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+    <div class="container">
+        <div class="footer-grid">
+            <div>
+                <div class="footer-brand-name">FacturaPro</div>
+                <p class="footer-tagline">
+                    Le logiciel de facturation 100% marocain pour entrepreneurs, freelances et petites entreprises.
+                </p>
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <a href="#" style="color: rgba(255,255,255,0.6); font-size: 18px;">𝕏</a>
+                    <a href="#" style="color: rgba(255,255,255,0.6); font-size: 18px;">in</a>
+                    <a href="#" style="color: rgba(255,255,255,0.6); font-size: 18px;">f</a>
+                </div>
+            </div>
+            
+            <div class="footer-col">
+                <h4>Produit</h4>
+                <a href="#fonctionnalites">Fonctionnalités</a>
+                <a href="#tarifs">Tarifs</a>
+                <a href="app.html">Démo</a>
+                <a href="#faq">FAQ</a>
+            </div>
+            
+            <div class="footer-col">
+                <h4>Ressources</h4>
+                <a href="#">Guide AE Maroc</a>
+                <a href="#">Calcul CNSS</a>
+                <a href="#">Modèles factures</a>
+                <a href="#">Blog</a>
+            </div>
+            
+            <div class="footer-col">
+                <h4>Contact</h4>
+                <a href="mailto:hello@facturapro.ma">hello@facturapro.ma</a>
+                <a href="https://wa.me/212600000000">WhatsApp</a>
+                <a href="#">Programme partenaire</a>
+                <a href="#">Support</a>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <div>© 2026 FacturaPro. Made with ❤️ in 🇲🇦</div>
+            <div>
+                <a href="#" style="color: inherit; margin-right: 16px;">Mentions légales</a>
+                <a href="#" style="color: inherit; margin-right: 16px;">CGU</a>
+                <a href="#" style="color: inherit;">Confidentialité</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script>
+    function toggleFAQ(el) {
+        const item = el.closest('.faq-item');
+        const wasOpen = item.classList.contains('open');
+        // Close all
+        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+        // Open clicked one if it wasn't already open
+        if (!wasOpen) item.classList.add('open');
+    }
+    
+    // Smooth scroll to anchors
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target && this.getAttribute('href') !== '#') {
+                e.preventDefault();
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

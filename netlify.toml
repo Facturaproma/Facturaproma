@@ -1,0 +1,27 @@
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache aggressif pour les fichiers statiques
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=300, must-revalidate"
+
+# Redirection : URL propre pour l'app
+[[redirects]]
+  from = "/app"
+  to = "/app.html"
+  status = 200
+
+# Redirection : URL propre pour l'admin
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
