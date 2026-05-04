@@ -477,18 +477,65 @@
 <div id="loginScreen">
     <div class="login-card">
         <h1>🔐 Admin FacturaPro</h1>
-        <p class="subtitle">Accès réservé</p>
+        <p class="subtitle">Espace administrateur sécurisé</p>
+        
+        <div id="adminLoginError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+        <div id="adminLoginSuccess" style="display:none; background: rgba(46, 125, 91, 0.08); border: 1px solid rgba(46, 125, 91, 0.2); color: var(--success); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
         
         <div class="form-group">
-            <label>Mot de passe admin</label>
-            <input type="password" id="adminPassword" placeholder="••••••••" autofocus>
+            <label>Email</label>
+            <input type="email" id="adminEmail" placeholder="webnour@gmail.com" autofocus autocomplete="email">
         </div>
         
-        <div class="alert alert-warning" style="font-size: 12px;">
-            ⚠️ Ce mot de passe est défini dans le code. Changez-le avant de déployer en prod.
+        <div class="form-group">
+            <label>Mot de passe</label>
+            <input type="password" id="adminPassword" placeholder="••••••••" autocomplete="current-password">
         </div>
         
-        <button class="btn btn-primary btn-block" onclick="adminLogin()">Se connecter</button>
+        <button class="btn btn-primary btn-block" onclick="adminLogin()">🔓 Se connecter</button>
+        
+        <div style="text-align: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px;">
+            <a onclick="showForgotAdminPassword()" style="color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 600;">🔓 Mot de passe oublié ?</a>
+        </div>
+        
+        <div class="alert" style="font-size: 11px; margin-top: 16px;">
+            🛡️ <strong>Master account</strong> : webnour@gmail.com<br>
+            En cas d'oubli du mot de passe Master, contactez l'équipe technique.
+        </div>
+    </div>
+</div>
+
+<!-- ============ FORGOT ADMIN PASSWORD MODAL ============ -->
+<div class="modal-overlay" id="forgotAdminModal">
+    <div class="modal">
+        <h2>🔓 Réinitialiser le mot de passe</h2>
+        
+        <div id="forgotAdminError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+        <div id="forgotAdminSuccess" style="display:none; background: rgba(46, 125, 91, 0.08); border: 1px solid rgba(46, 125, 91, 0.2); color: var(--success); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+
+        <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">
+            <strong>2 cas possibles</strong> :
+        </p>
+        
+        <div class="alert">
+            <strong>Cas 1 : Vous êtes admin secondaire</strong><br>
+            <small>Demandez à webnour@gmail.com (Master) de réinitialiser votre mot de passe depuis son espace admin.</small>
+        </div>
+        
+        <div class="alert alert-warning">
+            <strong>Cas 2 : Vous êtes le Master (webnour@gmail.com)</strong><br>
+            <small>Tapez votre email Master ci-dessous et la procédure d'urgence sera lancée.</small>
+        </div>
+
+        <div class="form-group">
+            <label>Email Master</label>
+            <input type="email" id="forgotAdminEmail" placeholder="webnour@gmail.com">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('forgotAdminModal')">Annuler</button>
+            <button class="btn btn-primary" onclick="resetMasterPassword()">🚨 Procédure Master</button>
+        </div>
     </div>
 </div>
 
@@ -521,8 +568,20 @@
         </a>
         
         <div style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px;">
+            <a class="nav-item master-only" data-page="admins" onclick="navTo('admins')">
+                👥 Gestion admins
+            </a>
+            <a class="nav-item" data-page="settings" onclick="navTo('settings')">
+                ⚙️ Réglages
+            </a>
+        </div>
+        
+        <div style="border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px;">
+            <div style="padding: 8px 12px; margin-bottom: 8px;" id="currentAdminInfo">
+                <!-- Filled dynamically -->
+            </div>
             <a class="nav-item" onclick="openChangeAdminPasswordModal()">
-                🔑 Changer mot de passe
+                🔑 Changer mon mot de passe
             </a>
             <a class="nav-item" onclick="adminLogout()" style="color: var(--danger);">
                 🚪 Déconnexion
@@ -817,6 +876,156 @@
                 </table>
             </div>
         </section>
+
+        <!-- ADMINS (Master only) -->
+        <section class="page" id="page-admins">
+            <div class="topbar">
+                <h1>👥 Gestion des admins</h1>
+                <button class="btn btn-primary" onclick="openCreateAdminModal()">+ Ajouter un admin</button>
+            </div>
+
+            <div class="alert" style="border-left-color: var(--accent);">
+                <strong>👑 Espace Master réservé</strong> — Vous pouvez créer des admins secondaires pour vous aider à gérer FacturaPro. Ils auront accès à tout sauf à cette page.
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Liste des administrateurs</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Rôle</th>
+                            <th>Créé le</th>
+                            <th>Dernière connexion</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminsTable">
+                        <tr><td colspan="5" class="empty">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="alert alert-warning" style="margin-top: 24px;">
+                <strong>⚠️ Sécurité importante</strong> :
+                <ul style="margin: 8px 0 0 20px; font-size: 13px;">
+                    <li>Seul le compte Master (<strong>${MASTER_EMAIL}</strong>) peut créer/supprimer des admins</li>
+                    <li>Le compte Master est <strong>irrévocable</strong></li>
+                    <li>Les admins secondaires peuvent gérer demandes, codes, paiements</li>
+                    <li>Ne donnez l'accès admin qu'à des personnes de confiance</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section class="page" id="page-settings">
+            <div class="topbar">
+                <h1>⚙️ Réglages</h1>
+            </div>
+
+            <div class="alert">
+                <strong>💡 Configuration globale</strong> de FacturaPro. Ces paramètres affectent tous les admins et les messages envoyés aux clients.
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>📱 Numéro WhatsApp Admin</h2>
+                </div>
+                <div style="padding: 24px;">
+                    <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">
+                        Ce numéro sera utilisé dans tous les messages automatiques envoyés aux clients (RIB, code de licence, support).
+                    </p>
+
+                    <div class="form-group">
+                        <label>Numéro WhatsApp</label>
+                        <input type="text" id="settingsWhatsapp" placeholder="+212 6XX XX XX XX" style="font-size: 16px; padding: 14px;">
+                        <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">
+                            Format : avec ou sans espaces, ex: +212600000000 ou +212 6 00 00 00 00
+                        </div>
+                    </div>
+
+                    <button class="btn btn-success" onclick="saveSettings()">💾 Enregistrer</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>🏦 Coordonnées bancaires (RIB)</h2>
+                </div>
+                <div style="padding: 24px;">
+                    <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">
+                        Utilisé dans les messages WhatsApp pour les virements clients.
+                    </p>
+
+                    <div class="form-group">
+                        <label>Bénéficiaire</label>
+                        <input type="text" id="settingsBeneficiary" placeholder="FacturaPro" style="font-size: 14px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>RIB</label>
+                        <input type="text" id="settingsRIB" placeholder="007 XXX XXXX XXXX XXXX XX" style="font-size: 14px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Banque</label>
+                        <input type="text" id="settingsBank" placeholder="Attijariwafa Bank, BMCE, CIH..." style="font-size: 14px;">
+                    </div>
+
+                    <button class="btn btn-success" onclick="saveSettings()">💾 Enregistrer</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>📧 Email de contact</h2>
+                </div>
+                <div style="padding: 24px;">
+                    <div class="form-group">
+                        <label>Email support</label>
+                        <input type="email" id="settingsEmail" placeholder="contact@facturapro.ma" style="font-size: 14px;">
+                    </div>
+
+                    <button class="btn btn-success" onclick="saveSettings()">💾 Enregistrer</button>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<!-- ============ MODAL: CREATE ADMIN ============ -->
+<div class="modal-overlay" id="createAdminModal">
+    <div class="modal">
+        <h2>➕ Créer un admin secondaire</h2>
+        <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">
+            Le nouvel admin pourra se connecter avec son email et le mot de passe que vous définissez.
+        </p>
+
+        <div id="createAdminError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+
+        <div class="form-group">
+            <label>Email du nouvel admin</label>
+            <input type="email" id="newAdminEmail" placeholder="assistant@example.com">
+        </div>
+
+        <div class="form-group">
+            <label>Mot de passe initial</label>
+            <input type="text" id="newAdminPassword" placeholder="Au moins 8 caractères">
+            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">
+                💡 Communiquez ce mot de passe à l'admin de manière sécurisée. Il pourra le changer après sa première connexion.
+            </div>
+        </div>
+
+        <div class="alert alert-warning">
+            ⚠️ <strong>Vous donnez accès à</strong> : la gestion des demandes, des codes de licence, des paiements, des clients. L'admin secondaire <strong>NE pourra PAS</strong> gérer cette page (Gestion des admins).
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('createAdminModal')">Annuler</button>
+            <button class="btn btn-success" onclick="createAdmin()">✓ Créer l'admin</button>
+        </div>
     </div>
 </div>
 
@@ -956,12 +1165,9 @@
 const SUPABASE_URL = 'https://mdozjptoecygmpkjlohr.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q';
 
-// 🔒 Mot de passe admin par DÉFAUT (utilisé seulement si jamais changé en base)
-// Tu peux le changer après login dans le menu admin
-const ADMIN_PASSWORD_DEFAULT = 'Saadnawal79@@££';
-
-// 📱 Ton numéro WhatsApp (sans + au début, ex: 212600000000)
-const WHATSAPP_NUMBER = '212600000000';
+// 👑 Master account (irrévocable, accès permanent)
+const MASTER_EMAIL = 'webnour@gmail.com';
+const MASTER_PASSWORD_DEFAULT = 'Saadnawal79@@££';
 
 // ============================================
 // SETUP
@@ -972,7 +1178,9 @@ let allCodes = [];
 let allPayments = [];
 let allUsers = [];
 let allRequests = [];
+let allAdmins = [];
 let lastGeneratedCode = '';
+let currentAdmin = null; // {email, isMaster}
 
 // ============================================
 // PASSWORD HASHING (SHA-256)
@@ -986,44 +1194,60 @@ async function hashAdminPassword(password) {
 }
 
 // ============================================
-// AUTH ADMIN (avec mot de passe en base)
+// AUTH ADMIN (multi-admins avec Master)
 // ============================================
-async function getStoredAdminHash() {
+async function getAdminByEmail(email) {
     try {
         const { data, error } = await supaClient
-            .from('admin_settings')
-            .select('value')
-            .eq('key', 'admin_password_hash')
+            .from('admins')
+            .select('*')
+            .eq('email', email.toLowerCase())
             .maybeSingle();
         
         if (error) {
-            console.warn('Could not load admin hash, using default:', error);
+            console.warn('Admin fetch error:', error);
             return null;
         }
-        return data?.value || null;
+        return data;
     } catch (err) {
-        console.warn('Admin hash fetch error:', err);
+        console.warn('Admin fetch exception:', err);
         return null;
     }
 }
 
-async function saveAdminHash(hash) {
+async function createOrUpdateAdmin(email, passwordHash, isMaster = false) {
     const { error } = await supaClient
-        .from('admin_settings')
+        .from('admins')
         .upsert({
-            key: 'admin_password_hash',
-            value: hash,
+            email: email.toLowerCase(),
+            password_hash: passwordHash,
+            is_master: isMaster,
             updated_at: new Date().toISOString()
-        }, { onConflict: 'key' });
+        }, { onConflict: 'email' });
     
     if (error) throw error;
 }
 
+function showAdminLoginError(msg) {
+    const el = document.getElementById('adminLoginError');
+    el.textContent = '❌ ' + msg;
+    el.style.display = 'block';
+    document.getElementById('adminLoginSuccess').style.display = 'none';
+}
+
+function showAdminLoginSuccess(msg) {
+    const el = document.getElementById('adminLoginSuccess');
+    el.textContent = '✓ ' + msg;
+    el.style.display = 'block';
+    document.getElementById('adminLoginError').style.display = 'none';
+}
+
 async function adminLogin() {
+    const email = document.getElementById('adminEmail').value.trim().toLowerCase();
     const pwd = document.getElementById('adminPassword').value;
     
-    if (!pwd) {
-        showToast('Entrez le mot de passe', 'error');
+    if (!email || !pwd) {
+        showAdminLoginError('Email et mot de passe requis');
         return;
     }
     
@@ -1034,61 +1258,144 @@ async function adminLogin() {
     }
     
     try {
-        // 1. Essayer de charger le hash stocké en base
-        const storedHash = await getStoredAdminHash();
         const inputHash = await hashAdminPassword(pwd);
+        let adminRecord = await getAdminByEmail(email);
+        let isValid = false;
+        let isMaster = false;
         
-        let valid = false;
-        
-        if (storedHash) {
-            // Mot de passe a été changé → comparer avec le hash en base
-            valid = (inputHash === storedHash);
-        } else {
-            // Première connexion → comparer avec le mot de passe par défaut
-            valid = (pwd === ADMIN_PASSWORD_DEFAULT);
-            
-            // Si valide, stocker le hash en base pour les prochaines fois
-            if (valid) {
-                try {
-                    await saveAdminHash(inputHash);
-                    console.log('✓ Admin password hash stored in database');
-                } catch (err) {
-                    console.warn('Could not store admin hash:', err);
-                }
+        if (adminRecord) {
+            // Admin existe en base
+            isValid = (inputHash === adminRecord.password_hash);
+            isMaster = adminRecord.is_master;
+        } else if (email === MASTER_EMAIL && pwd === MASTER_PASSWORD_DEFAULT) {
+            // Première connexion du Master → créer le compte
+            try {
+                await createOrUpdateAdmin(MASTER_EMAIL, inputHash, true);
+                console.log('✓ Master account created in database');
+                isValid = true;
+                isMaster = true;
+                adminRecord = { email: MASTER_EMAIL, is_master: true };
+            } catch (err) {
+                console.error('Could not create master:', err);
+                // Fallback : on accepte quand même
+                isValid = true;
+                isMaster = true;
             }
         }
         
-        if (!valid) {
+        if (!isValid) {
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = 'Se connecter';
+                btn.textContent = '🔓 Se connecter';
             }
-            showToast('Mot de passe incorrect', 'error');
+            showAdminLoginError('Email ou mot de passe incorrect');
             return;
         }
         
-        sessionStorage.setItem('admin_authenticated', 'yes');
+        // ✅ Login OK
+        currentAdmin = { 
+            email: email, 
+            isMaster: isMaster 
+        };
+        sessionStorage.setItem('admin_session', JSON.stringify(currentAdmin));
+        
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('app').classList.add('active');
+        
+        // Update sidebar with admin info
+        updateAdminSidebar();
+        
         loadAllData();
     } catch (err) {
         console.error('Admin login error:', err);
         if (btn) {
             btn.disabled = false;
-            btn.textContent = 'Se connecter';
+            btn.textContent = '🔓 Se connecter';
         }
-        showToast('Erreur de connexion: ' + err.message, 'error');
+        showAdminLoginError('Erreur de connexion: ' + err.message);
     }
 }
 
 function adminLogout() {
-    sessionStorage.removeItem('admin_authenticated');
+    sessionStorage.removeItem('admin_session');
+    currentAdmin = null;
     location.reload();
+}
+
+function updateAdminSidebar() {
+    if (!currentAdmin) return;
+    const el = document.getElementById('currentAdminInfo');
+    if (el) {
+        el.innerHTML = `
+            <div style="font-size: 12px; font-weight: 700; color: var(--ink);">${currentAdmin.email}</div>
+            <div style="font-size: 10px; color: ${currentAdmin.isMaster ? 'var(--accent)' : 'var(--ink-mute)'}; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-top: 2px;">
+                ${currentAdmin.isMaster ? '👑 MASTER' : '👤 ADMIN'}
+            </div>
+        `;
+    }
+    
+    // Show/hide master-only menu items
+    document.querySelectorAll('.master-only').forEach(el => {
+        el.style.display = currentAdmin.isMaster ? '' : 'none';
+    });
 }
 
 document.getElementById('adminPassword')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') adminLogin();
 });
+
+document.getElementById('adminEmail')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') document.getElementById('adminPassword').focus();
+});
+
+// ============================================
+// FORGOT ADMIN PASSWORD
+// ============================================
+function showForgotAdminPassword() {
+    document.getElementById('forgotAdminEmail').value = '';
+    document.getElementById('forgotAdminError').style.display = 'none';
+    document.getElementById('forgotAdminSuccess').style.display = 'none';
+    document.getElementById('forgotAdminModal').classList.add('active');
+}
+
+async function resetMasterPassword() {
+    const email = document.getElementById('forgotAdminEmail').value.trim().toLowerCase();
+    const errEl = document.getElementById('forgotAdminError');
+    const okEl = document.getElementById('forgotAdminSuccess');
+    
+    if (email !== MASTER_EMAIL) {
+        errEl.textContent = `❌ Cette procédure est réservée au Master (${MASTER_EMAIL}). Contactez le Master pour réinitialiser votre mot de passe.`;
+        errEl.style.display = 'block';
+        okEl.style.display = 'none';
+        return;
+    }
+    
+    if (!confirm(`🚨 PROCÉDURE D'URGENCE\n\nLe mot de passe Master sera réinitialisé à la valeur par défaut :\n${MASTER_PASSWORD_DEFAULT}\n\n⚠️ Vous DEVEZ le changer immédiatement après reconnexion.\n\nContinuer ?`)) {
+        return;
+    }
+    
+    try {
+        // Reset master password to default
+        const defaultHash = await hashAdminPassword(MASTER_PASSWORD_DEFAULT);
+        await createOrUpdateAdmin(MASTER_EMAIL, defaultHash, true);
+        
+        okEl.innerHTML = `✓ Mot de passe Master réinitialisé !<br><br>
+            Connectez-vous avec :<br>
+            <strong>Email :</strong> ${MASTER_EMAIL}<br>
+            <strong>Mot de passe :</strong> ${MASTER_PASSWORD_DEFAULT}<br><br>
+            ⚠️ <strong>Changez-le immédiatement</strong> après connexion !`;
+        okEl.style.display = 'block';
+        errEl.style.display = 'none';
+        
+        setTimeout(() => {
+            closeModal('forgotAdminModal');
+        }, 8000);
+    } catch (err) {
+        errEl.textContent = '❌ Erreur : ' + err.message;
+        errEl.style.display = 'block';
+        okEl.style.display = 'none';
+    }
+}
 
 // ============================================
 // CHANGE ADMIN PASSWORD
@@ -1144,22 +1451,27 @@ async function submitChangeAdminPassword() {
         return;
     }
     
+    if (!currentAdmin) {
+        showErr('Session expirée');
+        return;
+    }
+    
     btn.disabled = true;
     btn.textContent = 'Changement...';
     
     try {
-        // Vérifier l'ancien mot de passe
-        const storedHash = await getStoredAdminHash();
-        const currentHash = await hashAdminPassword(current);
-        
-        let valid = false;
-        if (storedHash) {
-            valid = (currentHash === storedHash);
-        } else {
-            valid = (current === ADMIN_PASSWORD_DEFAULT);
+        // Récupérer le record admin actuel
+        const adminRecord = await getAdminByEmail(currentAdmin.email);
+        if (!adminRecord) {
+            showErr('Compte admin introuvable');
+            btn.disabled = false;
+            btn.textContent = '🔑 Changer le mot de passe';
+            return;
         }
         
-        if (!valid) {
+        // Vérifier l'ancien mot de passe
+        const currentHash = await hashAdminPassword(current);
+        if (currentHash !== adminRecord.password_hash) {
             showErr('Mot de passe actuel incorrect');
             btn.disabled = false;
             btn.textContent = '🔑 Changer le mot de passe';
@@ -1168,17 +1480,15 @@ async function submitChangeAdminPassword() {
         
         // Sauvegarder le nouveau hash
         const newHash = await hashAdminPassword(newPwd);
-        await saveAdminHash(newHash);
+        await createOrUpdateAdmin(currentAdmin.email, newHash, adminRecord.is_master);
         
-        showOk('Mot de passe admin changé avec succès !');
+        showOk('Mot de passe changé avec succès !');
         showToast('Mot de passe changé ✓', 'success');
         
-        // Vider les champs
         document.getElementById('apwCurrent').value = '';
         document.getElementById('apwNew').value = '';
         document.getElementById('apwConfirm').value = '';
         
-        // Fermer après 2.5 secondes
         setTimeout(() => {
             closeModal('changeAdminPasswordModal');
         }, 2500);
@@ -1862,8 +2172,238 @@ function closeModal(id) {
 function navTo(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById('page-' + page).classList.add('active');
+    document.getElementById('page-' + page)?.classList.add('active');
     document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
+    
+    // Render page-specific data
+    if (page === 'admins') renderAdmins();
+    if (page === 'settings') loadSettings();
+}
+
+// ============================================
+// ADMINS MANAGEMENT (Master only)
+// ============================================
+async function loadAllAdmins() {
+    if (!currentAdmin?.isMaster) return;
+    
+    try {
+        const { data, error } = await supaClient
+            .from('admins')
+            .select('*')
+            .order('created_at', { ascending: true });
+        
+        if (error) throw error;
+        allAdmins = data || [];
+    } catch (err) {
+        console.warn('Admins fetch error:', err);
+        allAdmins = [];
+    }
+}
+
+async function renderAdmins() {
+    if (!currentAdmin?.isMaster) {
+        showToast('Accès réservé au Master', 'error');
+        navTo('dashboard');
+        return;
+    }
+    
+    await loadAllAdmins();
+    
+    const tbody = document.getElementById('adminsTable');
+    if (allAdmins.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Aucun admin</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = allAdmins.map(a => {
+        const roleBadge = a.is_master ? 
+            '<span class="badge" style="background: linear-gradient(135deg, var(--accent), var(--accent-bright)); color: var(--ink); font-weight: 700;">👑 MASTER</span>' :
+            '<span class="badge badge-trial">👤 Admin</span>';
+        
+        const isCurrentUser = a.email === currentAdmin.email;
+        const canDelete = !a.is_master && !isCurrentUser;
+        
+        return `
+            <tr>
+                <td><strong>${a.email}</strong>${isCurrentUser ? ' <span style="color: var(--success); font-size: 11px;">(vous)</span>' : ''}</td>
+                <td>${roleBadge}</td>
+                <td>${formatDate(a.created_at)}</td>
+                <td>${a.last_login ? formatDate(a.last_login) : '—'}</td>
+                <td>
+                    ${canDelete ? `
+                        <button class="btn btn-secondary btn-sm" onclick="resetAdminPassword('${a.email}')" title="Réinitialiser mot de passe">
+                            🔑 Reset
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteAdmin('${a.email}')" title="Supprimer">
+                            🗑️
+                        </button>
+                    ` : a.is_master ? '<span style="color: var(--ink-mute); font-size: 11px;">Irrévocable</span>' : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>'}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function openCreateAdminModal() {
+    document.getElementById('newAdminEmail').value = '';
+    document.getElementById('newAdminPassword').value = generateSecurePassword();
+    document.getElementById('createAdminError').style.display = 'none';
+    document.getElementById('createAdminModal').classList.add('active');
+}
+
+function generateSecurePassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    return Array.from({length: 12}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+async function createAdmin() {
+    const email = document.getElementById('newAdminEmail').value.trim().toLowerCase();
+    const pwd = document.getElementById('newAdminPassword').value;
+    const errEl = document.getElementById('createAdminError');
+    
+    if (!email || !pwd) {
+        errEl.textContent = '❌ Email et mot de passe requis';
+        errEl.style.display = 'block';
+        return;
+    }
+    
+    if (pwd.length < 8) {
+        errEl.textContent = '❌ Mot de passe minimum 8 caractères';
+        errEl.style.display = 'block';
+        return;
+    }
+    
+    if (email === MASTER_EMAIL) {
+        errEl.textContent = '❌ Cet email est réservé au Master';
+        errEl.style.display = 'block';
+        return;
+    }
+    
+    try {
+        const existing = await getAdminByEmail(email);
+        if (existing) {
+            errEl.textContent = '❌ Un admin avec cet email existe déjà';
+            errEl.style.display = 'block';
+            return;
+        }
+        
+        const hash = await hashAdminPassword(pwd);
+        await createOrUpdateAdmin(email, hash, false);
+        
+        closeModal('createAdminModal');
+        
+        // Show credentials to share
+        alert(`✅ Admin créé avec succès !\n\n📧 Email : ${email}\n🔑 Mot de passe : ${pwd}\n\n⚠️ COMMUNIQUEZ CES IDENTIFIANTS DE MANIÈRE SÉCURISÉE.\n\nL'admin pourra changer son mot de passe après sa première connexion.`);
+        
+        await renderAdmins();
+        showToast('Admin créé ✓', 'success');
+    } catch (err) {
+        errEl.textContent = '❌ Erreur : ' + err.message;
+        errEl.style.display = 'block';
+    }
+}
+
+async function resetAdminPassword(email) {
+    const newPwd = generateSecurePassword();
+    
+    if (!confirm(`Réinitialiser le mot de passe de ${email} ?\n\nNouveau mot de passe : ${newPwd}\n\n⚠️ Communiquez-le à l'admin de manière sécurisée.\n\nContinuer ?`)) {
+        return;
+    }
+    
+    try {
+        const hash = await hashAdminPassword(newPwd);
+        await createOrUpdateAdmin(email, hash, false);
+        
+        alert(`✅ Mot de passe réinitialisé !\n\n📧 ${email}\n🔑 Nouveau mot de passe : ${newPwd}\n\n⚠️ Communiquez-le à l'admin.`);
+        showToast('Mot de passe réinitialisé ✓', 'success');
+    } catch (err) {
+        showToast('Erreur : ' + err.message, 'error');
+    }
+}
+
+async function deleteAdmin(email) {
+    if (!confirm(`⚠️ Supprimer définitivement l'admin ${email} ?\n\nCet admin perdra immédiatement l'accès à FacturaPro.\n\nContinuer ?`)) {
+        return;
+    }
+    
+    try {
+        const { error } = await supaClient
+            .from('admins')
+            .delete()
+            .eq('email', email);
+        
+        if (error) throw error;
+        
+        showToast('Admin supprimé ✓', 'success');
+        await renderAdmins();
+    } catch (err) {
+        showToast('Erreur : ' + err.message, 'error');
+    }
+}
+
+// ============================================
+// SETTINGS
+// ============================================
+async function loadSettings() {
+    try {
+        const { data, error } = await supaClient
+            .from('admin_settings')
+            .select('key, value');
+        
+        if (error) throw error;
+        
+        const settings = {};
+        (data || []).forEach(row => settings[row.key] = row.value);
+        
+        document.getElementById('settingsWhatsapp').value = settings.whatsapp_number || '';
+        document.getElementById('settingsBeneficiary').value = settings.bank_beneficiary || 'FacturaPro';
+        document.getElementById('settingsRIB').value = settings.bank_rib || '';
+        document.getElementById('settingsBank').value = settings.bank_name || '';
+        document.getElementById('settingsEmail').value = settings.contact_email || '';
+    } catch (err) {
+        console.warn('Settings load error:', err);
+    }
+}
+
+async function saveSettings() {
+    const settings = {
+        whatsapp_number: document.getElementById('settingsWhatsapp').value.trim(),
+        bank_beneficiary: document.getElementById('settingsBeneficiary').value.trim(),
+        bank_rib: document.getElementById('settingsRIB').value.trim(),
+        bank_name: document.getElementById('settingsBank').value.trim(),
+        contact_email: document.getElementById('settingsEmail').value.trim()
+    };
+    
+    try {
+        for (const [key, value] of Object.entries(settings)) {
+            if (value) {
+                await supaClient.from('admin_settings').upsert({
+                    key,
+                    value,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'key' });
+            }
+        }
+        
+        showToast('Réglages enregistrés ✓', 'success');
+    } catch (err) {
+        showToast('Erreur : ' + err.message, 'error');
+    }
+}
+
+// Helper to get a setting value
+async function getSetting(key, defaultValue = '') {
+    try {
+        const { data, error } = await supaClient
+            .from('admin_settings')
+            .select('value')
+            .eq('key', key)
+            .maybeSingle();
+        if (error || !data) return defaultValue;
+        return data.value || defaultValue;
+    } catch {
+        return defaultValue;
+    }
 }
 
 // ============================================
@@ -1885,10 +2425,17 @@ function showToast(msg, type = 'info') {
 // ============================================
 // INIT
 // ============================================
-if (sessionStorage.getItem('admin_authenticated') === 'yes') {
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('app').classList.add('active');
-    loadAllData();
+const savedSession = sessionStorage.getItem('admin_session');
+if (savedSession) {
+    try {
+        currentAdmin = JSON.parse(savedSession);
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('app').classList.add('active');
+        updateAdminSidebar();
+        loadAllData();
+    } catch {
+        sessionStorage.removeItem('admin_session');
+    }
 }
 </script>
 

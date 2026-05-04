@@ -3789,6 +3789,34 @@
     </div>
 </div>
 
+<!-- ============ FORGOT PASSWORD MODAL ============ -->
+<div class="modal-overlay" id="forgotPasswordModal" onclick="closeModalIfBg(event, 'forgotPasswordModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 460px;">
+        <h2>🔓 Mot de passe oublié</h2>
+        <p>Entrez votre email pour recevoir un lien de réinitialisation</p>
+
+        <div id="fpwError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+        <div id="fpwSuccess" style="display:none; background: rgba(46, 125, 91, 0.08); border: 1px solid rgba(46, 125, 91, 0.2); color: var(--success); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+
+        <div class="form-group">
+            <label>Votre email</label>
+            <input type="email" id="fpwEmail" placeholder="votre@email.com" autocomplete="email">
+            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">
+                💡 Vous recevrez un lien par email pour créer un nouveau mot de passe.
+            </div>
+        </div>
+
+        <div style="background: rgba(232, 177, 74, 0.08); border-left: 3px solid var(--warning); padding: 10px 14px; border-radius: 8px; font-size: 12px; color: var(--ink-soft); margin-bottom: 16px;">
+            ⏱️ <strong>Délai de réception</strong> : généralement quelques minutes. Vérifiez votre dossier <strong>spam</strong> si vous ne recevez rien après 5 min.
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('forgotPasswordModal')">Annuler</button>
+            <button class="btn btn-primary" id="fpwSubmitBtn" onclick="submitForgotPassword()">📧 Envoyer le lien</button>
+        </div>
+    </div>
+</div>
+
 <!-- ============ TOAST ============ -->
 <div class="toast" id="toast"></div>
 
@@ -4371,19 +4399,62 @@ async function handleSignup(event) {
     }
 }
 
-async function forgotPassword() {
-    const email = prompt('Entrez votre email pour réinitialiser votre mot de passe :');
-    if (!email) return;
+function forgotPassword() {
+    document.getElementById('fpwEmail').value = document.getElementById('loginEmail').value || '';
+    document.getElementById('fpwError').style.display = 'none';
+    document.getElementById('fpwSuccess').style.display = 'none';
+    document.getElementById('forgotPasswordModal').classList.add('active');
+}
+
+async function submitForgotPassword() {
+    const email = document.getElementById('fpwEmail').value.trim().toLowerCase();
+    const errEl = document.getElementById('fpwError');
+    const okEl = document.getElementById('fpwSuccess');
+    const btn = document.getElementById('fpwSubmitBtn');
+    
+    function showErr(msg) {
+        errEl.textContent = '❌ ' + msg;
+        errEl.style.display = 'block';
+        okEl.style.display = 'none';
+    }
+    
+    function showOk(msg) {
+        okEl.innerHTML = msg;
+        okEl.style.display = 'block';
+        errEl.style.display = 'none';
+    }
+    
+    if (!email) {
+        showErr('Veuillez entrer votre email');
+        return;
+    }
+    
+    if (!email.includes('@') || !email.includes('.')) {
+        showErr('Format email invalide');
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.textContent = 'Envoi en cours...';
     
     try {
         await Auth.resetPassword(email);
+        
         if (USE_SUPABASE) {
-            alert(`📧 Un email de réinitialisation a été envoyé à ${email}.\n\nVérifiez votre boîte de réception (et les spams).`);
+            showOk(`✓ Email envoyé à <strong>${email}</strong><br><br>📬 Vérifiez votre boîte de réception (et les spams).<br>Le lien est valable 1 heure.`);
         } else {
-            alert(`📧 Si un compte existe avec ${email}, vous recevrez un email de réinitialisation.\n\n⚠️ Note : Cette version locale ne permet pas l'envoi d'email réel. Pour récupérer votre compte, contactez-nous via WhatsApp.`);
+            showOk(`✓ Si un compte existe avec <strong>${email}</strong>, vous recevrez un email de réinitialisation.<br><br>⚠️ Mode local : contactez le support via WhatsApp si pas reçu.`);
         }
+        
+        // Fermer après 4 secondes
+        setTimeout(() => {
+            closeModal('forgotPasswordModal');
+        }, 4000);
     } catch (err) {
-        alert('❌ ' + err.message);
+        console.error('Reset password error:', err);
+        showErr(err.message || 'Erreur lors de l\'envoi de l\'email');
+        btn.disabled = false;
+        btn.textContent = '📧 Envoyer le lien';
     }
 }
 
@@ -6240,36 +6311,122 @@ async function purchaseLicense(tier) {
     }
 }
 
-function activateLicense() {
-    const code = document.getElementById('licenseCodeInput').value.trim().toUpperCase();
+async function activateLicense() {
+    const codeInput = document.getElementById('licenseCodeInput');
+    const code = codeInput.value.trim().toUpperCase();
     
     if (!code) {
         showToast('Entrez un code de licence', 'error');
         return;
     }
     
-    // Validate code format (FACTURA-XXXX-XXXX-XXXX)
-    if (!/^FACTURA-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
-        showToast('Format de code invalide. Format attendu : FACTURA-XXXX-XXXX-XXXX', 'error');
+    // Validate format: FP-XXXX-XXXX-XXXX or FACTURA-XXXX-XXXX-XXXX
+    if (!/^(FP|FACTURA)-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+        showToast('Format invalide. Attendu : FP-XXXX-XXXX-XXXX', 'error');
         return;
     }
     
-    // In production: validate code with Supabase
-    // For now: simulate validation
-    const tierFromCode = code.charAt(8); // Demo logic
-    let tier = 'lifetime'; // Default
+    if (!USE_SUPABASE) {
+        // Mode local : activation simulée
+        if (confirm(`⚠️ Mode local actif\n\nActiver une licence Lifetime de démo avec le code ${code} ?`)) {
+            License.activate('lifetime', { code });
+            showToast('✓ Licence Lifetime activée (mode local) !', 'success');
+            updateTrialUI();
+            renderLicensePage();
+            codeInput.value = '';
+        }
+        return;
+    }
     
-    // Decode tier from code (demo: first char of segment)
-    if (code.includes('LIFE') || code.includes('LFE')) tier = 'lifetime';
-    else if (code.includes('PRO') || code.includes('MTH')) tier = 'monthly';
-    else if (code.includes('BIZ') || code.includes('BUS')) tier = 'business';
+    // Mode cloud : VRAIE vérification dans Supabase
+    if (!ensureSupabase()) {
+        showToast('Service indisponible. Vérifiez votre connexion.', 'error');
+        return;
+    }
     
-    if (confirm(`Activer la licence ${License.getTierLabel.call({ get: () => ({ type: tier }) }) || tier} avec le code ${code} ?`)) {
-        License.activate(tier, { code });
-        showToast('✓ Licence activée avec succès !', 'success');
+    showToast('Vérification du code...', 'info');
+    
+    try {
+        // 1. Récupérer le code depuis admin_codes
+        const { data: codeData, error: fetchError } = await supaClient
+            .from('admin_codes')
+            .select('*')
+            .eq('code', code)
+            .maybeSingle();
+        
+        if (fetchError) {
+            console.error('Code fetch error:', fetchError);
+            showToast('Erreur de vérification : ' + fetchError.message, 'error');
+            return;
+        }
+        
+        // 2. Code introuvable ?
+        if (!codeData) {
+            showToast('❌ Code invalide. Vérifiez et réessayez.', 'error');
+            return;
+        }
+        
+        // 3. Code déjà utilisé ?
+        if (codeData.status === 'used') {
+            showToast('⚠️ Ce code a déjà été utilisé', 'error');
+            return;
+        }
+        
+        // 4. Code révoqué ?
+        if (codeData.status === 'revoked') {
+            showToast('⚠️ Ce code a été révoqué. Contactez le support.', 'error');
+            return;
+        }
+        
+        // 5. Vérifier que le code est destiné à cet utilisateur (si client_email spécifié)
+        const session = await Auth.getCurrentUser();
+        if (codeData.client_email && session && codeData.client_email.toLowerCase() !== session.email.toLowerCase()) {
+            showToast(`⚠️ Ce code est destiné à un autre email (${codeData.client_email})`, 'error');
+            return;
+        }
+        
+        // 6. Tout est OK → confirmer activation
+        const tierLabels = {
+            lifetime: '🎁 Lifetime — Accès à vie',
+            monthly: '⭐ Pro Mensuel',
+            business: '👔 Business Mensuel'
+        };
+        const tierLabel = tierLabels[codeData.type] || codeData.type;
+        
+        if (!confirm(`✓ Code valide !\n\nActiver la licence : ${tierLabel}\n\nContinuer ?`)) {
+            return;
+        }
+        
+        // 7. Marquer le code comme utilisé en base
+        const { error: updateError } = await supaClient
+            .from('admin_codes')
+            .update({
+                status: 'used',
+                activated_at: new Date().toISOString()
+            })
+            .eq('id', codeData.id);
+        
+        if (updateError) {
+            console.error('Code update error:', updateError);
+            showToast('Erreur lors de l\'activation : ' + updateError.message, 'error');
+            return;
+        }
+        
+        // 8. Activer la licence localement
+        License.activate(codeData.type, { code: code });
+        
+        showToast('🎉 Licence activée avec succès !', 'success');
         updateTrialUI();
         renderLicensePage();
-        document.getElementById('licenseCodeInput').value = '';
+        codeInput.value = '';
+        
+        // Hide expired overlay if visible
+        const expiredOverlay = document.getElementById('expiredOverlay');
+        if (expiredOverlay) expiredOverlay.classList.remove('active');
+        
+    } catch (err) {
+        console.error('License activation error:', err);
+        showToast('Erreur : ' + err.message, 'error');
     }
 }
 

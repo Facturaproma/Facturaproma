@@ -496,6 +496,11 @@
             50% { transform: translateY(-10px); }
         }
 
+        @keyframes pulse-cta {
+            0%, 100% { transform: scale(1); box-shadow: 0 4px 12px rgba(201, 169, 91, 0.4); }
+            50% { transform: scale(1.04); box-shadow: 0 6px 20px rgba(201, 169, 91, 0.6); }
+        }
+
         @media (max-width: 1000px) {
             .floating-chip-1, .floating-chip-2 { display: none; }
         }
@@ -1155,7 +1160,7 @@
                 <a href="#tarifs">Tarifs</a>
                 <a href="#temoignages">Avis</a>
                 <a href="#faq">FAQ</a>
-                <a href="app.html" class="btn btn-primary">Commencer →</a>
+                <a href="app.html" class="btn btn-accent" style="font-weight: 700; box-shadow: 0 4px 12px rgba(201, 169, 91, 0.4); animation: pulse-cta 2s ease-in-out infinite;">🚀 Commencer Gratuitement</a>
             </div>
         </div>
     </div>
