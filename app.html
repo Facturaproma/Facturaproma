@@ -886,15 +886,102 @@
             background: var(--primary);
             color: white;
             border: none;
-            width: 40px;
-            height: 40px;
+            width: 44px;
+            height: 44px;
             border-radius: 10px;
-            font-size: 18px;
+            font-size: 22px;
             cursor: pointer;
+            box-shadow: 0 2px 8px rgba(27, 58, 107, 0.2);
         }
 
         @media (max-width: 900px) {
             .mobile-menu-btn { display: flex; align-items: center; justify-content: center; }
+        }
+
+        /* === USER MENU TOPBAR === */
+        .topbar-user-menu {
+            position: relative;
+            margin-left: auto;
+        }
+
+        .user-menu-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--surface-soft);
+            border: 1px solid var(--border);
+            color: var(--ink);
+            padding: 8px 14px;
+            border-radius: 100px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .user-menu-btn:hover {
+            background: white;
+            border-color: var(--primary);
+        }
+
+        .user-menu-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 8px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            min-width: 220px;
+            display: none;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .user-menu-dropdown.active { display: block; }
+
+        .user-menu-dropdown .user-info {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-soft);
+        }
+
+        .user-menu-dropdown .user-info .name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-menu-dropdown .user-info .role {
+            font-size: 11px;
+            color: var(--ink-mute);
+            margin-top: 2px;
+        }
+
+        .user-menu-dropdown a {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            color: var(--ink);
+            text-decoration: none;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .user-menu-dropdown a:hover {
+            background: var(--surface-soft);
+        }
+
+        .user-menu-dropdown a.danger {
+            color: var(--danger);
+            border-top: 1px solid var(--border);
         }
 
         /* === TRIAL BANNER === */
@@ -2270,8 +2357,8 @@
         <div class="license-code-section">
             <h3>🔑 J'ai déjà un code de licence</h3>
             <div class="license-code-input">
-                <input type="text" id="licenseCodeInput" placeholder="FP-XXXX-XXXX-XXXX" maxlength="19">
-                <button class="btn btn-success" onclick="activateLicense()">Activer</button>
+                <input type="text" id="licenseCodeInputModal" placeholder="FP-XXXX-XXXX-XXXX" maxlength="19">
+                <button class="btn btn-success" onclick="activateLicenseFromModal()">Activer</button>
             </div>
             <div style="font-size: 12px; color: var(--ink-mute); margin-top: 8px;">
                 💡 Vous recevez votre code par email après paiement
@@ -2613,6 +2700,31 @@
                 <div class="topbar-actions">
                     <button class="btn btn-secondary" onclick="navTo('quotes'); newQuote();">+ Nouveau devis</button>
                     <button class="btn btn-primary" onclick="navTo('invoices'); newInvoice();">+ Nouvelle facture</button>
+                </div>
+                <div class="topbar-user-menu">
+                    <button class="user-menu-btn" onclick="toggleUserMenu(event)">
+                        <span id="userMenuInitial" style="background: var(--primary); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">U</span>
+                        <span style="display: none;">Compte</span>
+                        <span style="font-size: 10px;">▼</span>
+                    </button>
+                    <div class="user-menu-dropdown" id="userMenuDropdown">
+                        <div class="user-info">
+                            <div class="name" id="userMenuEmail">user@email.com</div>
+                            <div class="role">Compte personnel</div>
+                        </div>
+                        <a onclick="closeUserMenu(); navTo('company');">
+                            🏢 Mon entreprise
+                        </a>
+                        <a onclick="closeUserMenu(); navTo('license');">
+                            🔑 Ma licence
+                        </a>
+                        <a onclick="closeUserMenu(); openChangePasswordModal();">
+                            🔐 Changer mot de passe
+                        </a>
+                        <a class="danger" onclick="closeUserMenu(); handleLogout();">
+                            🚪 Se déconnecter
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -4257,6 +4369,17 @@ async function checkOnboarding() {
     // No session = show auth screen
     if (!session) {
         console.log('[FacturaPro] Showing auth screen');
+        
+        // Check URL parameter to set the right tab (?mode=login or ?mode=signup)
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode');
+        if (mode === 'signup') {
+            switchAuthTab('signup');
+        } else if (mode === 'login') {
+            switchAuthTab('login');
+        }
+        // Else: keep default (login)
+        
         showAuthScreen();
         return;
     }
@@ -4273,6 +4396,7 @@ async function checkOnboarding() {
     
     // Update sidebar with user info
     updateSidebarUser(session);
+    updateUserMenu(session);
     
     // Check if onboarded
     if (!Storage.get('onboarded')) {
@@ -4747,6 +4871,38 @@ function navTo(page) {
 
 function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ============================================
+// USER MENU (topbar)
+// ============================================
+function toggleUserMenu(e) {
+    e?.stopPropagation();
+    const menu = document.getElementById('userMenuDropdown');
+    if (menu) menu.classList.toggle('active');
+}
+
+function closeUserMenu() {
+    const menu = document.getElementById('userMenuDropdown');
+    if (menu) menu.classList.remove('active');
+}
+
+// Close menu when clicking outside
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('userMenuDropdown');
+    const btn = e.target.closest('.user-menu-btn');
+    if (menu && menu.classList.contains('active') && !btn && !e.target.closest('.user-menu-dropdown')) {
+        menu.classList.remove('active');
+    }
+});
+
+// Update user menu info
+function updateUserMenu(session) {
+    if (!session) return;
+    const emailEl = document.getElementById('userMenuEmail');
+    const initialEl = document.getElementById('userMenuInitial');
+    if (emailEl) emailEl.textContent = session.email || 'Utilisateur';
+    if (initialEl) initialEl.textContent = (session.email || 'U').charAt(0).toUpperCase();
 }
 
 // ============================================
@@ -6311,8 +6467,32 @@ async function purchaseLicense(tier) {
     }
 }
 
+// Helper pour le modal licenseScreen (utilise un autre input)
+async function activateLicenseFromModal() {
+    const modalInput = document.getElementById('licenseCodeInputModal');
+    if (!modalInput) return;
+    
+    // Copier la valeur dans l'input principal et appeler activateLicense
+    const mainInput = document.getElementById('licenseCodeInput');
+    if (mainInput) {
+        mainInput.value = modalInput.value;
+    }
+    
+    await activateLicense();
+    
+    // Vider le modal input si activé avec succès
+    if (mainInput && !mainInput.value) {
+        modalInput.value = '';
+    }
+}
+
 async function activateLicense() {
     const codeInput = document.getElementById('licenseCodeInput');
+    if (!codeInput) {
+        showToast('Champ code introuvable', 'error');
+        return;
+    }
+    
     const code = codeInput.value.trim().toUpperCase();
     
     if (!code) {

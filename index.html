@@ -159,6 +159,18 @@
             transform: translateY(-1px);
         }
 
+        .btn-ghost {
+            background: transparent;
+            color: var(--ink);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            background: var(--surface);
+            border-color: var(--ink-mute);
+            transform: translateY(-1px);
+        }
+
         .btn-secondary {
             background: var(--surface);
             color: var(--ink);
@@ -1160,7 +1172,8 @@
                 <a href="#tarifs">Tarifs</a>
                 <a href="#temoignages">Avis</a>
                 <a href="#faq">FAQ</a>
-                <a href="app.html" class="btn btn-accent" style="font-weight: 700; box-shadow: 0 4px 12px rgba(201, 169, 91, 0.4); animation: pulse-cta 2s ease-in-out infinite;">🚀 Commencer Gratuitement</a>
+                <a href="app.html?mode=login" class="btn btn-ghost" style="margin-right: 8px;">Se connecter</a>
+                <a href="app.html?mode=signup" class="btn btn-accent" style="font-weight: 700; box-shadow: 0 4px 12px rgba(201, 169, 91, 0.4); animation: pulse-cta 2s ease-in-out infinite;">🚀 Essai Gratuit 14 jours</a>
             </div>
         </div>
     </div>
@@ -1182,7 +1195,7 @@
                     ICE, IF, RC, CNSS, TVA — tout est déjà intégré.
                 </p>
                 <div class="hero-cta">
-                    <a href="app.html" class="btn btn-primary btn-large">
+                    <a href="app.html?mode=signup" class="btn btn-primary btn-large">
                         Essayer gratuitement →
                     </a>
                     <a href="#tarifs" class="btn btn-secondary btn-large">
@@ -1469,13 +1482,13 @@
                 <li>Support prioritaire WhatsApp</li>
             </ul>
             
-            <a href="app.html" class="btn btn-accent btn-large final-cta-btn" style="width: 100%; justify-content: center;">
+            <a href="app.html?mode=signup" class="btn btn-accent btn-large final-cta-btn" style="width: 100%; justify-content: center;">
                 Acheter le Lifetime Deal →
             </a>
         </div>
         
         <div style="text-align: center; margin-top: 32px; color: var(--ink-mute); font-size: 14px;">
-            Pas convaincu ? <a href="app.html" style="color: var(--primary); font-weight: 600;">Essayez gratuitement</a> sans carte bancaire.
+            Pas convaincu ? <a href="app.html?mode=signup" style="color: var(--primary); font-weight: 600;">Essayez gratuitement</a> sans carte bancaire.
         </div>
         
         <!-- Alternative pricing -->
@@ -1775,7 +1788,7 @@
         <div class="final-cta">
             <h2>Prêt à dire <em>au revoir à Excel</em> ?</h2>
             <p>Rejoignez 500+ entrepreneurs marocains qui ont simplifié leur facturation. 14 jours satisfait ou remboursé.</p>
-            <a href="app.html" class="btn btn-accent btn-large final-cta-btn">
+            <a href="app.html?mode=signup" class="btn btn-accent btn-large final-cta-btn">
                 Commencer maintenant — Gratuit →
             </a>
             <div style="margin-top: 16px; color: rgba(255, 255, 255, 0.6); font-size: 13px; position: relative; z-index: 1;">
