@@ -3408,7 +3408,7 @@
             </div>
 
             <!-- Pricing tiers -->
-            <h3 style="font-family: 'Crimson Pro', serif; font-size: 26px; font-weight: 700; margin-bottom: 16px;">Choisissez votre formule</h3>
+            <h3 id="licensePricingTitle" style="font-family: 'Crimson Pro', serif; font-size: 26px; font-weight: 700; margin-bottom: 16px;">Choisissez votre formule</h3>
 
             <div class="pricing-cards" id="pricingCards">
                 <!-- Lifetime -->
@@ -3480,7 +3480,7 @@
             </div>
 
             <!-- Promo code -->
-            <div class="promo-section">
+            <div class="promo-section" id="sectionPromoCode">
                 <h4>🎁 Vous avez un code promo ?</h4>
                 <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Codes de lancement disponibles : <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">LANCEMENT2026</code> · <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">FOUNDERS</code></p>
                 <div class="promo-input-group">
@@ -3491,7 +3491,7 @@
             </div>
 
             <!-- Payment methods -->
-            <div class="calc-card" style="margin-top: 24px;">
+            <div class="calc-card" id="sectionPayment" style="margin-top: 24px;">
                 <h3>💳 Modes de paiement acceptés</h3>
                 <p class="subtitle">Plusieurs options pour vous faciliter la vie</p>
 
@@ -3519,7 +3519,7 @@
             </div>
 
             <!-- Activation manuelle (admin) -->
-            <div class="calc-card" style="margin-top: 24px;">
+            <div class="calc-card" id="sectionActivateCode" style="margin-top: 24px;">
                 <h3>🔑 Activation par code de licence</h3>
                 <p class="subtitle">Vous avez déjà payé et reçu un code d'activation ?</p>
 
@@ -6144,21 +6144,34 @@ function updateTrialUI() {
     
     // Active paid license
     if (info.type === 'lifetime' || (info.type === 'monthly' || info.type === 'business') && info.status === 'active' && !License.isExpired()) {
-        banner.style.display = 'flex';
-        banner.className = 'trial-banner licensed';
-        const tierIcon = info.type === 'lifetime' ? '🎁' : info.type === 'business' ? '👔' : '⭐';
-        const tierName = info.type === 'lifetime' ? 'Lifetime — Accès à vie' : 
-                         info.type === 'business' ? 'Business' : 'Pro Mensuel';
-        document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierIcon}</span> Licence ${tierName} active`;
-        document.getElementById('trialBannerCountdown').style.display = 'none';
-        banner.querySelector('button').style.display = 'none';
+        // 🎁 Lifetime : pas de banner du tout (juste le badge sidebar)
+        if (info.type === 'lifetime') {
+            banner.style.display = 'none';
+        } else {
+            // Pro/Business : banner discret (pour rappel renouvellement)
+            banner.style.display = 'flex';
+            banner.className = 'trial-banner licensed';
+            const tierIcon = info.type === 'business' ? '👔' : '⭐';
+            const tierName = info.type === 'business' ? 'Business' : 'Pro Mensuel';
+            const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '';
+            document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierIcon}</span> ${tierName} active${expDate ? ` · Renouvellement le ${expDate}` : ''}`;
+            document.getElementById('trialBannerCountdown').style.display = 'none';
+            const banBtn = banner.querySelector('button');
+            if (banBtn) banBtn.style.display = 'none';
+        }
         
         // Update sidebar badge
         badge.style.display = 'block';
         badge.className = 'trial-badge licensed';
-        badge.querySelector('.trial-badge-label').textContent = 'Licence active';
-        badge.querySelector('.trial-badge-value').textContent = info.type === 'lifetime' ? 'À vie 🎁' : tierName;
-        badge.querySelector('.trial-badge-cta').textContent = '→ Voir détails';
+        const tierIcon2 = info.type === 'lifetime' ? '🎁' : info.type === 'business' ? '👔' : '⭐';
+        const tierName2 = info.type === 'lifetime' ? 'Lifetime — Accès à vie' : 
+                         info.type === 'business' ? 'Business' : 'Pro Mensuel';
+        const labelEl = badge.querySelector('.trial-badge-label');
+        const valueEl = badge.querySelector('.trial-badge-value');
+        const ctaEl = badge.querySelector('.trial-badge-cta');
+        if (labelEl) labelEl.textContent = 'Licence active';
+        if (valueEl) valueEl.textContent = info.type === 'lifetime' ? 'À vie 🎁' : tierName2;
+        if (ctaEl) ctaEl.textContent = '→ Voir détails';
         
         overlay.classList.remove('active');
         return;
@@ -6238,57 +6251,155 @@ function renderLicensePage() {
     const heroSubtitle = document.getElementById('licenseHeroSubtitle');
     const currentInfoEl = document.getElementById('currentLicenseInfo');
     
-    if (isLicensed) {
-        // Active paid license
+    // Sections à afficher/masquer dynamiquement
+    const pricingTitle = document.getElementById('licensePricingTitle');
+    const pricingCards = document.getElementById('pricingCards');
+    const sectionPromo = document.getElementById('sectionPromoCode');
+    const sectionPayment = document.getElementById('sectionPayment');
+    const sectionActivate = document.getElementById('sectionActivateCode');
+    
+    // Helper pour afficher/masquer
+    const show = (el) => { if (el) el.style.display = ''; };
+    const hide = (el) => { if (el) el.style.display = 'none'; };
+    
+    if (info.type === 'lifetime') {
+        // ═══════════════════════════════════════════
+        // LIFETIME ACTIF : tout caché, juste les infos
+        // ═══════════════════════════════════════════
         badge.classList.add('licensed');
         document.getElementById('licenseStatusIcon').textContent = '✓';
-        document.getElementById('licenseStatusLabel').textContent = 'Licence active';
+        document.getElementById('licenseStatusLabel').textContent = 'Licence Lifetime';
         
-        if (info.type === 'lifetime') {
-            heroTitle.textContent = '🎁 Licence Lifetime active';
-            heroSubtitle.textContent = 'Vous avez un accès illimité à FacturaPro à vie. Profitez de toutes les fonctionnalités sans limite !';
-        } else {
-            heroTitle.textContent = `${info.type === 'business' ? '👔 Business' : '⭐ Pro'} actif`;
-            const expDate = new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-            heroSubtitle.textContent = `Votre abonnement est actif jusqu'au ${expDate}.`;
-        }
+        heroTitle.textContent = '🎁 Licence Lifetime active';
+        heroSubtitle.textContent = 'Vous avez un accès illimité à FacturaPro à vie. Profitez de toutes les fonctionnalités sans limite, à jamais !';
         
-        // Show current license details
+        // Cacher TOUT (pas besoin d'acheter, déjà tout)
+        hide(pricingTitle);
+        hide(pricingCards);
+        hide(sectionPromo);
+        hide(sectionPayment);
+        hide(sectionActivate);
+        
+        // Afficher détails licence
         currentInfoEl.innerHTML = `
-            <div class="calc-card">
+            <div class="calc-card" style="border-left: 4px solid var(--success);">
                 <h3>📋 Détails de votre licence</h3>
                 <div class="calc-line">
                     <span>Type</span>
-                    <strong>${License.getTierLabel()}</strong>
+                    <strong>🎁 Lifetime — Accès à vie</strong>
+                </div>
+                <div class="calc-line">
+                    <span>Statut</span>
+                    <strong style="color: var(--success);">✓ Active à vie</strong>
+                </div>
+                <div class="calc-line">
+                    <span>Activée le</span>
+                    <strong>${formatDate(info.activatedAt)}</strong>
+                </div>
+                ${info.licenseCode ? `<div class="calc-line"><span>Code de licence</span><strong style="font-family: monospace;">${info.licenseCode}</strong></div>` : ''}
+                ${info.promoCodeUsed ? `<div class="calc-line"><span>Code promo utilisé</span><strong>${info.promoCodeUsed}</strong></div>` : ''}
+            </div>
+            
+            <div class="notice" style="margin-top: 16px; background: rgba(46, 125, 91, 0.05); border-left-color: var(--success);">
+                💚 <strong>Merci pour votre confiance !</strong> Toutes les futures mises à jour de FacturaPro sont incluses gratuitement dans votre licence Lifetime.
+            </div>
+        `;
+    } else if (info.type === 'monthly' || info.type === 'business') {
+        // ═══════════════════════════════════════════
+        // ABONNEMENT MENSUEL ACTIF : option upgrade Lifetime uniquement
+        // ═══════════════════════════════════════════
+        badge.classList.add('licensed');
+        document.getElementById('licenseStatusIcon').textContent = '✓';
+        document.getElementById('licenseStatusLabel').textContent = info.type === 'business' ? 'Business actif' : 'Pro actif';
+        
+        const tierLabel = info.type === 'business' ? '👔 Business' : '⭐ Pro Mensuel';
+        heroTitle.textContent = `${tierLabel} active`;
+        const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+        heroSubtitle.textContent = `Votre abonnement est actif jusqu'au ${expDate}. Vous pouvez upgrader vers Lifetime pour économiser à long terme.`;
+        
+        // Pricing : afficher SEULEMENT le Lifetime (upgrade)
+        if (pricingTitle) pricingTitle.textContent = '⬆️ Upgrader vers Lifetime';
+        show(pricingTitle);
+        show(pricingCards);
+        show(sectionPromo);
+        show(sectionPayment);
+        hide(sectionActivate); // Pas besoin d'activer un autre code
+        
+        // Cacher les cartes Pro/Business car déjà actifs
+        document.querySelectorAll('.pricing-tier').forEach(card => {
+            const isLifetimeCard = card.classList.contains('featured');
+            card.style.display = isLifetimeCard ? '' : 'none';
+        });
+        
+        // Détails licence
+        currentInfoEl.innerHTML = `
+            <div class="calc-card" style="border-left: 4px solid var(--accent);">
+                <h3>📋 Votre abonnement actuel</h3>
+                <div class="calc-line">
+                    <span>Type</span>
+                    <strong>${tierLabel}</strong>
                 </div>
                 <div class="calc-line">
                     <span>Statut</span>
                     <strong style="color: var(--success);">✓ Active</strong>
                 </div>
                 <div class="calc-line">
-                    <span>Activée le</span>
+                    <span>Activé le</span>
                     <strong>${formatDate(info.activatedAt)}</strong>
                 </div>
-                ${info.expiresAt ? `<div class="calc-line"><span>Expire le</span><strong>${formatDate(info.expiresAt)}</strong></div>` : ''}
+                ${info.expiresAt ? `<div class="calc-line"><span>Prochain renouvellement</span><strong>${formatDate(info.expiresAt)}</strong></div>` : ''}
                 ${info.licenseCode ? `<div class="calc-line"><span>Code de licence</span><strong style="font-family: monospace;">${info.licenseCode}</strong></div>` : ''}
-                ${info.promoCodeUsed ? `<div class="calc-line"><span>Code promo utilisé</span><strong>${info.promoCodeUsed}</strong></div>` : ''}
+            </div>
+            
+            <div class="notice" style="margin-top: 16px; background: rgba(201, 169, 91, 0.05); border-left-color: var(--accent);">
+                💡 <strong>Économisez avec le Lifetime !</strong> Au lieu de 99 DH/mois, payez 499 DH une seule fois et profitez de FacturaPro à vie. Économies dès la 6ème mois !
             </div>
         `;
     } else if (expired) {
-        // Expired
+        // ═══════════════════════════════════════════
+        // ESSAI EXPIRÉ : tout afficher pour conversion
+        // ═══════════════════════════════════════════
         badge.classList.remove('licensed');
         document.getElementById('licenseStatusIcon').textContent = '🔒';
         document.getElementById('licenseStatusLabel').textContent = 'Essai expiré';
         heroTitle.textContent = 'Période d\'essai terminée';
         heroSubtitle.textContent = 'Vos données sont sauvegardées. Activez votre licence pour continuer à créer des factures.';
+        
+        if (pricingTitle) pricingTitle.textContent = 'Choisissez votre formule';
+        show(pricingTitle);
+        show(pricingCards);
+        show(sectionPromo);
+        show(sectionPayment);
+        show(sectionActivate);
+        
+        // Afficher TOUTES les cartes
+        document.querySelectorAll('.pricing-tier').forEach(card => {
+            card.style.display = '';
+        });
+        
         currentInfoEl.innerHTML = '';
     } else {
-        // Trial active
+        // ═══════════════════════════════════════════
+        // ESSAI ACTIF : tout afficher
+        // ═══════════════════════════════════════════
         badge.classList.remove('licensed');
         document.getElementById('licenseStatusIcon').textContent = '⏰';
         document.getElementById('licenseStatusLabel').textContent = `${daysLeft} jour${daysLeft > 1 ? 's' : ''} d'essai`;
         heroTitle.textContent = `Profitez de votre essai gratuit (${daysLeft} jour${daysLeft > 1 ? 's' : ''})`;
         heroSubtitle.textContent = 'Accès complet à toutes les fonctionnalités. Activez maintenant pour bloquer le prix de lancement.';
+        
+        if (pricingTitle) pricingTitle.textContent = 'Choisissez votre formule';
+        show(pricingTitle);
+        show(pricingCards);
+        show(sectionPromo);
+        show(sectionPayment);
+        show(sectionActivate);
+        
+        // Afficher TOUTES les cartes
+        document.querySelectorAll('.pricing-tier').forEach(card => {
+            card.style.display = '';
+        });
+        
         currentInfoEl.innerHTML = '';
     }
 }
@@ -6369,6 +6480,27 @@ async function purchaseLicense(tier) {
         showToast('Vous devez être connecté', 'error');
         return;
     }
+    
+    // ═════════════════════════════════════════════════
+    // PROTECTION : Empêcher achat si déjà licencié
+    // ═════════════════════════════════════════════════
+    const currentLicense = License.get();
+    
+    if (currentLicense.type === 'lifetime') {
+        showToast('Vous avez déjà une licence Lifetime à vie ! ✨', 'success');
+        return;
+    }
+    
+    if ((currentLicense.type === 'monthly' || currentLicense.type === 'business') && 
+        currentLicense.status === 'active' && !License.isExpired()) {
+        // Abonnement actif → autoriser SEULEMENT l'upgrade vers Lifetime
+        if (tier !== 'lifetime') {
+            showToast(`Vous avez déjà un abonnement ${currentLicense.type === 'business' ? 'Business' : 'Pro'} actif`, 'info');
+            return;
+        }
+        // Sinon (tier === 'lifetime'), c'est un upgrade, on continue
+    }
+    // ═════════════════════════════════════════════════
     
     let basePrice = { lifetime: 499, monthly: 99, business: 199 }[tier];
     let finalPrice = basePrice;
@@ -6499,6 +6631,16 @@ async function activateLicense() {
         showToast('Entrez un code de licence', 'error');
         return;
     }
+    
+    // ═════════════════════════════════════════════════
+    // PROTECTION : Empêcher si déjà licence Lifetime
+    // ═════════════════════════════════════════════════
+    const currentLicense = License.get();
+    if (currentLicense.type === 'lifetime') {
+        showToast('Vous avez déjà une licence Lifetime à vie ! ✨', 'success');
+        return;
+    }
+    // ═════════════════════════════════════════════════
     
     // Validate format: FP-XXXX-XXXX-XXXX or FACTURA-XXXX-XXXX-XXXX
     if (!/^(FP|FACTURA)-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
