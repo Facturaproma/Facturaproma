@@ -6,6 +6,16 @@
     <title>FacturaPro — Facturation Maroc</title>
     <meta name="description" content="Logiciel de facturation 100% marocain. Factures conformes, déclarations CNSS et impôts automatiques.">
     
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#1B3A6B">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FacturaPro">
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -16,6 +26,21 @@
     
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => {
+                        console.log('[SW] Registered, scope:', reg.scope);
+                        // Check for updates every hour
+                        setInterval(() => reg.update(), 60 * 60 * 1000);
+                    })
+                    .catch(err => console.warn('[SW] Registration failed:', err));
+            });
+        }
+    </script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -2198,6 +2223,160 @@
 
         @media (max-width: 700px) { .calc-grid { grid-template-columns: 1fr; } }
 
+        /* === REPORT TABS === */
+        .report-tab {
+            background: transparent;
+            border: none;
+            padding: 10px 16px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink-mute);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .report-tab:hover {
+            color: var(--ink);
+        }
+        .report-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        @media (max-width: 700px) {
+            .report-tab { font-size: 12px; padding: 8px 12px; }
+        }
+
+        /* === OFFLINE INDICATOR === */
+        .sync-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--success);
+            color: white;
+            padding: 8px 14px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .sync-indicator.offline {
+            background: var(--danger);
+        }
+        
+        .sync-indicator.syncing {
+            background: var(--warning);
+        }
+        
+        .sync-indicator .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+        }
+        
+        .sync-indicator.offline .sync-dot {
+            animation: pulseRed 1.5s ease-in-out infinite;
+        }
+        
+        .sync-indicator.syncing .sync-dot {
+            animation: spin 1s linear infinite;
+            border: 2px solid white;
+            border-top-color: transparent;
+            background: transparent;
+        }
+        
+        @keyframes pulseRed {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.3); }
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .sync-indicator.fade-out {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+        
+        @media (max-width: 700px) {
+            .sync-indicator {
+                bottom: 80px;
+                right: 12px;
+                font-size: 11px;
+                padding: 6px 12px;
+            }
+        }
+        
+        /* === PWA INSTALL BANNER === */
+        .pwa-install-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+            color: white;
+            padding: 12px 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            z-index: 99;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .pwa-install-banner.show {
+            display: flex;
+        }
+        
+        .pwa-install-banner .pwa-text {
+            flex: 1;
+            font-size: 13px;
+        }
+        
+        .pwa-install-banner .pwa-text strong {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+        
+        .pwa-install-banner button {
+            background: var(--accent);
+            color: var(--ink);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        
+        .pwa-install-banner .pwa-close {
+            background: transparent;
+            color: white;
+            font-size: 18px;
+            padding: 4px 8px;
+        }
+        
+        @media (max-width: 700px) {
+            .pwa-install-banner {
+                padding: 10px 14px;
+                font-size: 12px;
+            }
+        }
+
         .calc-card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -2630,6 +2809,13 @@
         </div>
 
         <div class="nav-section">
+            <div class="nav-label">Analyse</div>
+            <button class="nav-item" data-page="reports" onclick="navTo('reports')">
+                <span class="nav-icon">📊</span> Rapports
+            </button>
+        </div>
+
+        <div class="nav-section">
             <div class="nav-label">Fiscalité</div>
             <button class="nav-item" data-page="cnss" onclick="navTo('cnss')">
                 <span class="nav-icon">🏥</span> CNSS
@@ -2723,6 +2909,9 @@
                         </a>
                         <a onclick="closeUserMenu(); openChangePasswordModal();">
                             🔐 Changer mot de passe
+                        </a>
+                        <a onclick="closeUserMenu(); installPWA();">
+                            📱 Installer l'app
                         </a>
                         <a class="danger" onclick="closeUserMenu(); handleLogout();">
                             🚪 Se déconnecter
@@ -3018,6 +3207,382 @@
                     </div>
                 </div>
                 <div id="productsList"></div>
+            </div>
+        </section>
+
+        <!-- ============ CNSS PAGE ============ -->
+        <!-- ============ REPORTS PAGE ============ -->
+        <section class="page" id="page-reports">
+            <div class="topbar">
+                <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <h1>📊 Rapports & Analyses</h1>
+                <div class="topbar-actions">
+                    <select id="reportPeriod" onchange="rerenderActiveReport()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: white;">
+                        <option value="month" selected>Ce mois</option>
+                        <option value="quarter">Ce trimestre</option>
+                        <option value="year">Cette année</option>
+                        <option value="ytd">Année à ce jour</option>
+                        <option value="all">Tout</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="background: rgba(201, 169, 91, 0.08); border-left: 4px solid var(--accent); padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;">
+                💡 <strong>Astuce</strong> : Tous les rapports peuvent être exportés en CSV pour Excel ou votre comptable. Période sélectionnée en haut à droite.
+            </div>
+
+            <!-- Onglets de navigation -->
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 0;">
+                <button class="report-tab active" data-tab="invoices" onclick="switchReportTab('invoices')">📋 Factures</button>
+                <button class="report-tab" data-tab="cashflow" onclick="switchReportTab('cashflow')">💰 Cash Flow</button>
+                <button class="report-tab" data-tab="topclients" onclick="switchReportTab('topclients')">🏆 Top Clients</button>
+                <button class="report-tab" data-tab="topproducts" onclick="switchReportTab('topproducts')">📦 Top Produits</button>
+                <button class="report-tab" data-tab="catva" onclick="switchReportTab('catva')">📊 CA & TVA</button>
+                <button class="report-tab" data-tab="fiscal" onclick="switchReportTab('fiscal')">🏥 CNSS / IR</button>
+            </div>
+
+            <!-- ============ ONGLET 1 : FACTURES ============ -->
+            <div class="report-content" id="report-invoices">
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="stat-label">Total facturé</div>
+                        <div class="stat-value" id="rpInvTotalAmount">0 DH</div>
+                        <div class="stat-trend" id="rpInvTotalCount">0 factures</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-label">✅ Payées</div>
+                        <div class="stat-value" id="rpInvPaidAmount">0 DH</div>
+                        <div class="stat-trend" id="rpInvPaidCount">0 factures</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">⏳ En attente</div>
+                        <div class="stat-value" id="rpInvPendingAmount">0 DH</div>
+                        <div class="stat-trend" id="rpInvPendingCount">0 factures</div>
+                    </div>
+                    <div class="stat-card" style="background: rgba(200, 74, 74, 0.08); border-left: 4px solid var(--danger);">
+                        <div class="stat-label">🚨 En retard</div>
+                        <div class="stat-value" id="rpInvOverdueAmount" style="color: var(--danger);">0 DH</div>
+                        <div class="stat-trend" id="rpInvOverdueCount">0 factures</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;">
+                    <select id="rpInvFilterStatus" onchange="renderReportInvoices()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                        <option value="all">Toutes les factures</option>
+                        <option value="paid">✅ Payées</option>
+                        <option value="sent">⏳ Envoyées (en attente)</option>
+                        <option value="overdue">🚨 En retard</option>
+                        <option value="draft">📝 Brouillons</option>
+                    </select>
+                    <input type="text" id="rpInvFilterClient" placeholder="🔍 Rechercher client..." oninput="renderReportInvoices()" style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                    <button class="btn btn-primary btn-sm" onclick="exportReportCSV('invoices')">📥 Exporter CSV</button>
+                </div>
+
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>N° Facture</th>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Montant TTC</th>
+                                <th>Échéance</th>
+                                <th>Statut</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rpInvTable">
+                            <tr><td colspan="7" class="empty">Aucune facture dans cette période</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 2 : CASH FLOW ============ -->
+            <div class="report-content" id="report-cashflow" style="display: none;">
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card success">
+                        <div class="stat-label">💰 Encaissé</div>
+                        <div class="stat-value" id="rpCfReceived">0 DH</div>
+                        <div class="stat-trend" id="rpCfReceivedTrend">—</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">📋 Facturé</div>
+                        <div class="stat-value" id="rpCfBilled">0 DH</div>
+                        <div class="stat-trend">Période sélectionnée</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">⏱️ Délai moyen</div>
+                        <div class="stat-value" id="rpCfAvgDelay">— jours</div>
+                        <div class="stat-trend">Entre facture et paiement</div>
+                    </div>
+                    <div class="stat-card" style="background: rgba(232, 177, 74, 0.08);">
+                        <div class="stat-label">📊 Taux d'encaissement</div>
+                        <div class="stat-value" id="rpCfRate">0%</div>
+                        <div class="stat-trend">Encaissé / Facturé</div>
+                    </div>
+                </div>
+
+                <div class="calc-card">
+                    <h3>📈 Évolution Cash Flow (12 mois)</h3>
+                    <div class="chart-container" style="height: 220px; margin-top: 16px;">
+                        <div class="chart-bars" id="rpCfChart"></div>
+                    </div>
+                    <div style="display: flex; gap: 16px; justify-content: center; margin-top: 12px; font-size: 12px;">
+                        <div><span style="display: inline-block; width: 12px; height: 12px; background: var(--success); border-radius: 3px; vertical-align: middle;"></span> Encaissé</div>
+                        <div><span style="display: inline-block; width: 12px; height: 12px; background: var(--accent); border-radius: 3px; vertical-align: middle;"></span> Facturé</div>
+                    </div>
+                </div>
+
+                <div class="calc-card" style="margin-top: 16px;">
+                    <h3>🐌 Clients qui paient en retard</h3>
+                    <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 12px;">Triés par délai moyen de paiement (du plus lent au plus rapide)</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Client</th>
+                                <th>Factures payées</th>
+                                <th>Délai moyen</th>
+                                <th>Total payé</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rpCfSlowPayers">
+                            <tr><td colspan="5" class="empty">Pas assez de données</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 3 : TOP CLIENTS ============ -->
+            <div class="report-content" id="report-topclients" style="display: none;">
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card success">
+                        <div class="stat-label">🏆 Meilleur client</div>
+                        <div class="stat-value" id="rpTcBestName" style="font-size: 18px;">—</div>
+                        <div class="stat-trend" id="rpTcBestAmount">0 DH</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">👥 Clients actifs</div>
+                        <div class="stat-value" id="rpTcActiveCount">0</div>
+                        <div class="stat-trend">Avec au moins 1 facture</div>
+                    </div>
+                    <div class="stat-card accent">
+                        <div class="stat-label">📊 CA moyen / client</div>
+                        <div class="stat-value" id="rpTcAvgRevenue">0 DH</div>
+                        <div class="stat-trend">Période sélectionnée</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">💎 % par top 5</div>
+                        <div class="stat-value" id="rpTcTop5Percent">0%</div>
+                        <div class="stat-trend">Concentration du CA</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
+                    <button class="btn btn-primary btn-sm" onclick="exportReportCSV('topclients')">📥 Exporter CSV</button>
+                </div>
+
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Client</th>
+                                <th>Factures</th>
+                                <th>CA total HT</th>
+                                <th>CA total TTC</th>
+                                <th>Dernière facture</th>
+                                <th>Statut</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rpTcTable">
+                            <tr><td colspan="8" class="empty">Aucun client dans cette période</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 4 : TOP PRODUITS ============ -->
+            <div class="report-content" id="report-topproducts" style="display: none;">
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card accent">
+                        <div class="stat-label">🥇 Best-seller</div>
+                        <div class="stat-value" id="rpTpBestName" style="font-size: 18px;">—</div>
+                        <div class="stat-trend" id="rpTpBestQty">0 vendus</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">📦 Articles différents</div>
+                        <div class="stat-value" id="rpTpUniqueCount">0</div>
+                        <div class="stat-trend">Vendus dans la période</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">🔢 Total unités</div>
+                        <div class="stat-value" id="rpTpTotalQty">0</div>
+                        <div class="stat-trend">Toutes catégories</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-label">💰 CA produits</div>
+                        <div class="stat-value" id="rpTpTotalRevenue">0 DH</div>
+                        <div class="stat-trend">HT</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
+                    <button class="btn btn-primary btn-sm" onclick="exportReportCSV('topproducts')">📥 Exporter CSV</button>
+                </div>
+
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Article / Service</th>
+                                <th>Qté vendue</th>
+                                <th>CA HT</th>
+                                <th>% du CA total</th>
+                                <th>Prix moyen HT</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rpTpTable">
+                            <tr><td colspan="6" class="empty">Aucune vente dans cette période</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 5 : CA & TVA ============ -->
+            <div class="report-content" id="report-catva" style="display: none;">
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="stat-label">💼 CA HT</div>
+                        <div class="stat-value" id="rpCvCAHT">0 DH</div>
+                        <div class="stat-trend">Période sélectionnée</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">📊 TVA collectée</div>
+                        <div class="stat-value" id="rpCvTVA">0 DH</div>
+                        <div class="stat-trend">À reverser à la DGI</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-label">💰 CA TTC</div>
+                        <div class="stat-value" id="rpCvCATTC">0 DH</div>
+                        <div class="stat-trend">Total facturé</div>
+                    </div>
+                    <div class="stat-card accent">
+                        <div class="stat-label">📈 Évolution N vs N-1</div>
+                        <div class="stat-value" id="rpCvGrowth">—</div>
+                        <div class="stat-trend">Croissance annuelle</div>
+                    </div>
+                </div>
+
+                <div class="calc-card">
+                    <h3>📊 TVA collectée par taux</h3>
+                    <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 12px;">Détail des montants par taux de TVA — Utile pour la déclaration trimestrielle DGI</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Taux TVA</th>
+                                <th>Base HT</th>
+                                <th>TVA collectée</th>
+                                <th>Total TTC</th>
+                                <th>% du CA</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rpCvTvaBreakdown">
+                            <tr><td colspan="5" class="empty">Aucune donnée</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="calc-card" style="margin-top: 16px;">
+                    <h3>📅 Évolution mensuelle (12 mois)</h3>
+                    <div class="chart-container" style="height: 220px; margin-top: 16px;">
+                        <div class="chart-bars" id="rpCvChart"></div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: 16px;">
+                    <button class="btn btn-primary" onclick="exportReportCSV('catva')">📥 Exporter pour DGI</button>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 6 : CNSS / IR (AE seulement) ============ -->
+            <div class="report-content" id="report-fiscal" style="display: none;">
+                <div id="rpFiscalAESection">
+                    <div class="stats-grid" style="margin-bottom: 20px;">
+                        <div class="stat-card accent">
+                            <div class="stat-label">💼 CA Annuel cumulé</div>
+                            <div class="stat-value" id="rpFsCAYear">0 DH</div>
+                            <div class="stat-trend" id="rpFsCAYearTrend">Depuis le 01/01</div>
+                        </div>
+                        <div class="stat-card warning">
+                            <div class="stat-label">🏥 Cotisation CNSS</div>
+                            <div class="stat-value" id="rpFsCNSS">0 DH</div>
+                            <div class="stat-trend" id="rpFsCNSSRate">Taux : —</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">💰 IR estimé</div>
+                            <div class="stat-value" id="rpFsIR">0 DH</div>
+                            <div class="stat-trend" id="rpFsIRRate">Taux : —</div>
+                        </div>
+                        <div class="stat-card" id="rpFsPlafondCard">
+                            <div class="stat-label">📊 Plafond AE</div>
+                            <div class="stat-value" id="rpFsPlafondPercent">0%</div>
+                            <div class="stat-trend" id="rpFsPlafondText">—</div>
+                        </div>
+                    </div>
+
+                    <div class="calc-card" id="rpFsAlertCard" style="display: none; background: rgba(200, 74, 74, 0.05); border-left: 4px solid var(--danger);">
+                        <h3>🚨 Alerte importante</h3>
+                        <p id="rpFsAlertText" style="font-size: 14px; line-height: 1.6;"></p>
+                    </div>
+
+                    <div class="calc-card">
+                        <h3>📋 Détail du calcul CNSS</h3>
+                        <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">Estimation basée sur votre activité et CA annuel</p>
+                        <div class="calc-line">
+                            <span>Statut</span>
+                            <strong id="rpFsStatus">—</strong>
+                        </div>
+                        <div class="calc-line">
+                            <span>Activité principale</span>
+                            <strong id="rpFsActivity">—</strong>
+                        </div>
+                        <div class="calc-line">
+                            <span>CA annuel imposable</span>
+                            <strong id="rpFsBase">0 DH</strong>
+                        </div>
+                        <div class="calc-line">
+                            <span>Taux CNSS appliqué</span>
+                            <strong id="rpFsCNSSRateText">—</strong>
+                        </div>
+                        <div class="calc-line" style="border-top: 2px solid var(--primary); padding-top: 8px; margin-top: 8px;">
+                            <span><strong>Cotisation CNSS annuelle estimée</strong></span>
+                            <strong id="rpFsCNSSTotal" style="color: var(--primary); font-size: 18px;">0 DH</strong>
+                        </div>
+                    </div>
+
+                    <div class="calc-card" style="margin-top: 16px;">
+                        <h3>💡 Conseils fiscaux</h3>
+                        <ul id="rpFsTips" style="font-size: 13px; line-height: 1.8; color: var(--ink-soft); padding-left: 20px;">
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="rpFiscalNotAESection" style="display: none;">
+                    <div class="calc-card" style="text-align: center; padding: 60px 24px;">
+                        <div style="font-size: 64px; margin-bottom: 16px;">ℹ️</div>
+                        <h2 style="font-family: 'Crimson Pro', serif; font-size: 24px; margin-bottom: 12px;">Module CNSS pour Auto-Entrepreneur</h2>
+                        <p style="color: var(--ink-mute); margin-bottom: 24px; max-width: 500px; margin-left: auto; margin-right: auto;">
+                            Le calcul automatique CNSS/IR est spécifique au statut <strong>Auto-Entrepreneur</strong>.
+                        </p>
+                        <p style="color: var(--ink-mute); font-size: 13px;">
+                            Si vous êtes AE, allez dans <strong>Mon Entreprise</strong> et sélectionnez le statut "Auto-Entrepreneur".
+                        </p>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -3479,7 +4044,7 @@
                     <ul>
                         <li>Multi-utilisateurs (5)</li>
                         <li>Multi-entreprises (3)</li>
-                        <li>API export comptable</li>
+                        <li>Export comptable (Sage, EBP, FEC DGI)</li>
                         <li>Templates personnalisés</li>
                         <li>Support prioritaire WhatsApp</li>
                     </ul>
@@ -3729,10 +4294,20 @@
                     <div class="aside-card">
                         <h3>📊 Export comptable <span style="background: linear-gradient(135deg, #1B3A6B, #122849); color: var(--accent); font-size: 9px; padding: 2px 6px; border-radius: 100px; font-weight: 700; margin-left: 4px; vertical-align: middle;">BUSINESS</span></h3>
                         <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">
-                            Exportez vos factures vers votre logiciel comptable (Sage, Cegid, EBP) ou au format FEC pour la DGI.
+                            Exportez vos factures dans des formats compatibles avec les logiciels comptables et la DGI Maroc.
                         </p>
+                        
+                        <div style="background: var(--surface-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
+                            <strong style="display: block; margin-bottom: 6px;">📦 Formats inclus :</strong>
+                            <div style="display: flex; flex-direction: column; gap: 4px; color: var(--ink-soft);">
+                                <div>✓ <strong>CSV Excel</strong> (Sage, EBP, Cegid, Quadratus...)</div>
+                                <div>✓ <strong>FEC</strong> (Fichier Écritures Comptables - DGI Maroc)</div>
+                                <div>✓ Compatible cabinet comptable</div>
+                            </div>
+                        </div>
+                        
                         <button class="btn btn-primary" onclick="showAccountingExportMenu()" style="width: 100%; font-size: 13px;">
-                            📥 Exporter comptabilité
+                            📥 Exporter ma comptabilité
                         </button>
                         <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;" id="accountingExportNote">
                             <!-- Filled dynamically -->
@@ -3969,6 +4544,60 @@
     </div>
 </div>
 
+<!-- ============ ACCOUNTING EXPORT MODAL ============ -->
+<div class="modal-overlay" id="accountingExportModal" onclick="closeModalIfBg(event, 'accountingExportModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 560px;">
+        <h2>📊 Export Comptable</h2>
+        <p>Choisissez le format adapté à votre logiciel comptable ou à la DGI</p>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; margin: 16px 0;">
+            <!-- CSV Excel -->
+            <div onclick="closeModal('accountingExportModal'); exportAccounting('csv');" style="padding: 16px; border: 2px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--primary)'; this.style.background='var(--surface-soft)';" onmouseout="this.style.borderColor='var(--border)'; this.style.background='white';">
+                <div style="display: flex; gap: 12px; align-items: start;">
+                    <div style="font-size: 32px;">📄</div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">CSV Excel (Recommandé)</div>
+                        <div style="font-size: 12px; color: var(--ink-mute); margin-bottom: 6px;">Compatible avec tous les logiciels comptables</div>
+                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                            <span style="background: var(--surface-soft); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Sage</span>
+                            <span style="background: var(--surface-soft); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">EBP</span>
+                            <span style="background: var(--surface-soft); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Cegid</span>
+                            <span style="background: var(--surface-soft); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Ciel</span>
+                            <span style="background: var(--surface-soft); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Quadratus</span>
+                        </div>
+                    </div>
+                    <div style="color: var(--primary); font-size: 20px;">→</div>
+                </div>
+            </div>
+
+            <!-- FEC DGI -->
+            <div onclick="closeModal('accountingExportModal'); exportAccounting('fec');" style="padding: 16px; border: 2px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--primary)'; this.style.background='var(--surface-soft)';" onmouseout="this.style.borderColor='var(--border)'; this.style.background='white';">
+                <div style="display: flex; gap: 12px; align-items: start;">
+                    <div style="font-size: 32px;">🏛️</div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">Format FEC (DGI Maroc)</div>
+                        <div style="font-size: 12px; color: var(--ink-mute); margin-bottom: 6px;">Fichier Écritures Comptables conforme DGI</div>
+                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">DGI</span>
+                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Conforme Maroc</span>
+                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Contrôle fiscal</span>
+                        </div>
+                    </div>
+                    <div style="color: var(--primary); font-size: 20px;">→</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="background: rgba(201, 169, 91, 0.08); border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 8px; font-size: 12px; color: var(--ink-soft); margin: 16px 0;">
+            💡 <strong>Conseil</strong> : Demandez à votre comptable quel format il préfère. La plupart utilisent le CSV Excel. Le FEC est requis en cas de contrôle fiscal DGI.
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('accountingExportModal')">Fermer</button>
+        </div>
+    </div>
+</div>
+
 <!-- ============ PRODUCT PICKER MODAL ============ -->
 <div class="modal-overlay" id="productPickerModal" onclick="closeModalIfBg(event, 'productPickerModal')">
     <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 600px;">
@@ -4165,6 +4794,23 @@
     </div>
 </div>
 
+<!-- ============ SYNC INDICATOR ============ -->
+<div class="sync-indicator" id="syncIndicator" onclick="showSyncDetails()">
+    <div class="sync-dot"></div>
+    <span id="syncIndicatorText">En ligne</span>
+</div>
+
+<!-- ============ PWA INSTALL BANNER ============ -->
+<div class="pwa-install-banner" id="pwaInstallBanner">
+    <div style="font-size: 28px;">📱</div>
+    <div class="pwa-text">
+        <strong>Installer FacturaPro</strong>
+        <span>Accès rapide depuis votre écran d'accueil</span>
+    </div>
+    <button onclick="installPWA()">Installer</button>
+    <button class="pwa-close" onclick="dismissPWAInstall()">✕</button>
+</div>
+
 <!-- ============ TOAST ============ -->
 <div class="toast" id="toast"></div>
 
@@ -4172,6 +4818,249 @@
 // ============================================
 // FACTURAPRO PRO - Avec Supabase + Paiements
 // ============================================
+
+// ============================================
+// SYNC MANAGER - Online/Offline + Queue
+// ============================================
+const SyncManager = {
+    isOnline: navigator.onLine,
+    pendingChanges: [],
+    isSyncing: false,
+    lastSyncTime: null,
+    deferredPrompt: null, // Pour PWA install
+    
+    init() {
+        // Restaurer la queue depuis localStorage
+        try {
+            const stored = localStorage.getItem('fp_pending_sync');
+            if (stored) this.pendingChanges = JSON.parse(stored);
+        } catch (e) {
+            this.pendingChanges = [];
+        }
+        
+        // Listeners online/offline
+        window.addEventListener('online', () => this.handleOnline());
+        window.addEventListener('offline', () => this.handleOffline());
+        
+        // PWA install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredPrompt = e;
+            // Afficher la bannière après 30 secondes
+            setTimeout(() => this.showPWAInstallBanner(), 30000);
+        });
+        
+        // Install success
+        window.addEventListener('appinstalled', () => {
+            console.log('[FacturaPro] PWA installée avec succès');
+            this.dismissPWAInstall();
+            try { showToast('🎉 FacturaPro installée avec succès !', 'success'); } catch(e) {}
+        });
+        
+        // État initial
+        this.updateUI();
+        
+        // Si online au démarrage et queue non vide, sync
+        if (this.isOnline && this.pendingChanges.length > 0) {
+            setTimeout(() => this.syncPending(), 2000);
+        }
+    },
+    
+    handleOnline() {
+        this.isOnline = true;
+        this.updateUI();
+        try { showToast('🟢 Connexion rétablie', 'success'); } catch(e) {}
+        
+        // Auto-sync de la queue
+        if (this.pendingChanges.length > 0) {
+            setTimeout(() => this.syncPending(), 1000);
+        }
+    },
+    
+    handleOffline() {
+        this.isOnline = false;
+        this.updateUI();
+        try { showToast('🔴 Mode hors ligne - Vos modifications seront synchronisées plus tard', 'warning'); } catch(e) {}
+    },
+    
+    addPendingChange(change) {
+        this.pendingChanges.push({
+            ...change,
+            timestamp: Date.now(),
+            id: 'sync-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5)
+        });
+        this.savePendingChanges();
+        this.updateUI();
+    },
+    
+    savePendingChanges() {
+        try {
+            localStorage.setItem('fp_pending_sync', JSON.stringify(this.pendingChanges));
+        } catch (e) {
+            console.warn('[Sync] Impossible de sauvegarder la queue:', e);
+        }
+    },
+    
+    async syncPending() {
+        if (!this.isOnline || this.isSyncing || this.pendingChanges.length === 0) return;
+        
+        this.isSyncing = true;
+        this.updateUI();
+        
+        const total = this.pendingChanges.length;
+        let synced = 0;
+        const failed = [];
+        
+        for (const change of [...this.pendingChanges]) {
+            try {
+                // Le sync se fait via Storage.set qui appelle déjà Supabase
+                // Pour les anciennes modifications, juste re-déclencher la sauvegarde
+                if (change.type === 'storage' && change.key) {
+                    const value = Storage.get(change.key);
+                    if (window._supabaseClient && Storage._currentUserId) {
+                        await window._supabaseClient
+                            .from('user_data')
+                            .upsert({
+                                user_id: Storage._currentUserId,
+                                key: change.key,
+                                value: value,
+                                updated_at: new Date().toISOString()
+                            }, { onConflict: 'user_id,key' });
+                    }
+                }
+                synced++;
+                // Retirer de la queue
+                this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id);
+            } catch (err) {
+                console.warn('[Sync] Échec sync:', change, err);
+                failed.push(change);
+            }
+        }
+        
+        this.savePendingChanges();
+        this.lastSyncTime = Date.now();
+        this.isSyncing = false;
+        
+        if (synced > 0) {
+            try { showToast(`✅ ${synced} modification${synced > 1 ? 's' : ''} synchronisée${synced > 1 ? 's' : ''}`, 'success'); } catch(e) {}
+        }
+        
+        this.updateUI();
+        
+        // Auto-hide indicator after sync
+        if (this.pendingChanges.length === 0 && this.isOnline) {
+            setTimeout(() => {
+                const indicator = document.getElementById('syncIndicator');
+                if (indicator && this.pendingChanges.length === 0 && this.isOnline) {
+                    indicator.classList.add('fade-out');
+                }
+            }, 3000);
+        }
+    },
+    
+    updateUI() {
+        const indicator = document.getElementById('syncIndicator');
+        const text = document.getElementById('syncIndicatorText');
+        if (!indicator || !text) return;
+        
+        indicator.classList.remove('offline', 'syncing', 'fade-out');
+        
+        if (!this.isOnline) {
+            indicator.classList.add('offline');
+            const pending = this.pendingChanges.length;
+            text.textContent = pending > 0 
+                ? `🔴 Hors ligne · ${pending} en attente`
+                : '🔴 Hors ligne';
+        } else if (this.isSyncing) {
+            indicator.classList.add('syncing');
+            text.textContent = `Synchronisation...`;
+        } else if (this.pendingChanges.length > 0) {
+            indicator.classList.add('syncing');
+            text.textContent = `${this.pendingChanges.length} en attente`;
+        } else {
+            text.textContent = '🟢 Synchronisé';
+        }
+    },
+    
+    showSyncDetails() {
+        const pending = this.pendingChanges.length;
+        let msg = '';
+        
+        if (!this.isOnline) {
+            msg = `🔴 Mode hors ligne\n\n`;
+            msg += `Vos données sont sauvegardées localement.\n\n`;
+            if (pending > 0) {
+                msg += `${pending} modification${pending > 1 ? 's' : ''} en attente de synchronisation.\n\n`;
+            }
+            msg += `Quand votre connexion sera rétablie, tout sera automatiquement synchronisé.`;
+        } else if (pending > 0) {
+            msg = `🔄 Synchronisation en cours...\n\n${pending} modification${pending > 1 ? 's' : ''} à synchroniser.`;
+        } else {
+            const lastSync = this.lastSyncTime 
+                ? new Date(this.lastSyncTime).toLocaleTimeString('fr-FR') 
+                : 'maintenant';
+            msg = `✅ Toutes vos données sont synchronisées\n\nDernière synchronisation : ${lastSync}\n\nVos données sont sauvegardées dans le cloud (Supabase) et localement sur cet appareil.`;
+        }
+        
+        alert(msg);
+    },
+    
+    showPWAInstallBanner() {
+        if (!this.deferredPrompt) return;
+        // Ne pas montrer si déjà installé ou refusé récemment
+        const dismissed = localStorage.getItem('fp_pwa_dismissed');
+        if (dismissed) {
+            const dismissedDate = parseInt(dismissed);
+            // Re-montrer après 7 jours
+            if (Date.now() - dismissedDate < 7 * 24 * 60 * 60 * 1000) return;
+        }
+        
+        const banner = document.getElementById('pwaInstallBanner');
+        if (banner) banner.classList.add('show');
+    },
+    
+    dismissPWAInstall() {
+        const banner = document.getElementById('pwaInstallBanner');
+        if (banner) banner.classList.remove('show');
+        localStorage.setItem('fp_pwa_dismissed', Date.now().toString());
+    },
+    
+    async installPWA() {
+        if (!this.deferredPrompt) {
+            // Sur iOS Safari, pas de prompt natif - donner instructions
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            if (isIOS) {
+                alert('📱 Pour installer FacturaPro sur iOS :\n\n1. Tapez le bouton "Partager" 📤 dans Safari\n2. Faites défiler et tapez "Sur l\'écran d\'accueil"\n3. Confirmez l\'ajout\n\nFacturaPro apparaîtra comme une vraie app !');
+            } else {
+                alert('💡 Pour installer FacturaPro :\n\n• Sur Chrome/Edge : Cherchez l\'icône d\'installation dans la barre d\'adresse\n• Sur Firefox : Menu → Installer cette application');
+            }
+            return;
+        }
+        
+        try {
+            this.deferredPrompt.prompt();
+            const { outcome } = await this.deferredPrompt.userChoice;
+            console.log('[PWA] Install outcome:', outcome);
+            this.deferredPrompt = null;
+            this.dismissPWAInstall();
+        } catch (err) {
+            console.warn('[PWA] Install error:', err);
+        }
+    }
+};
+
+// Helpers globaux
+function showSyncDetails() { SyncManager.showSyncDetails(); }
+function installPWA() { SyncManager.installPWA(); }
+function dismissPWAInstall() { SyncManager.dismissPWAInstall(); }
+
+// Init au démarrage
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => SyncManager.init());
+} else {
+    SyncManager.init();
+}
+
 
 // ============================================
 // CONFIGURATION SUPABASE
@@ -4429,15 +5318,33 @@ const Storage = {
     },
     
     async _syncToCloud(key, value) {
+        // Si offline, ajouter à la queue
+        if (typeof SyncManager !== 'undefined' && !SyncManager.isOnline) {
+            SyncManager.addPendingChange({ type: 'storage', key });
+            return;
+        }
+        
         try {
-            await supaClient.from('user_data').upsert({
+            const { error } = await supaClient.from('user_data').upsert({
                 user_id: this._currentUserId,
                 key: key,
                 value: value,
                 updated_at: new Date().toISOString()
             }, { onConflict: 'user_id,key' });
+            
+            if (error) throw error;
+            
+            // Mise à jour timestamp last sync
+            if (typeof SyncManager !== 'undefined') {
+                SyncManager.lastSyncTime = Date.now();
+                SyncManager.updateUI();
+            }
         } catch (err) {
             console.warn('Cloud sync failed:', err);
+            // Si erreur réseau, ajouter à la queue pour retry plus tard
+            if (typeof SyncManager !== 'undefined') {
+                SyncManager.addPendingChange({ type: 'storage', key });
+            }
         }
     },
     
@@ -4527,6 +5434,24 @@ function formatCurrency(amount, withSymbol = true) {
         maximumFractionDigits: 2
     });
     return withSymbol ? `${formatted} DH` : formatted;
+}
+
+// Format spécifique pour PDF (jsPDF a des soucis avec les NBSP/caractères spéciaux)
+// Utilise un espace normal au lieu de NBSP pour les milliers
+function formatCurrencyForPDF(amount, withSymbol = true) {
+    const num = amount || 0;
+    const isNegative = num < 0;
+    const absNum = Math.abs(num);
+    
+    // Format manuel pour garantir compatibilité jsPDF
+    const fixed = absNum.toFixed(2); // Ex: "1000.00"
+    const [intPart, decPart] = fixed.split('.');
+    
+    // Ajout d'espaces tous les 3 chiffres (de droite à gauche)
+    const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    
+    const result = `${isNegative ? '-' : ''}${intFormatted},${decPart}`;
+    return withSymbol ? `${result} DH` : result;
 }
 
 function formatDate(dateStr) {
@@ -5101,6 +6026,7 @@ function navTo(page) {
     if (page === 'taxes') renderTaxes();
     if (page === 'company') loadCompanyForm();
     if (page === 'team') navTo_team_render();
+    if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
     
     // Close mobile sidebar
@@ -6360,6 +7286,861 @@ function calculatePatente() {
 // ============================================
 let pendingInviteData = null;
 
+// ============================================
+// REPORTS - 6 ONGLETS D'ANALYSE
+// ============================================
+let activeReportTab = 'invoices';
+
+function initReports() {
+    activeReportTab = 'invoices';
+    switchReportTab('invoices');
+}
+
+function switchReportTab(tab) {
+    activeReportTab = tab;
+    document.querySelectorAll('.report-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`.report-tab[data-tab="${tab}"]`)?.classList.add('active');
+    document.querySelectorAll('.report-content').forEach(c => c.style.display = 'none');
+    const content = document.getElementById(`report-${tab}`);
+    if (content) content.style.display = 'block';
+    
+    rerenderActiveReport();
+}
+
+function rerenderActiveReport() {
+    switch (activeReportTab) {
+        case 'invoices': renderReportInvoices(); break;
+        case 'cashflow': renderReportCashflow(); break;
+        case 'topclients': renderReportTopClients(); break;
+        case 'topproducts': renderReportTopProducts(); break;
+        case 'catva': renderReportCATVA(); break;
+        case 'fiscal': renderReportFiscal(); break;
+    }
+}
+
+// Helper : Filtrer par période
+function getReportDateRange() {
+    const period = document.getElementById('reportPeriod')?.value || 'month';
+    const now = new Date();
+    let start;
+    
+    switch (period) {
+        case 'month':
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        case 'quarter':
+            const q = Math.floor(now.getMonth() / 3);
+            start = new Date(now.getFullYear(), q * 3, 1);
+            break;
+        case 'year':
+            start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+            break;
+        case 'ytd':
+            start = new Date(now.getFullYear(), 0, 1);
+            break;
+        case 'all':
+        default:
+            return null;
+    }
+    return { start, end: now };
+}
+
+function isInReportRange(dateStr, range) {
+    if (!range) return true;
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
+    return date >= range.start && date <= range.end;
+}
+
+// ============================================
+// RAPPORT 1 : FACTURES
+// ============================================
+function renderReportInvoices() {
+    const range = getReportDateRange();
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+    );
+    const filtered = allInvoices.filter(i => isInReportRange(i.date, range));
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Catégorisation
+    const paid = filtered.filter(i => i.status === 'paid');
+    const sent = filtered.filter(i => i.status === 'sent');
+    const overdue = filtered.filter(i => {
+        if (i.status === 'paid' || i.status === 'draft') return false;
+        if (!i.dueDate) return false;
+        return new Date(i.dueDate) < today;
+    });
+    const draft = filtered.filter(i => i.status === 'draft');
+    
+    const sumTTC = arr => arr.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    
+    document.getElementById('rpInvTotalAmount').textContent = formatCurrency(sumTTC(filtered));
+    document.getElementById('rpInvTotalCount').textContent = `${filtered.length} facture${filtered.length > 1 ? 's' : ''}`;
+    
+    document.getElementById('rpInvPaidAmount').textContent = formatCurrency(sumTTC(paid));
+    document.getElementById('rpInvPaidCount').textContent = `${paid.length} facture${paid.length > 1 ? 's' : ''}`;
+    
+    document.getElementById('rpInvPendingAmount').textContent = formatCurrency(sumTTC(sent.filter(i => !overdue.includes(i))));
+    document.getElementById('rpInvPendingCount').textContent = `${sent.filter(i => !overdue.includes(i)).length} facture(s)`;
+    
+    document.getElementById('rpInvOverdueAmount').textContent = formatCurrency(sumTTC(overdue));
+    document.getElementById('rpInvOverdueCount').textContent = `${overdue.length} facture${overdue.length > 1 ? 's' : ''}`;
+    
+    // Filtres
+    const statusFilter = document.getElementById('rpInvFilterStatus')?.value || 'all';
+    const clientSearch = (document.getElementById('rpInvFilterClient')?.value || '').toLowerCase().trim();
+    
+    let displayed = filtered;
+    if (statusFilter === 'overdue') {
+        displayed = overdue;
+    } else if (statusFilter !== 'all') {
+        displayed = displayed.filter(i => i.status === statusFilter);
+    }
+    if (clientSearch) {
+        displayed = displayed.filter(i => 
+            (i.clientName || '').toLowerCase().includes(clientSearch)
+        );
+    }
+    
+    // Trier par date desc
+    displayed.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // Render table
+    const tbody = document.getElementById('rpInvTable');
+    if (displayed.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">Aucune facture trouvée</td></tr>';
+    } else {
+        tbody.innerHTML = displayed.slice(0, 100).map(i => {
+            const isOverdue = overdue.includes(i);
+            const dueLabel = i.dueDate ? formatDate(i.dueDate) : '—';
+            
+            let statusBadge;
+            if (i.status === 'paid') statusBadge = '<span class="status-pill status-paid">✅ Payée</span>';
+            else if (isOverdue) statusBadge = '<span class="status-pill status-overdue">🚨 En retard</span>';
+            else if (i.status === 'sent') statusBadge = '<span class="status-pill status-sent">⏳ Envoyée</span>';
+            else if (i.status === 'draft') statusBadge = '<span class="status-pill status-draft">📝 Brouillon</span>';
+            else statusBadge = `<span class="status-pill">${i.status}</span>`;
+            
+            const action = (i.status !== 'paid' && i.status !== 'draft' && i.clientName) 
+                ? `<button class="btn btn-success btn-sm" onclick="quickRelance('${i.id}')" title="Relancer client">📱 Relancer</button>`
+                : '—';
+            
+            return `
+                <tr>
+                    <td><strong>${escapeHtml(i.number)}</strong></td>
+                    <td>${formatDate(i.date)}</td>
+                    <td>${escapeHtml(i.clientName || '—')}</td>
+                    <td><strong>${formatCurrency(i.totalTTC)}</strong></td>
+                    <td>${dueLabel}${isOverdue ? ' <span style="color: var(--danger); font-size: 11px;">(retard)</span>' : ''}</td>
+                    <td>${statusBadge}</td>
+                    <td>${action}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+}
+
+function quickRelance(invoiceId) {
+    const invoices = Storage.get('invoices', []);
+    const invoice = invoices.find(i => i.id === invoiceId);
+    if (!invoice) return;
+    
+    const clients = Storage.get('clients', []);
+    const client = clients.find(c => c.id === invoice.clientId);
+    
+    const company = Storage.get('company', {});
+    const dueLabel = invoice.dueDate ? formatDate(invoice.dueDate) : '';
+    
+    const msg = `Bonjour 🇲🇦,\n\n` +
+        `Je me permets de revenir vers vous concernant la facture ${invoice.number}${dueLabel ? ` (échéance ${dueLabel})` : ''}.\n\n` +
+        `📋 Détail :\n` +
+        `• N° : ${invoice.number}\n` +
+        `• Montant : ${formatCurrency(invoice.totalTTC)}\n` +
+        `• Date : ${formatDate(invoice.date)}\n\n` +
+        `Pourriez-vous svp me faire un retour sur le statut du règlement ?\n\n` +
+        `${company.rib ? `RIB : ${company.rib}\n` : ''}` +
+        `Bien cordialement,\n${company.name || ''}`;
+    
+    const phone = (client?.phone || '').replace(/\D/g, '');
+    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+}
+
+// ============================================
+// RAPPORT 2 : CASH FLOW
+// ============================================
+function renderReportCashflow() {
+    const range = getReportDateRange();
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+    );
+    const filtered = allInvoices.filter(i => isInReportRange(i.date, range));
+    
+    const billed = filtered.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const paid = filtered.filter(i => i.status === 'paid');
+    const received = paid.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    
+    document.getElementById('rpCfReceived').textContent = formatCurrency(received);
+    document.getElementById('rpCfBilled').textContent = formatCurrency(billed);
+    
+    const rate = billed > 0 ? Math.round((received / billed) * 100) : 0;
+    document.getElementById('rpCfRate').textContent = `${rate}%`;
+    
+    // Délai moyen
+    const delays = paid.filter(i => i.paymentDate && i.date).map(i => {
+        const d1 = new Date(i.date);
+        const d2 = new Date(i.paymentDate);
+        return Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
+    });
+    const avgDelay = delays.length > 0 ? Math.round(delays.reduce((a,b) => a+b, 0) / delays.length) : null;
+    document.getElementById('rpCfAvgDelay').textContent = avgDelay !== null ? `${avgDelay} jours` : '— jours';
+    
+    // Trend
+    const todayReceived = paid.filter(i => {
+        if (!i.paymentDate) return false;
+        const d = new Date(i.paymentDate);
+        const t = new Date();
+        return d.toDateString() === t.toDateString();
+    }).reduce((s, i) => s + (i.totalTTC || 0), 0);
+    document.getElementById('rpCfReceivedTrend').textContent = todayReceived > 0 
+        ? `+${formatCurrency(todayReceived)} aujourd'hui`
+        : 'Période sélectionnée';
+    
+    // Chart 12 mois
+    renderCashFlowChart();
+    
+    // Slow payers
+    renderSlowPayers();
+}
+
+function renderCashFlowChart() {
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+    );
+    
+    const months = [];
+    const today = new Date();
+    for (let i = 11; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        months.push({
+            year: d.getFullYear(),
+            month: d.getMonth(),
+            label: d.toLocaleDateString('fr-FR', { month: 'short' }),
+            billed: 0,
+            received: 0
+        });
+    }
+    
+    allInvoices.forEach(inv => {
+        if (!inv.date) return;
+        const d = new Date(inv.date);
+        const m = months.find(x => x.year === d.getFullYear() && x.month === d.getMonth());
+        if (m) m.billed += inv.totalTTC || 0;
+        
+        if (inv.status === 'paid' && inv.paymentDate) {
+            const dp = new Date(inv.paymentDate);
+            const mp = months.find(x => x.year === dp.getFullYear() && x.month === dp.getMonth());
+            if (mp) mp.received += inv.totalTTC || 0;
+        }
+    });
+    
+    const max = Math.max(...months.map(m => Math.max(m.billed, m.received)), 1);
+    
+    const container = document.getElementById('rpCfChart');
+    if (!container) return;
+    
+    container.innerHTML = months.map(m => {
+        const billedH = (m.billed / max) * 100;
+        const receivedH = (m.received / max) * 100;
+        return `
+            <div class="chart-bar-group" style="display: flex; flex-direction: column; align-items: center; flex: 1; height: 100%; justify-content: flex-end; gap: 2px;">
+                <div style="display: flex; gap: 2px; align-items: flex-end; height: 80%;">
+                    <div style="background: var(--success); width: 8px; height: ${receivedH}%; border-radius: 2px 2px 0 0;" title="Encaissé : ${formatCurrency(m.received)}"></div>
+                    <div style="background: var(--accent); width: 8px; height: ${billedH}%; border-radius: 2px 2px 0 0;" title="Facturé : ${formatCurrency(m.billed)}"></div>
+                </div>
+                <div style="font-size: 10px; color: var(--ink-mute); margin-top: 4px;">${m.label}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderSlowPayers() {
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && i.status === 'paid' && i.paymentDate && i.date
+    );
+    
+    const clientStats = {};
+    allInvoices.forEach(i => {
+        const key = i.clientName || 'Inconnu';
+        if (!clientStats[key]) {
+            clientStats[key] = { name: key, count: 0, totalDelay: 0, totalAmount: 0, clientId: i.clientId };
+        }
+        const d1 = new Date(i.date);
+        const d2 = new Date(i.paymentDate);
+        const delay = Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
+        clientStats[key].count++;
+        clientStats[key].totalDelay += delay;
+        clientStats[key].totalAmount += i.totalTTC || 0;
+    });
+    
+    const sorted = Object.values(clientStats)
+        .filter(c => c.count >= 1)
+        .map(c => ({ ...c, avgDelay: Math.round(c.totalDelay / c.count) }))
+        .sort((a, b) => b.avgDelay - a.avgDelay)
+        .slice(0, 10);
+    
+    const tbody = document.getElementById('rpCfSlowPayers');
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Pas assez de données</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = sorted.map(c => {
+        let badge;
+        if (c.avgDelay <= 7) badge = '<span style="color: var(--success); font-weight: 600;">🟢 Rapide</span>';
+        else if (c.avgDelay <= 30) badge = '<span style="color: var(--warning); font-weight: 600;">🟡 Moyen</span>';
+        else badge = '<span style="color: var(--danger); font-weight: 600;">🔴 Lent</span>';
+        
+        return `
+            <tr>
+                <td><strong>${escapeHtml(c.name)}</strong></td>
+                <td>${c.count}</td>
+                <td><strong>${c.avgDelay} jours</strong> ${badge}</td>
+                <td>${formatCurrency(c.totalAmount)}</td>
+                <td>${c.clientId ? `<button class="btn btn-secondary btn-sm" onclick="navTo('clients')">Voir client</button>` : '—'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ============================================
+// RAPPORT 3 : TOP CLIENTS
+// ============================================
+function renderReportTopClients() {
+    const range = getReportDateRange();
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0 && isInReportRange(i.date, range)
+    );
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const clientStats = {};
+    allInvoices.forEach(i => {
+        const key = i.clientName || 'Inconnu';
+        if (!clientStats[key]) {
+            clientStats[key] = {
+                name: key,
+                clientId: i.clientId,
+                count: 0,
+                totalHT: 0,
+                totalTTC: 0,
+                lastInvoice: i.date,
+                hasOverdue: false,
+                hasPaid: false
+            };
+        }
+        clientStats[key].count++;
+        clientStats[key].totalHT += i.totalHT || 0;
+        clientStats[key].totalTTC += i.totalTTC || 0;
+        if (new Date(i.date) > new Date(clientStats[key].lastInvoice)) {
+            clientStats[key].lastInvoice = i.date;
+        }
+        if (i.status === 'paid') clientStats[key].hasPaid = true;
+        if (i.status !== 'paid' && i.dueDate && new Date(i.dueDate) < today) {
+            clientStats[key].hasOverdue = true;
+        }
+    });
+    
+    const sorted = Object.values(clientStats).sort((a, b) => b.totalTTC - a.totalTTC);
+    
+    // KPIs
+    if (sorted.length > 0) {
+        document.getElementById('rpTcBestName').textContent = sorted[0].name;
+        document.getElementById('rpTcBestAmount').textContent = formatCurrency(sorted[0].totalTTC);
+    } else {
+        document.getElementById('rpTcBestName').textContent = '—';
+        document.getElementById('rpTcBestAmount').textContent = '0 DH';
+    }
+    
+    document.getElementById('rpTcActiveCount').textContent = sorted.length;
+    
+    const totalCA = sorted.reduce((s, c) => s + c.totalTTC, 0);
+    const avg = sorted.length > 0 ? totalCA / sorted.length : 0;
+    document.getElementById('rpTcAvgRevenue').textContent = formatCurrency(avg);
+    
+    const top5 = sorted.slice(0, 5).reduce((s, c) => s + c.totalTTC, 0);
+    const top5Pct = totalCA > 0 ? Math.round((top5 / totalCA) * 100) : 0;
+    document.getElementById('rpTcTop5Percent').textContent = `${top5Pct}%`;
+    
+    // Table
+    const tbody = document.getElementById('rpTcTable');
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">Aucun client dans cette période</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = sorted.slice(0, 50).map((c, idx) => {
+        let badge;
+        if (c.hasOverdue) badge = '<span class="badge badge-warning">🚨 Retard</span>';
+        else if (c.hasPaid) badge = '<span class="badge badge-success">✅ À jour</span>';
+        else badge = '<span class="badge" style="background: var(--surface-soft); color: var(--ink-mute);">⏳ En attente</span>';
+        
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
+        
+        return `
+            <tr>
+                <td><strong>${medal}</strong></td>
+                <td><strong>${escapeHtml(c.name)}</strong></td>
+                <td>${c.count}</td>
+                <td>${formatCurrency(c.totalHT)}</td>
+                <td><strong>${formatCurrency(c.totalTTC)}</strong></td>
+                <td>${formatDate(c.lastInvoice)}</td>
+                <td>${badge}</td>
+                <td><button class="btn btn-secondary btn-sm" onclick="contactClient('${escapeHtml(c.name)}', '${c.clientId || ''}')">📱</button></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function contactClient(name, clientId) {
+    const clients = Storage.get('clients', []);
+    const client = clients.find(c => c.id === clientId);
+    const phone = (client?.phone || '').replace(/\D/g, '');
+    
+    const msg = `Bonjour 🇲🇦,\n\nJ'espère que vous allez bien.\n\nJe me permets de prendre de vos nouvelles et reste à votre disposition pour vos prochains besoins.\n\nBien cordialement.`;
+    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+}
+
+// ============================================
+// RAPPORT 4 : TOP PRODUITS
+// ============================================
+function renderReportTopProducts() {
+    const range = getReportDateRange();
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0 && isInReportRange(i.date, range)
+    );
+    
+    const productStats = {};
+    let totalRevenue = 0;
+    
+    allInvoices.forEach(inv => {
+        (inv.items || []).forEach(item => {
+            const key = (item.description || 'Sans nom').substring(0, 80);
+            if (!productStats[key]) {
+                productStats[key] = { name: key, qty: 0, revenue: 0, prices: [] };
+            }
+            const qty = Math.abs(item.quantity || 0);
+            const price = item.price || 0;
+            productStats[key].qty += qty;
+            productStats[key].revenue += qty * price;
+            productStats[key].prices.push(price);
+            totalRevenue += qty * price;
+        });
+    });
+    
+    const sorted = Object.values(productStats).sort((a, b) => b.revenue - a.revenue);
+    
+    // KPIs
+    if (sorted.length > 0) {
+        document.getElementById('rpTpBestName').textContent = sorted[0].name.substring(0, 30) + (sorted[0].name.length > 30 ? '...' : '');
+        document.getElementById('rpTpBestQty').textContent = `${sorted[0].qty} unités vendues`;
+    } else {
+        document.getElementById('rpTpBestName').textContent = '—';
+        document.getElementById('rpTpBestQty').textContent = '0 vendus';
+    }
+    
+    document.getElementById('rpTpUniqueCount').textContent = sorted.length;
+    document.getElementById('rpTpTotalQty').textContent = sorted.reduce((s, p) => s + p.qty, 0);
+    document.getElementById('rpTpTotalRevenue').textContent = formatCurrency(totalRevenue);
+    
+    // Table
+    const tbody = document.getElementById('rpTpTable');
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">Aucune vente dans cette période</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = sorted.slice(0, 50).map((p, idx) => {
+        const pct = totalRevenue > 0 ? ((p.revenue / totalRevenue) * 100).toFixed(1) : '0.0';
+        const avgPrice = p.qty > 0 ? p.revenue / p.qty : 0;
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
+        
+        return `
+            <tr>
+                <td><strong>${medal}</strong></td>
+                <td><strong>${escapeHtml(p.name)}</strong></td>
+                <td><strong>${p.qty}</strong></td>
+                <td>${formatCurrency(p.revenue)}</td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="flex: 1; height: 6px; background: var(--surface-soft); border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${pct}%; background: var(--accent);"></div>
+                        </div>
+                        <strong style="font-size: 12px; min-width: 50px;">${pct}%</strong>
+                    </div>
+                </td>
+                <td>${formatCurrency(avgPrice)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ============================================
+// RAPPORT 5 : CA & TVA
+// ============================================
+function renderReportCATVA() {
+    const range = getReportDateRange();
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+    );
+    const filtered = allInvoices.filter(i => isInReportRange(i.date, range));
+    
+    let totalHT = 0, totalTVA = 0, totalTTC = 0;
+    const tvaBreakdown = {};
+    
+    filtered.forEach(inv => {
+        totalHT += inv.totalHT || 0;
+        totalTVA += inv.totalTVA || 0;
+        totalTTC += inv.totalTTC || 0;
+        
+        (inv.items || []).forEach(item => {
+            const tva = item.tva || 0;
+            const baseHT = (item.quantity || 0) * (item.price || 0);
+            const tvaAmount = baseHT * (tva / 100);
+            
+            if (!tvaBreakdown[tva]) {
+                tvaBreakdown[tva] = { rate: tva, baseHT: 0, tvaAmount: 0, ttc: 0 };
+            }
+            tvaBreakdown[tva].baseHT += baseHT;
+            tvaBreakdown[tva].tvaAmount += tvaAmount;
+            tvaBreakdown[tva].ttc += baseHT + tvaAmount;
+        });
+    });
+    
+    document.getElementById('rpCvCAHT').textContent = formatCurrency(totalHT);
+    document.getElementById('rpCvTVA').textContent = formatCurrency(totalTVA);
+    document.getElementById('rpCvCATTC').textContent = formatCurrency(totalTTC);
+    
+    // Comparaison N vs N-1
+    const today = new Date();
+    const yearAgoStart = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+    const yearAgoEnd = new Date(today.getFullYear() - 1, today.getMonth() + 1, 0);
+    const lastYearInvoices = allInvoices.filter(i => {
+        const d = new Date(i.date);
+        return d >= yearAgoStart && d <= yearAgoEnd;
+    });
+    const lastYearCA = lastYearInvoices.reduce((s, i) => s + (i.totalHT || 0), 0);
+    
+    if (lastYearCA > 0) {
+        const growth = Math.round(((totalHT - lastYearCA) / lastYearCA) * 100);
+        const sign = growth >= 0 ? '+' : '';
+        const color = growth >= 0 ? 'var(--success)' : 'var(--danger)';
+        const arrow = growth >= 0 ? '📈' : '📉';
+        document.getElementById('rpCvGrowth').innerHTML = `<span style="color: ${color}; font-size: 18px;">${arrow} ${sign}${growth}%</span>`;
+    } else {
+        document.getElementById('rpCvGrowth').textContent = '—';
+    }
+    
+    // Breakdown table
+    const tbody = document.getElementById('rpCvTvaBreakdown');
+    const breakdownArray = Object.values(tvaBreakdown).sort((a, b) => a.rate - b.rate);
+    
+    if (breakdownArray.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Aucune donnée dans cette période</td></tr>';
+    } else {
+        tbody.innerHTML = breakdownArray.map(b => {
+            const pct = totalHT > 0 ? ((b.baseHT / totalHT) * 100).toFixed(1) : '0.0';
+            return `
+                <tr>
+                    <td><strong>${b.rate}%</strong></td>
+                    <td>${formatCurrency(b.baseHT)}</td>
+                    <td><strong>${formatCurrency(b.tvaAmount)}</strong></td>
+                    <td>${formatCurrency(b.ttc)}</td>
+                    <td>${pct}%</td>
+                </tr>
+            `;
+        }).join('') + `
+            <tr style="background: var(--surface-soft); font-weight: 700;">
+                <td><strong>TOTAL</strong></td>
+                <td><strong>${formatCurrency(totalHT)}</strong></td>
+                <td><strong>${formatCurrency(totalTVA)}</strong></td>
+                <td><strong>${formatCurrency(totalTTC)}</strong></td>
+                <td>100%</td>
+            </tr>
+        `;
+    }
+    
+    // Chart 12 mois
+    renderCATVAChart();
+}
+
+function renderCATVAChart() {
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+    );
+    
+    const months = [];
+    const today = new Date();
+    for (let i = 11; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        months.push({
+            year: d.getFullYear(),
+            month: d.getMonth(),
+            label: d.toLocaleDateString('fr-FR', { month: 'short' }),
+            ca: 0
+        });
+    }
+    
+    allInvoices.forEach(inv => {
+        if (!inv.date) return;
+        const d = new Date(inv.date);
+        const m = months.find(x => x.year === d.getFullYear() && x.month === d.getMonth());
+        if (m) m.ca += inv.totalHT || 0;
+    });
+    
+    const max = Math.max(...months.map(m => m.ca), 1);
+    const container = document.getElementById('rpCvChart');
+    if (!container) return;
+    
+    container.innerHTML = months.map(m => {
+        const h = (m.ca / max) * 100;
+        return `
+            <div style="display: flex; flex-direction: column; align-items: center; flex: 1; height: 100%; justify-content: flex-end;">
+                <div style="background: linear-gradient(180deg, var(--accent), var(--primary)); width: 70%; height: ${Math.max(h, 1)}%; border-radius: 4px 4px 0 0; transition: all 0.3s;" title="${m.label} : ${formatCurrency(m.ca)}"></div>
+                <div style="font-size: 10px; color: var(--ink-mute); margin-top: 4px;">${m.label}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================
+// RAPPORT 6 : CNSS / IR (AE seulement)
+// ============================================
+function renderReportFiscal() {
+    const company = Storage.get('company', {});
+    const isAE = company.status === 'ae';
+    
+    document.getElementById('rpFiscalAESection').style.display = isAE ? 'block' : 'none';
+    document.getElementById('rpFiscalNotAESection').style.display = isAE ? 'none' : 'block';
+    
+    if (!isAE) return;
+    
+    // Calcul CA annuel (depuis 1er janvier)
+    const today = new Date();
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+    const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+    );
+    const yearInvoices = allInvoices.filter(i => {
+        if (!i.date) return false;
+        const d = new Date(i.date);
+        return d >= yearStart && d <= today;
+    });
+    
+    const caYear = yearInvoices.reduce((s, i) => s + (i.totalHT || 0), 0);
+    
+    // Activité (par défaut services)
+    const activity = company.activity || 'services';
+    const cnssRate = activity === 'commerce' ? 0.005 : 0.01;
+    const cnssRateLabel = activity === 'commerce' ? '0,5% (commerce)' : '1% (services)';
+    
+    // Plafond AE
+    const plafond = activity === 'commerce' ? 500000 : 200000;
+    const pctPlafond = Math.min(100, Math.round((caYear / plafond) * 100));
+    
+    // CNSS
+    const cnssAmount = caYear * cnssRate;
+    
+    // IR estimé (barème simplifié)
+    let irRate = 0;
+    let irLabel = '';
+    if (caYear <= 30000) { irRate = 0; irLabel = '0% (exonéré)'; }
+    else if (caYear <= 50000) { irRate = 0.10; irLabel = '10%'; }
+    else if (caYear <= 60000) { irRate = 0.20; irLabel = '20%'; }
+    else if (caYear <= 80000) { irRate = 0.30; irLabel = '30%'; }
+    else if (caYear <= 180000) { irRate = 0.34; irLabel = '34%'; }
+    else { irRate = 0.38; irLabel = '38%'; }
+    
+    const irAmount = caYear * irRate;
+    
+    // Render KPIs
+    document.getElementById('rpFsCAYear').textContent = formatCurrency(caYear);
+    document.getElementById('rpFsCAYearTrend').textContent = `Depuis le 01/01/${today.getFullYear()}`;
+    
+    document.getElementById('rpFsCNSS').textContent = formatCurrency(cnssAmount);
+    document.getElementById('rpFsCNSSRate').textContent = `Taux : ${cnssRateLabel}`;
+    
+    document.getElementById('rpFsIR').textContent = formatCurrency(irAmount);
+    document.getElementById('rpFsIRRate').textContent = `Taux : ${irLabel}`;
+    
+    document.getElementById('rpFsPlafondPercent').textContent = `${pctPlafond}%`;
+    document.getElementById('rpFsPlafondText').textContent = `${formatCurrency(caYear)} / ${formatCurrency(plafond)}`;
+    
+    // Couleur selon plafond
+    const plafondCard = document.getElementById('rpFsPlafondCard');
+    if (pctPlafond >= 90) plafondCard.style.borderLeft = '4px solid var(--danger)';
+    else if (pctPlafond >= 70) plafondCard.style.borderLeft = '4px solid var(--warning)';
+    else plafondCard.style.borderLeft = '4px solid var(--success)';
+    
+    // Alerte
+    const alertCard = document.getElementById('rpFsAlertCard');
+    const alertText = document.getElementById('rpFsAlertText');
+    if (pctPlafond >= 90) {
+        alertCard.style.display = 'block';
+        alertText.innerHTML = `🚨 <strong>Vous approchez du plafond AE !</strong><br><br>Vous avez atteint <strong>${pctPlafond}%</strong> du plafond annuel autorisé pour le statut Auto-Entrepreneur (${formatCurrency(plafond)}).<br><br>Si vous dépassez ce plafond, vous devrez changer de statut (passage en SARL ou Profession libérale). Anticipez maintenant !`;
+    } else if (pctPlafond >= 70) {
+        alertCard.style.display = 'block';
+        alertCard.style.background = 'rgba(232, 177, 74, 0.05)';
+        alertCard.style.borderLeftColor = 'var(--warning)';
+        alertText.innerHTML = `⚠️ Vous avez atteint <strong>${pctPlafond}%</strong> du plafond AE annuel (${formatCurrency(plafond)}). Surveillez votre CA pour ne pas dépasser.`;
+    } else {
+        alertCard.style.display = 'none';
+    }
+    
+    // Détails calcul
+    document.getElementById('rpFsStatus').textContent = 'Auto-Entrepreneur';
+    document.getElementById('rpFsActivity').textContent = activity === 'commerce' ? 'Commerce / Industrie' : 'Services / Profession libérale';
+    document.getElementById('rpFsBase').textContent = formatCurrency(caYear);
+    document.getElementById('rpFsCNSSRateText').textContent = cnssRateLabel;
+    document.getElementById('rpFsCNSSTotal').textContent = formatCurrency(cnssAmount);
+    
+    // Conseils
+    const tips = [];
+    if (caYear < plafond * 0.3) {
+        tips.push('💪 Vous êtes loin du plafond, continuez à développer votre activité !');
+    }
+    if (irRate === 0) {
+        tips.push('✅ Vous êtes exonéré d\'IR cette année (CA < 30 000 DH)');
+    } else {
+        tips.push(`📊 Pensez à provisionner ${formatCurrency(irAmount)} pour votre IR annuel`);
+    }
+    tips.push(`🏥 Provisionnez environ ${formatCurrency(cnssAmount / 12)} par mois pour la CNSS`);
+    tips.push('📅 La déclaration CNSS se fait mensuellement sur damancom.ma avant le 30 du mois suivant');
+    tips.push('💡 La déclaration IR AE se fait annuellement avant le 31 mars de l\'année suivante');
+    if (pctPlafond >= 80) {
+        tips.push('⚠️ <strong>Anticipez le changement de statut</strong> si vous dépassez le plafond');
+    }
+    
+    document.getElementById('rpFsTips').innerHTML = tips.map(t => `<li>${t}</li>`).join('');
+}
+
+// ============================================
+// EXPORT CSV REPORTS
+// ============================================
+function exportReportCSV(type) {
+    const range = getReportDateRange();
+    let headers, rows, filename;
+    
+    if (type === 'invoices') {
+        const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+            i.type !== 'credit' && isInReportRange(i.date, range)
+        );
+        headers = ['N° Facture', 'Date', 'Client', 'Montant HT', 'TVA', 'Montant TTC', 'Échéance', 'Statut', 'Date Paiement'];
+        rows = allInvoices.map(i => [
+            i.number || '',
+            formatDate(i.date),
+            i.clientName || '',
+            (i.totalHT || 0).toFixed(2),
+            (i.totalTVA || 0).toFixed(2),
+            (i.totalTTC || 0).toFixed(2),
+            i.dueDate ? formatDate(i.dueDate) : '',
+            i.status || '',
+            i.paymentDate ? formatDate(i.paymentDate) : ''
+        ]);
+        filename = 'rapport-factures';
+    } else if (type === 'topclients') {
+        const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+            i.type !== 'credit' && (i.totalTTC || 0) >= 0 && isInReportRange(i.date, range)
+        );
+        const stats = {};
+        allInvoices.forEach(i => {
+            const k = i.clientName || 'Inconnu';
+            if (!stats[k]) stats[k] = { name: k, count: 0, ht: 0, ttc: 0 };
+            stats[k].count++;
+            stats[k].ht += i.totalHT || 0;
+            stats[k].ttc += i.totalTTC || 0;
+        });
+        const sorted = Object.values(stats).sort((a, b) => b.ttc - a.ttc);
+        headers = ['Rang', 'Client', 'Nb Factures', 'CA HT', 'CA TTC'];
+        rows = sorted.map((c, idx) => [idx + 1, c.name, c.count, c.ht.toFixed(2), c.ttc.toFixed(2)]);
+        filename = 'rapport-top-clients';
+    } else if (type === 'topproducts') {
+        const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+            i.type !== 'credit' && (i.totalTTC || 0) >= 0 && isInReportRange(i.date, range)
+        );
+        const stats = {};
+        allInvoices.forEach(inv => {
+            (inv.items || []).forEach(item => {
+                const k = (item.description || 'Sans nom').substring(0, 100);
+                if (!stats[k]) stats[k] = { name: k, qty: 0, revenue: 0 };
+                const qty = Math.abs(item.quantity || 0);
+                stats[k].qty += qty;
+                stats[k].revenue += qty * (item.price || 0);
+            });
+        });
+        const sorted = Object.values(stats).sort((a, b) => b.revenue - a.revenue);
+        headers = ['Rang', 'Article', 'Qté', 'CA HT', 'Prix moyen'];
+        rows = sorted.map((p, idx) => [
+            idx + 1, p.name, p.qty,
+            p.revenue.toFixed(2),
+            (p.qty > 0 ? (p.revenue / p.qty) : 0).toFixed(2)
+        ]);
+        filename = 'rapport-top-produits';
+    } else if (type === 'catva') {
+        const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
+            i.type !== 'credit' && (i.totalTTC || 0) >= 0 && isInReportRange(i.date, range)
+        );
+        headers = ['Date', 'N° Facture', 'Client', 'Description', 'Qté', 'PU HT', 'TVA %', 'TVA Montant', 'Total HT', 'Total TTC'];
+        rows = [];
+        allInvoices.forEach(inv => {
+            (inv.items || []).forEach(item => {
+                const baseHT = (item.quantity || 0) * (item.price || 0);
+                const tva = item.tva || 0;
+                const tvaAmount = baseHT * (tva / 100);
+                rows.push([
+                    formatDate(inv.date),
+                    inv.number || '',
+                    inv.clientName || '',
+                    (item.description || '').substring(0, 80).replace(/[",;]/g, ' '),
+                    item.quantity || 0,
+                    (item.price || 0).toFixed(2),
+                    tva,
+                    tvaAmount.toFixed(2),
+                    baseHT.toFixed(2),
+                    (baseHT + tvaAmount).toFixed(2)
+                ]);
+            });
+        });
+        filename = 'rapport-ca-tva-dgi';
+    } else {
+        showToast('Type de rapport inconnu', 'error');
+        return;
+    }
+    
+    let csv = headers.join(';') + '\n';
+    csv += rows.map(r => r.map(cell => {
+        const s = String(cell || '');
+        return s.includes(';') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(';')).join('\n');
+    
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}-${todayISO()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast('Rapport CSV téléchargé ✓', 'success');
+}
+
 function navTo_team_render() {
     const lockedSection = document.getElementById('teamLockedSection');
     const activeSection = document.getElementById('teamActiveSection');
@@ -6977,16 +8758,8 @@ function showAccountingExportMenu() {
         return;
     }
     
-    const choice = prompt(
-        '📊 Export Comptable\n\n' +
-        'Choisissez le format :\n\n' +
-        '1 = CSV Excel (compatible Sage, EBP, Cegid)\n' +
-        '2 = FEC (Fichier Écritures Comptables - format DGI Maroc)\n\n' +
-        'Tapez 1 ou 2 :'
-    );
-    
-    if (choice === '1') exportAccounting('csv');
-    else if (choice === '2') exportAccounting('fec');
+    // Ouvrir le modal d'export
+    document.getElementById('accountingExportModal').classList.add('active');
 }
 
 async function resetApp() {
@@ -8387,9 +10160,9 @@ function generatePDF(id, type) {
     const tableData = doc_data.items.map(item => [
         item.description,
         item.quantity.toString(),
-        formatCurrency(item.price, false),
+        formatCurrencyForPDF(item.price, false),
         item.tva + '%',
-        formatCurrency(item.totalHT, false)
+        formatCurrencyForPDF(item.totalHT, false)
     ]);
     
     pdf.autoTable({
@@ -8400,44 +10173,54 @@ function generatePDF(id, type) {
         headStyles: {
             fillColor: primaryColor,
             textColor: [255, 255, 255],
-            fontSize: 9,
+            fontSize: 10,
             fontStyle: 'bold',
-            cellPadding: 4,
-            halign: 'left'
+            cellPadding: 5,
+            halign: 'left',
+            font: 'helvetica'
         },
         bodyStyles: {
-            fontSize: 9,
-            cellPadding: 4,
-            textColor: grayDark
+            fontSize: 10,
+            cellPadding: 5,
+            textColor: grayDark,
+            font: 'helvetica',
+            lineWidth: 0,
+            lineColor: [220, 220, 220]
         },
         alternateRowStyles: {
             fillColor: [250, 248, 243]
         },
         columnStyles: {
-            0: { cellWidth: 85 },
-            1: { cellWidth: 20, halign: 'center' },
-            2: { cellWidth: 30, halign: 'right' },
-            3: { cellWidth: 20, halign: 'center' },
-            4: { cellWidth: 30, halign: 'right' }
+            0: { cellWidth: 80, fontStyle: 'normal' },
+            1: { cellWidth: 18, halign: 'center' },
+            2: { cellWidth: 32, halign: 'right' },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
         },
-        margin: { left: 15, right: 15 }
+        margin: { left: 15, right: 15 },
+        styles: {
+            overflow: 'linebreak'
+        }
     });
     
-    yPos = pdf.lastAutoTable.finalY + 8;
+    yPos = pdf.lastAutoTable.finalY + 10;
     
     // === TOTALS ===
     const totalsX = 120;
-    pdf.setFontSize(10);
+    pdf.setFontSize(11);
     pdf.setTextColor(...grayDark);
     
     pdf.setFont('helvetica', 'normal');
     pdf.text('Sous-total HT', totalsX, yPos);
-    pdf.text(formatCurrency(doc_data.totalHT), 195, yPos, { align: 'right' });
-    yPos += 6;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(formatCurrencyForPDF(doc_data.totalHT), 195, yPos, { align: 'right' });
+    yPos += 7;
     
+    pdf.setFont('helvetica', 'normal');
     pdf.text('TVA', totalsX, yPos);
-    pdf.text(formatCurrency(doc_data.totalTVA), 195, yPos, { align: 'right' });
-    yPos += 4;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(formatCurrencyForPDF(doc_data.totalTVA), 195, yPos, { align: 'right' });
+    yPos += 5;
     
     // Line separator
     pdf.setDrawColor(...primaryColor);
@@ -8445,16 +10228,17 @@ function generatePDF(id, type) {
     pdf.line(totalsX, yPos, 195, yPos);
     yPos += 7;
     
-    // Grand total
+    // Grand total - bandeau plus visible
     pdf.setFillColor(...primaryColor);
-    pdf.roundedRect(totalsX - 2, yPos - 5, 79, 10, 1, 1, 'F');
+    pdf.roundedRect(totalsX - 2, yPos - 6, 79, 12, 1.5, 1.5, 'F');
     pdf.setTextColor(255, 255, 255);
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(11);
-    pdf.text('Total TTC', totalsX, yPos);
+    pdf.setFontSize(12);
+    pdf.text('Total TTC', totalsX + 2, yPos + 1);
     pdf.setTextColor(...accentColor);
-    pdf.text(formatCurrency(doc_data.totalTTC), 195, yPos, { align: 'right' });
-    yPos += 16;
+    pdf.setFontSize(13);
+    pdf.text(formatCurrencyForPDF(doc_data.totalTTC), 193, yPos + 1, { align: 'right' });
+    yPos += 18;
     
     // === LEGAL MENTIONS (AE) ===
     if (company.status === 'ae') {
@@ -8514,26 +10298,21 @@ function generatePDF(id, type) {
                         licenseInfo.status === 'active' && !License.isExpired());
     
     if (!isLicensed) {
-        // Diagonal watermark across page
+        // Diagonal watermark across page (plus discret)
         pdf.saveGraphicsState();
-        pdf.setGState(new pdf.GState({ opacity: 0.10 }));
+        pdf.setGState(new pdf.GState({ opacity: 0.06 }));
         pdf.setTextColor(27, 58, 107);
-        pdf.setFontSize(58);
+        pdf.setFontSize(70);
         pdf.setFont('helvetica', 'bold');
-        pdf.text('FACTURAPRO', 105, 150, { 
+        pdf.text('FACTURAPRO', 105, 160, { 
             align: 'center', 
-            angle: 45 
-        });
-        pdf.setFontSize(13);
-        pdf.text('Version d\'essai - Activez votre licence', 105, 165, { 
-            align: 'center', 
-            angle: 45 
+            angle: -30
         });
         pdf.restoreGraphicsState();
         
         // Footer watermark text (more discreet, on every page)
         pdf.setFontSize(8);
-        pdf.setTextColor(150, 150, 150);
+        pdf.setTextColor(180, 180, 180);
         pdf.setFont('helvetica', 'italic');
         pdf.text('Document généré avec FacturaPro (version d\'essai) - facturapro.ma', 105, 290, {
             align: 'center'

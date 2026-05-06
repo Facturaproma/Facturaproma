@@ -1,0 +1,56 @@
+{
+  "name": "FacturaPro - Logiciel de facturation Maroc",
+  "short_name": "FacturaPro",
+  "description": "Logiciel de facturation 100% marocain pour AE, Freelances et SARL. Conformité ICE, IF, CNSS.",
+  "start_url": "./app.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F7F5F0",
+  "theme_color": "#1B3A6B",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nouvelle facture",
+      "short_name": "Facture",
+      "description": "Créer une nouvelle facture",
+      "url": "./app.html?action=new-invoice",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Nouveau devis",
+      "short_name": "Devis",
+      "description": "Créer un nouveau devis",
+      "url": "./app.html?action=new-quote",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
