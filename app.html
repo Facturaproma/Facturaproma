@@ -2644,6 +2644,9 @@
             <button class="nav-item" data-page="company" onclick="navTo('company')">
                 <span class="nav-icon">🏢</span> Mon entreprise
             </button>
+            <button class="nav-item" data-page="team" onclick="navTo('team')" id="navTeam">
+                <span class="nav-icon">👥</span> Mon équipe
+            </button>
             <button class="nav-item" data-page="license" onclick="navTo('license')">
                 <span class="nav-icon">💎</span> Licence
             </button>
@@ -3665,10 +3668,17 @@
                         <div class="form-group">
                             <label>Préfixe factures</label>
                             <input type="text" id="cmpInvoicePrefix" placeholder="FAC">
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">Ex: FAC-2026-001</div>
                         </div>
                         <div class="form-group">
                             <label>Préfixe devis</label>
                             <input type="text" id="cmpQuotePrefix" placeholder="DEV">
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">Ex: DEV-2026-001</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Préfixe avoirs</label>
+                            <input type="text" id="cmpCreditPrefix" placeholder="AVR">
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">Ex: AVR-2026-001 (notes de crédit)</div>
                         </div>
                         <div class="form-group">
                             <label>Devise</label>
@@ -3677,6 +3687,48 @@
                                 <option value="EUR">EUR (Euro)</option>
                                 <option value="USD">USD (Dollar)</option>
                             </select>
+                        </div>
+                    </div>
+
+                    <div class="aside-card">
+                        <h3>🎨 Logo de l'entreprise</h3>
+                        <div id="logoLockedSection" style="display: none;">
+                            <div style="text-align: center; padding: 16px; background: linear-gradient(135deg, rgba(201, 169, 91, 0.1), rgba(232, 189, 107, 0.1)); border-radius: 10px; margin-bottom: 12px;">
+                                <div style="font-size: 32px; margin-bottom: 8px;">🔒</div>
+                                <strong style="display: block; font-size: 14px; margin-bottom: 4px;">Fonctionnalité Premium</strong>
+                                <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Personnalisez vos factures avec votre logo en activant une licence.</p>
+                                <button class="btn btn-accent" onclick="navTo('license')" style="width: 100%; font-size: 13px;">
+                                    🚀 Activer ma licence
+                                </button>
+                            </div>
+                        </div>
+                        <div id="logoActiveSection" style="display: none;">
+                            <div id="logoPreview" style="text-align: center; padding: 16px; background: var(--surface-soft); border-radius: 10px; margin-bottom: 12px; min-height: 100px; display: flex; align-items: center; justify-content: center;">
+                                <span style="color: var(--ink-mute); font-size: 12px;">Aucun logo</span>
+                            </div>
+                            <input type="file" id="logoUploadInput" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;" onchange="handleLogoUpload(event)">
+                            <button class="btn btn-secondary" onclick="document.getElementById('logoUploadInput').click()" style="width: 100%; margin-bottom: 8px; font-size: 13px;">
+                                📤 Uploader un logo
+                            </button>
+                            <button class="btn btn-secondary" onclick="removeLogo()" style="width: 100%; font-size: 12px; color: var(--danger);" id="removeLogoBtn">
+                                🗑️ Supprimer le logo
+                            </button>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">
+                                💡 PNG, JPG ou WebP. Max 500 KB. Apparaîtra sur vos factures et devis.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="aside-card">
+                        <h3>📊 Export comptable <span style="background: linear-gradient(135deg, #1B3A6B, #122849); color: var(--accent); font-size: 9px; padding: 2px 6px; border-radius: 100px; font-weight: 700; margin-left: 4px; vertical-align: middle;">BUSINESS</span></h3>
+                        <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">
+                            Exportez vos factures vers votre logiciel comptable (Sage, Cegid, EBP) ou au format FEC pour la DGI.
+                        </p>
+                        <button class="btn btn-primary" onclick="showAccountingExportMenu()" style="width: 100%; font-size: 13px;">
+                            📥 Exporter comptabilité
+                        </button>
+                        <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;" id="accountingExportNote">
+                            <!-- Filled dynamically -->
                         </div>
                     </div>
 
@@ -3706,7 +3758,163 @@
                 </aside>
             </div>
         </section>
+        <!-- ============ TEAM PAGE (Business only) ============ -->
+        <section class="page" id="page-team">
+            <div class="topbar">
+                <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <h1>👥 Mon équipe</h1>
+                <div class="topbar-actions">
+                    <button class="btn btn-primary" onclick="openInviteTeamMember()" id="inviteTeamBtn">+ Inviter un membre</button>
+                </div>
+            </div>
+
+            <!-- Section bloquée pour non-Business -->
+            <div id="teamLockedSection" style="display: none;">
+                <div class="calc-card" style="text-align: center; padding: 60px 24px;">
+                    <div style="font-size: 64px; margin-bottom: 16px;">🔒</div>
+                    <h2 style="font-family: 'Crimson Pro', serif; font-size: 28px; margin-bottom: 12px;">Fonctionnalité Business</h2>
+                    <p style="color: var(--ink-mute); margin-bottom: 24px; max-width: 500px; margin-left: auto; margin-right: auto;">
+                        Le module Multi-utilisateurs vous permet d'inviter jusqu'à 5 collaborateurs (employés, comptable) à accéder à votre FacturaPro.
+                    </p>
+                    
+                    <div style="background: var(--surface-soft); padding: 24px; border-radius: 12px; max-width: 500px; margin: 0 auto 24px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px;">Avec le plan Business :</h3>
+                        <div style="text-align: left;">
+                            <div style="margin-bottom: 12px;">✅ Jusqu'à 5 utilisateurs</div>
+                            <div style="margin-bottom: 12px;">✅ Permissions personnalisées</div>
+                            <div style="margin-bottom: 12px;">✅ Suivi des activités par utilisateur</div>
+                            <div style="margin-bottom: 12px;">✅ Multi-entreprises (jusqu'à 3)</div>
+                            <div>✅ Export comptable (Sage, FEC)</div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-accent btn-large" onclick="navTo('license')">
+                        🚀 Passer en Business — 199 DH/mois
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section active pour Business -->
+            <div id="teamActiveSection" style="display: none;">
+                <div class="stats-grid" style="margin-bottom: 24px;">
+                    <div class="stat-card success">
+                        <div class="stat-label">Membres actifs</div>
+                        <div class="stat-value" id="teamCountActive">1</div>
+                        <div class="stat-trend" id="teamCountTrend">Sur 5 max</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">Invitations en attente</div>
+                        <div class="stat-value" id="teamCountPending">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Plan</div>
+                        <div class="stat-value" style="font-size: 22px;">Business</div>
+                        <div class="stat-trend">Multi-utilisateurs activé</div>
+                    </div>
+                </div>
+
+                <div class="calc-card">
+                    <h3>👥 Membres de l'équipe</h3>
+                    <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">
+                        Les membres invités peuvent accéder à votre compte selon leurs permissions.
+                    </p>
+                    
+                    <div id="teamMembersList">
+                        <div style="text-align: center; padding: 24px; color: var(--ink-mute); font-size: 13px;">
+                            Vous êtes seul pour le moment. Cliquez sur "Inviter un membre" pour ajouter votre équipe.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="calc-card" style="margin-top: 24px; background: rgba(232, 177, 74, 0.05); border-left: 4px solid var(--warning);">
+                    <h3>💡 Comment ça fonctionne ?</h3>
+                    <ol style="margin: 12px 0 0 20px; font-size: 13px; line-height: 1.8;">
+                        <li>Cliquez sur <strong>"+ Inviter un membre"</strong></li>
+                        <li>Entrez l'email + choisissez les permissions</li>
+                        <li>Un <strong>code d'invitation</strong> est généré</li>
+                        <li>Communiquez ce code à votre collaborateur (WhatsApp, email)</li>
+                        <li>Il s'inscrit sur FacturaPro avec ce code</li>
+                        <li>✅ Il accède à vos données avec les permissions définies</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
     </main>
+</div>
+
+<!-- ============ INVITE TEAM MEMBER MODAL ============ -->
+<div class="modal-overlay" id="inviteTeamModal" onclick="closeModalIfBg(event, 'inviteTeamModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 500px;">
+        <h2>👥 Inviter un membre</h2>
+        <p>Donnez accès à votre équipe (employés, comptable, partenaire)</p>
+
+        <div id="inviteError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+
+        <div class="form-group">
+            <label>Email du collaborateur *</label>
+            <input type="email" id="inviteEmail" placeholder="employe@example.com">
+        </div>
+
+        <div class="form-group">
+            <label>Nom (optionnel)</label>
+            <input type="text" id="inviteName" placeholder="Mohamed Alami">
+        </div>
+
+        <div class="form-group">
+            <label>Rôle</label>
+            <select id="inviteRole">
+                <option value="viewer">👁️ Lecteur (voir uniquement)</option>
+                <option value="editor" selected>✏️ Éditeur (factures, clients, devis)</option>
+                <option value="admin">🔧 Admin (tout sauf facturation)</option>
+            </select>
+            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;" id="invitePermissionsNote">
+                Peut créer/modifier factures, devis, clients
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('inviteTeamModal')">Annuler</button>
+            <button class="btn btn-primary" onclick="generateInvitationCode()">🎁 Générer code d'invitation</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ INVITATION CODE GENERATED MODAL ============ -->
+<div class="modal-overlay" id="inviteCodeModal" onclick="closeModalIfBg(event, 'inviteCodeModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 500px;">
+        <h2>✅ Code d'invitation généré</h2>
+        <p>Communiquez ces informations à votre collaborateur</p>
+
+        <div style="background: var(--surface-soft); padding: 20px; border-radius: 10px; margin: 16px 0;">
+            <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: var(--ink-mute); text-transform: uppercase; font-weight: 700;">Email à inviter</div>
+                <div id="inviteResultEmail" style="font-size: 14px; font-weight: 600;">—</div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: var(--ink-mute); text-transform: uppercase; font-weight: 700;">Code d'invitation</div>
+                <div id="inviteResultCode" style="font-family: monospace; font-size: 18px; font-weight: 700; color: var(--primary); letter-spacing: 0.1em;">—</div>
+            </div>
+            <div>
+                <div style="font-size: 11px; color: var(--ink-mute); text-transform: uppercase; font-weight: 700;">Rôle</div>
+                <div id="inviteResultRole" style="font-size: 13px;">—</div>
+            </div>
+        </div>
+
+        <div class="alert" style="font-size: 13px;">
+            <strong>📱 Instructions à donner</strong> :
+            <ol style="margin: 8px 0 0 20px;">
+                <li>Allez sur <strong>facturapro.ma/app</strong></li>
+                <li>Inscription avec votre email</li>
+                <li>Saisissez le code d'invitation lors de l'inscription</li>
+            </ol>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="copyInvitationDetails()">📋 Copier le message</button>
+            <button class="btn btn-success" onclick="sendInvitationByWhatsApp()">📱 WhatsApp</button>
+            <button class="btn btn-primary" onclick="closeModal('inviteCodeModal')">Fermer</button>
+        </div>
+    </div>
 </div>
 
 <!-- ============ CLIENT MODAL ============ -->
@@ -4323,16 +4531,18 @@ function showToast(message, type = '') {
 }
 
 function getNextNumber(type) {
-    const counter = Storage.get('counter', { invoice: 0, quote: 0 });
+    const counter = Storage.get('counter', { invoice: 0, quote: 0, credit: 0 });
     counter[type] = (counter[type] || 0) + 1;
     Storage.set('counter', counter);
     
     const company = Storage.get('company', {});
-    const prefix = type === 'invoice' 
-        ? (company.invoicePrefix || 'FAC')
-        : (company.quotePrefix || 'DEV');
-    const year = new Date().getFullYear();
+    let prefix;
+    if (type === 'invoice') prefix = company.invoicePrefix || 'FAC';
+    else if (type === 'quote') prefix = company.quotePrefix || 'DEV';
+    else if (type === 'credit') prefix = company.creditPrefix || 'AVR';  // Avoir
+    else prefix = 'DOC';
     
+    const year = new Date().getFullYear();
     return `${prefix}-${year}-${String(counter[type]).padStart(3, '0')}`;
 }
 
@@ -4862,6 +5072,7 @@ function navTo(page) {
     if (page === 'cnss') renderCNSS();
     if (page === 'taxes') renderTaxes();
     if (page === 'company') loadCompanyForm();
+    if (page === 'team') navTo_team_render();
     if (page === 'license') renderLicensePage();
     
     // Close mobile sidebar
@@ -5075,21 +5286,31 @@ function renderInvoices() {
                 </tr>
             </thead>
             <tbody>
-                ${sorted.map(i => `
-                    <tr>
-                        <td onclick="editInvoice('${i.id}')"><strong>${escapeHtml(i.number)}</strong></td>
-                        <td onclick="editInvoice('${i.id}')">${escapeHtml(i.clientName || '—')}</td>
-                        <td onclick="editInvoice('${i.id}')">${formatDate(i.date)}</td>
-                        <td onclick="editInvoice('${i.id}')">${formatDate(i.dueDate)}</td>
-                        <td onclick="editInvoice('${i.id}')"><strong>${formatCurrency(i.totalTTC)}</strong></td>
-                        <td onclick="editInvoice('${i.id}')"><span class="status-pill status-${i.status}">${statusLabel(i.status)}</span></td>
-                        <td>
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥</button>
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); duplicateInvoice('${i.id}')" title="Dupliquer">📋</button>
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
-                        </td>
-                    </tr>
-                `).join('')}
+                ${sorted.map(i => {
+                    const isCredit = i.type === 'credit' || (i.totalTTC || 0) < 0;
+                    const rowStyle = isCredit ? 'background: rgba(232, 177, 74, 0.04);' : '';
+                    const numberDisplay = isCredit ? `<strong style="color: var(--warning);">${escapeHtml(i.number)}</strong> <span style="font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 100px; font-weight: 700;">AVOIR</span>` : `<strong>${escapeHtml(i.number)}</strong>`;
+                    const amountDisplay = isCredit 
+                        ? `<strong style="color: var(--danger);">${formatCurrency(i.totalTTC)}</strong>`
+                        : `<strong>${formatCurrency(i.totalTTC)}</strong>`;
+                    
+                    return `
+                        <tr style="${rowStyle}">
+                            <td onclick="editInvoice('${i.id}')">${numberDisplay}${i.relatedInvoiceNumber ? `<br><small style="color: var(--ink-mute); font-size: 10px;">↩️ relatif à ${i.relatedInvoiceNumber}</small>` : ''}</td>
+                            <td onclick="editInvoice('${i.id}')">${escapeHtml(i.clientName || '—')}</td>
+                            <td onclick="editInvoice('${i.id}')">${formatDate(i.date)}</td>
+                            <td onclick="editInvoice('${i.id}')">${formatDate(i.dueDate)}</td>
+                            <td onclick="editInvoice('${i.id}')">${amountDisplay}</td>
+                            <td onclick="editInvoice('${i.id}')"><span class="status-pill status-${i.status}">${statusLabel(i.status)}</span></td>
+                            <td>
+                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥</button>
+                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); duplicateInvoice('${i.id}')" title="Dupliquer">📋</button>
+                                ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); createCreditFromInvoice('${i.id}')" title="Créer un avoir (remboursement)" style="color: var(--warning);">↩️</button>` : ''}
+                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
             </tbody>
         </table>`;
 }
@@ -5121,12 +5342,15 @@ function newInvoice() {
 }
 
 function getNextNumberPreview(type) {
-    const counter = Storage.get('counter', { invoice: 0, quote: 0 });
+    const counter = Storage.get('counter', { invoice: 0, quote: 0, credit: 0 });
     const next = (counter[type] || 0) + 1;
     const company = Storage.get('company', {});
-    const prefix = type === 'invoice' 
-        ? (company.invoicePrefix || 'FAC')
-        : (company.quotePrefix || 'DEV');
+    let prefix;
+    if (type === 'invoice') prefix = company.invoicePrefix || 'FAC';
+    else if (type === 'quote') prefix = company.quotePrefix || 'DEV';
+    else if (type === 'credit') prefix = company.creditPrefix || 'AVR';
+    else prefix = 'DOC';
+    
     const year = new Date().getFullYear();
     return `${prefix}-${year}-${String(next).padStart(3, '0')}`;
 }
@@ -5195,6 +5419,59 @@ function deleteInvoice(id) {
     Storage.set('invoices', invoices.filter(i => i.id !== id));
     renderInvoices();
     showToast('Facture supprimée', 'success');
+}
+
+// ============================================
+// CREDIT NOTES (AVOIRS) - Remboursements
+// ============================================
+function createCreditFromInvoice(id) {
+    const invoices = Storage.get('invoices', []);
+    const original = invoices.find(i => i.id === id);
+    if (!original) return;
+    
+    if (!confirm(`📝 Créer un avoir (note de crédit) pour cette facture ?\n\n` +
+                 `Facture originale : ${original.number}\n` +
+                 `Montant : ${formatCurrency(original.totalTTC)}\n\n` +
+                 `Un avoir avec montants négatifs sera créé.\n` +
+                 `Cela représente un remboursement ou annulation partielle/totale.\n\n` +
+                 `Continuer ?`)) {
+        return;
+    }
+    
+    // Générer un nouveau numéro d'avoir
+    const creditNumber = getNextNumber('credit');
+    
+    // Créer l'avoir avec items en NÉGATIF
+    const credit = {
+        id: 'credit-' + Date.now(),
+        number: creditNumber,
+        type: 'credit',
+        relatedInvoiceId: original.id,
+        relatedInvoiceNumber: original.number,
+        clientId: original.clientId,
+        clientName: original.clientName,
+        clientICE: original.clientICE,
+        clientAddress: original.clientAddress,
+        date: todayISO(),
+        dueDate: todayISO(),
+        items: (original.items || []).map(item => ({
+            ...item,
+            quantity: -Math.abs(item.quantity || 0),  // Quantité négative
+        })),
+        subtotal: -Math.abs(original.subtotal || 0),
+        totalTVA: -Math.abs(original.totalTVA || 0),
+        totalTTC: -Math.abs(original.totalTTC || 0),
+        status: 'sent',
+        notes: `Avoir relatif à la facture ${original.number}\nMotif : ${prompt('Motif de l\'avoir :', 'Remboursement / Annulation') || 'Remboursement'}`,
+        paymentTerms: '0',
+        createdAt: new Date().toISOString()
+    };
+    
+    invoices.push(credit);
+    Storage.set('invoices', invoices);
+    
+    showToast(`✓ Avoir ${creditNumber} créé`, 'success');
+    renderInvoices();
 }
 
 function updateEditorType() {
@@ -5932,6 +6209,373 @@ function calculatePatente() {
 // ============================================
 // COMPANY
 // ============================================
+// ============================================
+// TEAM MANAGEMENT (Business uniquement)
+// ============================================
+let pendingInviteData = null;
+
+function navTo_team_render() {
+    const lockedSection = document.getElementById('teamLockedSection');
+    const activeSection = document.getElementById('teamActiveSection');
+    if (!lockedSection || !activeSection) return;
+    
+    if (isBusinessTier()) {
+        lockedSection.style.display = 'none';
+        activeSection.style.display = 'block';
+        renderTeamMembers();
+    } else {
+        lockedSection.style.display = 'block';
+        activeSection.style.display = 'none';
+    }
+}
+
+function renderTeamMembers() {
+    const session = Storage.get('_session', null);
+    const invitations = Storage.get('teamInvitations', []);
+    const members = Storage.get('teamMembers', []);
+    
+    // Update stats
+    const activeCount = 1 + members.length; // owner + members
+    document.getElementById('teamCountActive').textContent = activeCount;
+    document.getElementById('teamCountTrend').textContent = `Sur 5 max (${5 - activeCount} restants)`;
+    
+    const pendingCount = invitations.filter(i => i.status === 'pending').length;
+    document.getElementById('teamCountPending').textContent = pendingCount;
+    
+    const list = document.getElementById('teamMembersList');
+    if (!list) return;
+    
+    let html = '';
+    
+    // Owner (vous)
+    html += `
+        <div style="display: flex; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid var(--border);">
+            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700;">👑</div>
+            <div style="flex: 1;">
+                <div style="font-weight: 600;">Vous (Propriétaire)</div>
+                <div style="font-size: 12px; color: var(--ink-mute);">${session?.email || ''}</div>
+            </div>
+            <span class="badge badge-success">Owner</span>
+        </div>
+    `;
+    
+    // Membres acceptés
+    members.forEach(m => {
+        const roleLabels = { viewer: '👁️ Lecteur', editor: '✏️ Éditeur', admin: '🔧 Admin' };
+        html += `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid var(--border);">
+                <div style="width: 40px; height: 40px; background: var(--surface-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink-mute);">${(m.email || '?').charAt(0).toUpperCase()}</div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600;">${m.name || m.email}</div>
+                    <div style="font-size: 12px; color: var(--ink-mute);">${m.email}</div>
+                </div>
+                <span class="badge" style="background: var(--surface-soft); color: var(--ink);">${roleLabels[m.role] || m.role}</span>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="removeTeamMember('${m.email}')">🗑️</button>
+            </div>
+        `;
+    });
+    
+    // Invitations en attente
+    invitations.filter(i => i.status === 'pending').forEach(inv => {
+        const roleLabels = { viewer: '👁️ Lecteur', editor: '✏️ Éditeur', admin: '🔧 Admin' };
+        const daysSince = Math.floor((Date.now() - new Date(inv.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+        html += `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid var(--border); opacity: 0.7;">
+                <div style="width: 40px; height: 40px; background: var(--surface-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center;">⏳</div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600;">${inv.name || inv.email}</div>
+                    <div style="font-size: 12px; color: var(--ink-mute);">Invité il y a ${daysSince}j · Code: <code>${inv.code}</code></div>
+                </div>
+                <span class="badge badge-warning">${roleLabels[inv.role] || inv.role}</span>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="resendInvitation('${inv.code}')" title="Renvoyer le code">📱</button>
+                <button class="btn btn-danger" style="font-size: 11px; padding: 4px 10px;" onclick="cancelInvitation('${inv.code}')" title="Annuler l'invitation">✕</button>
+            </div>
+        `;
+    });
+    
+    if (members.length === 0 && pendingCount === 0) {
+        html += `<div style="text-align: center; padding: 24px; color: var(--ink-mute); font-size: 13px;">Aucun autre membre. Cliquez sur "+ Inviter un membre" pour ajouter votre équipe.</div>`;
+    }
+    
+    list.innerHTML = html;
+}
+
+function openInviteTeamMember() {
+    if (!isBusinessTier()) {
+        showToast('🔒 Réservé aux comptes Business', 'error');
+        return;
+    }
+    
+    // Vérifier la limite (5 membres max)
+    const members = Storage.get('teamMembers', []);
+    const invitations = Storage.get('teamInvitations', []);
+    const total = 1 + members.length + invitations.filter(i => i.status === 'pending').length;
+    
+    if (total >= 5) {
+        showToast('Limite atteinte : 5 membres maximum (vous + 4)', 'error');
+        return;
+    }
+    
+    document.getElementById('inviteEmail').value = '';
+    document.getElementById('inviteName').value = '';
+    document.getElementById('inviteRole').value = 'editor';
+    document.getElementById('inviteError').style.display = 'none';
+    document.getElementById('inviteTeamModal').classList.add('active');
+}
+
+// Update permissions note when role changes
+document.addEventListener('DOMContentLoaded', () => {
+    const roleSelect = document.getElementById('inviteRole');
+    if (roleSelect) {
+        const noteEl = document.getElementById('invitePermissionsNote');
+        roleSelect.addEventListener('change', () => {
+            const notes = {
+                viewer: 'Peut consulter factures, devis, clients (pas modifier)',
+                editor: 'Peut créer/modifier factures, devis, clients',
+                admin: 'Tout sauf gestion équipe et licence'
+            };
+            if (noteEl) noteEl.textContent = notes[roleSelect.value] || '';
+        });
+    }
+});
+
+function generateInvitationCode() {
+    const email = document.getElementById('inviteEmail').value.trim().toLowerCase();
+    const name = document.getElementById('inviteName').value.trim();
+    const role = document.getElementById('inviteRole').value;
+    const errEl = document.getElementById('inviteError');
+    
+    if (!email || !email.includes('@')) {
+        errEl.textContent = '❌ Email invalide';
+        errEl.style.display = 'block';
+        return;
+    }
+    
+    // Check if email already invited
+    const invitations = Storage.get('teamInvitations', []);
+    const members = Storage.get('teamMembers', []);
+    
+    if (members.some(m => m.email === email) || invitations.some(i => i.email === email && i.status === 'pending')) {
+        errEl.textContent = '❌ Cet email est déjà membre ou invité';
+        errEl.style.display = 'block';
+        return;
+    }
+    
+    // Generate code
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const segment = (n) => Array.from({length: n}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const code = `TEAM-${segment(4)}-${segment(4)}`;
+    
+    const session = Storage.get('_session', {});
+    
+    const invitation = {
+        code,
+        email,
+        name,
+        role,
+        invitedBy: session.email || 'Owner',
+        createdAt: new Date().toISOString(),
+        status: 'pending'
+    };
+    
+    invitations.push(invitation);
+    Storage.set('teamInvitations', invitations);
+    
+    pendingInviteData = invitation;
+    
+    // Show result modal
+    document.getElementById('inviteResultEmail').textContent = email;
+    document.getElementById('inviteResultCode').textContent = code;
+    const roleLabels = { viewer: '👁️ Lecteur', editor: '✏️ Éditeur', admin: '🔧 Admin' };
+    document.getElementById('inviteResultRole').textContent = roleLabels[role] || role;
+    
+    closeModal('inviteTeamModal');
+    document.getElementById('inviteCodeModal').classList.add('active');
+    
+    showToast('Code d\'invitation généré ✓', 'success');
+    renderTeamMembers();
+}
+
+function copyInvitationDetails() {
+    if (!pendingInviteData) return;
+    const session = Storage.get('_session', {});
+    const company = Storage.get('company', {});
+    
+    const msg = `Bonjour ${pendingInviteData.name || ''} 🇲🇦,\n\n` +
+        `${session.email || 'Votre collègue'} vous invite à rejoindre FacturaPro - ${company.name || 'son équipe'}.\n\n` +
+        `📋 Vos accès :\n` +
+        `• Email : ${pendingInviteData.email}\n` +
+        `• Code d'invitation : ${pendingInviteData.code}\n\n` +
+        `🚀 Comment vous inscrire :\n` +
+        `1. Allez sur facturapro.ma/app\n` +
+        `2. Créez un compte avec votre email\n` +
+        `3. Saisissez le code d'invitation lors de l'inscription\n\n` +
+        `Bienvenue ! 👋`;
+    
+    navigator.clipboard.writeText(msg).then(() => {
+        showToast('Message copié ✓', 'success');
+    }).catch(() => {
+        showToast('Erreur de copie', 'error');
+    });
+}
+
+function sendInvitationByWhatsApp() {
+    if (!pendingInviteData) return;
+    const session = Storage.get('_session', {});
+    const company = Storage.get('company', {});
+    
+    const msg = `Bonjour ${pendingInviteData.name || ''} 🇲🇦,\n\n` +
+        `${session.email || 'Votre collègue'} vous invite à rejoindre FacturaPro - ${company.name || 'son équipe'}.\n\n` +
+        `📋 Vos accès :\n` +
+        `• Email : ${pendingInviteData.email}\n` +
+        `• Code d'invitation : ${pendingInviteData.code}\n\n` +
+        `🚀 Comment vous inscrire :\n` +
+        `1. Allez sur facturapro.ma/app\n` +
+        `2. Créez un compte avec votre email\n` +
+        `3. Saisissez le code d'invitation lors de l'inscription\n\n` +
+        `Bienvenue ! 👋`;
+    
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function resendInvitation(code) {
+    const invitations = Storage.get('teamInvitations', []);
+    const inv = invitations.find(i => i.code === code);
+    if (!inv) return;
+    
+    pendingInviteData = inv;
+    document.getElementById('inviteResultEmail').textContent = inv.email;
+    document.getElementById('inviteResultCode').textContent = inv.code;
+    const roleLabels = { viewer: '👁️ Lecteur', editor: '✏️ Éditeur', admin: '🔧 Admin' };
+    document.getElementById('inviteResultRole').textContent = roleLabels[inv.role] || inv.role;
+    
+    document.getElementById('inviteCodeModal').classList.add('active');
+}
+
+function cancelInvitation(code) {
+    if (!confirm('Annuler cette invitation ?')) return;
+    
+    let invitations = Storage.get('teamInvitations', []);
+    invitations = invitations.filter(i => i.code !== code);
+    Storage.set('teamInvitations', invitations);
+    
+    showToast('Invitation annulée', 'success');
+    renderTeamMembers();
+}
+
+function removeTeamMember(email) {
+    if (!confirm(`Retirer ${email} de l'équipe ?\n\nIl perdra immédiatement l'accès à FacturaPro.`)) return;
+    
+    let members = Storage.get('teamMembers', []);
+    members = members.filter(m => m.email !== email);
+    Storage.set('teamMembers', members);
+    
+    showToast('Membre retiré', 'success');
+    renderTeamMembers();
+}
+
+// ============================================
+// LOGO MANAGEMENT (Premium feature)
+// ============================================
+function isUserLicensed() {
+    const info = License.get();
+    return (info.type === 'lifetime') || 
+           ((info.type === 'monthly' || info.type === 'business') && 
+            info.status === 'active' && !License.isExpired());
+}
+
+function updateLogoSection() {
+    const lockedSection = document.getElementById('logoLockedSection');
+    const activeSection = document.getElementById('logoActiveSection');
+    if (!lockedSection || !activeSection) return;
+    
+    if (isUserLicensed()) {
+        lockedSection.style.display = 'none';
+        activeSection.style.display = 'block';
+        
+        // Charger le logo si existe
+        const company = Storage.get('company', {});
+        const preview = document.getElementById('logoPreview');
+        const removeBtn = document.getElementById('removeLogoBtn');
+        
+        if (company.logo) {
+            preview.innerHTML = `<img src="${company.logo}" style="max-width: 100%; max-height: 80px; object-fit: contain;" alt="Logo">`;
+            if (removeBtn) removeBtn.style.display = 'block';
+        } else {
+            preview.innerHTML = '<span style="color: var(--ink-mute); font-size: 12px;">Aucun logo</span>';
+            if (removeBtn) removeBtn.style.display = 'none';
+        }
+    } else {
+        lockedSection.style.display = 'block';
+        activeSection.style.display = 'none';
+    }
+    
+    // Update accounting export note based on tier
+    const noteEl = document.getElementById('accountingExportNote');
+    if (noteEl) {
+        const info = License.get();
+        if (info.type === 'business' && info.status === 'active' && !License.isExpired()) {
+            noteEl.innerHTML = '✅ <strong style="color: var(--success);">Activé</strong> avec votre plan Business';
+        } else if (info.type === 'trial' && !License.isExpired()) {
+            noteEl.innerHTML = '🆓 Disponible pendant votre essai. Passez en <strong>Business</strong> pour conserver l\'accès.';
+        } else {
+            noteEl.innerHTML = '🔒 Réservé au plan <strong>Business (199 DH/mois)</strong>';
+        }
+    }
+}
+
+function handleLogoUpload(event) {
+    if (!isUserLicensed()) {
+        showToast('🔒 Activez votre licence pour uploader un logo', 'error');
+        return;
+    }
+    
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Validate size (500 KB max)
+    if (file.size > 500 * 1024) {
+        showToast('Logo trop volumineux. Max 500 KB.', 'error');
+        return;
+    }
+    
+    // Validate type
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
+        showToast('Format non supporté. Utilisez PNG, JPG ou WebP.', 'error');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const company = Storage.get('company', {});
+        company.logo = e.target.result; // base64
+        Storage.set('company', company);
+        
+        updateLogoSection();
+        showToast('Logo uploadé ✓', 'success');
+    };
+    reader.onerror = () => {
+        showToast('Erreur lors de la lecture du fichier', 'error');
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeLogo() {
+    if (!confirm('Supprimer le logo ?')) return;
+    
+    const company = Storage.get('company', {});
+    delete company.logo;
+    Storage.set('company', company);
+    
+    updateLogoSection();
+    
+    // Reset input
+    const input = document.getElementById('logoUploadInput');
+    if (input) input.value = '';
+    
+    showToast('Logo supprimé', 'success');
+}
+
 function loadCompanyForm() {
     const company = Storage.get('company', {});
     
@@ -5952,7 +6596,12 @@ function loadCompanyForm() {
     document.getElementById('cmpSWIFT').value = company.swift || '';
     document.getElementById('cmpInvoicePrefix').value = company.invoicePrefix || 'FAC';
     document.getElementById('cmpQuotePrefix').value = company.quotePrefix || 'DEV';
+    const creditPrefixEl = document.getElementById('cmpCreditPrefix');
+    if (creditPrefixEl) creditPrefixEl.value = company.creditPrefix || 'AVR';
     document.getElementById('cmpCurrency').value = company.currency || 'MAD';
+    
+    // Logo handling - only for licensed users
+    updateLogoSection();
     
     // Stats
     const invoices = Storage.get('invoices', []);
@@ -5988,6 +6637,7 @@ function saveCompany() {
         swift: document.getElementById('cmpSWIFT').value.trim(),
         invoicePrefix: document.getElementById('cmpInvoicePrefix').value.trim() || 'FAC',
         quotePrefix: document.getElementById('cmpQuotePrefix').value.trim() || 'DEV',
+        creditPrefix: (document.getElementById('cmpCreditPrefix')?.value.trim()) || 'AVR',
         currency: document.getElementById('cmpCurrency').value,
         updatedAt: new Date().toISOString()
     };
@@ -6015,6 +6665,182 @@ function exportData() {
     a.click();
     URL.revokeObjectURL(url);
     showToast('Export téléchargé ✓', 'success');
+}
+
+// ============================================
+// EXPORT COMPTABLE (Business uniquement)
+// ============================================
+function isBusinessTier() {
+    const info = License.get();
+    return info.type === 'business' && info.status === 'active' && !License.isExpired();
+}
+
+function exportAccounting(format = 'csv') {
+    // Vérification tier Business
+    const info = License.get();
+    
+    // Pendant période d'essai active : permettre l'export pour tester
+    const isTrialActive = info.type === 'trial' && !License.isExpired();
+    
+    if (!isBusinessTier() && !isTrialActive) {
+        showToast('🔒 L\'export comptable est réservé aux comptes Business', 'error');
+        if (confirm('Cette fonctionnalité est disponible avec le plan Business (199 DH/mois).\n\nVoulez-vous voir les options d\'abonnement ?')) {
+            navTo('license');
+        }
+        return;
+    }
+    
+    const invoices = Storage.get('invoices', []);
+    const company = Storage.get('company', {});
+    
+    if (invoices.length === 0) {
+        showToast('Aucune facture à exporter', 'error');
+        return;
+    }
+    
+    if (format === 'csv') {
+        // Format CSV comptable standard (compatible Sage, EBP, Cegid, etc.)
+        const headers = [
+            'Date',
+            'N° Facture',
+            'Client',
+            'Client_ICE',
+            'Désignation',
+            'Quantité',
+            'Prix Unitaire HT',
+            'Total HT',
+            'TVA %',
+            'Montant TVA',
+            'Total TTC',
+            'Statut',
+            'Date Paiement',
+            'Mode Paiement'
+        ];
+        
+        const rows = [];
+        invoices.forEach(inv => {
+            const client = (Storage.get('clients', []).find(c => c.id === inv.clientId)) || {};
+            
+            // Une ligne par item de la facture
+            (inv.items || []).forEach(item => {
+                rows.push([
+                    formatDate(inv.date),
+                    inv.number || '',
+                    (client.name || inv.clientName || '').replace(/[",;]/g, ' '),
+                    client.ice || '',
+                    (item.description || '').replace(/[",;]/g, ' '),
+                    item.quantity || 0,
+                    (item.unitPrice || 0).toFixed(2),
+                    ((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2),
+                    item.tva || 0,
+                    (((item.quantity || 0) * (item.unitPrice || 0)) * ((item.tva || 0) / 100)).toFixed(2),
+                    ((item.quantity || 0) * (item.unitPrice || 0) * (1 + (item.tva || 0) / 100)).toFixed(2),
+                    inv.status || 'draft',
+                    inv.paymentDate ? formatDate(inv.paymentDate) : '',
+                    inv.paymentMode || ''
+                ]);
+            });
+        });
+        
+        let csv = headers.join(';') + '\n'; // ; pour Excel français
+        csv += rows.map(r => r.map(cell => {
+            const s = String(cell || '');
+            return s.includes(';') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+        }).join(';')).join('\n');
+        
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `facturapro-comptable-${todayISO()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showToast('Export comptable CSV téléchargé ✓', 'success');
+    } else if (format === 'fec') {
+        // Format FEC (Fichier des Écritures Comptables) - format marocain DGI
+        const headers = [
+            'JournalCode',
+            'JournalLib',
+            'EcritureNum',
+            'EcritureDate',
+            'CompteNum',
+            'CompteLib',
+            'CompAuxNum',
+            'CompAuxLib',
+            'PieceRef',
+            'PieceDate',
+            'EcritureLib',
+            'Debit',
+            'Credit',
+            'EcritureLet',
+            'DateLet',
+            'ValidDate',
+            'Montantdevise',
+            'Idevise'
+        ];
+        
+        const rows = [];
+        invoices.forEach((inv, idx) => {
+            if (inv.status !== 'paid') return; // FEC uniquement sur factures validées
+            
+            const client = (Storage.get('clients', []).find(c => c.id === inv.clientId)) || {};
+            const ecrNum = String(idx + 1).padStart(5, '0');
+            const dateFormatted = (inv.date || '').replace(/-/g, '');
+            const totalHT = (inv.subtotal || 0).toFixed(2);
+            const totalTVA = (inv.totalTVA || 0).toFixed(2);
+            const totalTTC = (inv.totalTTC || 0).toFixed(2);
+            
+            // Ligne 1 : Client (débit)
+            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '3421', 'Clients', client.id || '', client.name || '', inv.number, dateFormatted, `Vente ${inv.number}`, totalTTC, '0.00', '', '', dateFormatted, totalTTC, 'MAD']);
+            
+            // Ligne 2 : Vente (crédit)
+            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '7111', 'Ventes de marchandises', '', '', inv.number, dateFormatted, `Vente ${inv.number}`, '0.00', totalHT, '', '', dateFormatted, totalHT, 'MAD']);
+            
+            // Ligne 3 : TVA collectée (crédit)
+            if (parseFloat(totalTVA) > 0) {
+                rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '4455', 'TVA collectée', '', '', inv.number, dateFormatted, `TVA Vente ${inv.number}`, '0.00', totalTVA, '', '', dateFormatted, totalTVA, 'MAD']);
+            }
+        });
+        
+        let fec = headers.join('|') + '\n';
+        fec += rows.map(r => r.join('|')).join('\n');
+        
+        const blob = new Blob(['\uFEFF' + fec], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `FEC-${(company.ice || 'ENT')}-${todayISO()}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showToast('Fichier FEC téléchargé ✓', 'success');
+    }
+}
+
+function showAccountingExportMenu() {
+    // Vérification tier
+    const info = License.get();
+    const isTrialActive = info.type === 'trial' && !License.isExpired();
+    
+    if (!isBusinessTier() && !isTrialActive) {
+        showToast('🔒 Réservé aux comptes Business', 'error');
+        if (confirm('Cette fonctionnalité est disponible avec le plan Business (199 DH/mois).\n\nVoir les options d\'abonnement ?')) {
+            navTo('license');
+        }
+        return;
+    }
+    
+    const choice = prompt(
+        '📊 Export Comptable\n\n' +
+        'Choisissez le format :\n\n' +
+        '1 = CSV Excel (compatible Sage, EBP, Cegid)\n' +
+        '2 = FEC (Fichier Écritures Comptables - format DGI Maroc)\n\n' +
+        'Tapez 1 ou 2 :'
+    );
+    
+    if (choice === '1') exportAccounting('csv');
+    else if (choice === '2') exportAccounting('fec');
 }
 
 async function resetApp() {
@@ -7274,7 +8100,11 @@ function generatePDF(id, type) {
     const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
     
     const isInvoice = type === 'invoice';
-    const docTitle = isInvoice ? 'FACTURE' : 'DEVIS';
+    const isCredit = doc_data.type === 'credit' || (doc_data.totalTTC || 0) < 0;
+    let docTitle;
+    if (isCredit) docTitle = 'AVOIR';
+    else if (isInvoice) docTitle = 'FACTURE';
+    else docTitle = 'DEVIS';
     
     // Colors
     const primaryColor = [27, 58, 107];
@@ -7290,11 +8120,28 @@ function generatePDF(id, type) {
     pdf.setFillColor(...accentColor);
     pdf.rect(0, 38, 210, 1.5, 'F');
     
+    // Logo (only for licensed users with logo uploaded)
+    const logoCheckLicense = License.get();
+    const isLicensedForLogo = (logoCheckLicense.type === 'lifetime') || 
+                              ((logoCheckLicense.type === 'monthly' || logoCheckLicense.type === 'business') && 
+                               logoCheckLicense.status === 'active' && !License.isExpired());
+    let companyTextX = 15; // Position du texte (déplacé si logo)
+    
+    if (company.logo && isLicensedForLogo) {
+        try {
+            // Logo en haut à gauche, dimensions 25x25mm
+            pdf.addImage(company.logo, 'PNG', 12, 7, 24, 24);
+            companyTextX = 42; // Décaler texte à droite du logo
+        } catch (err) {
+            console.warn('Could not add logo to PDF:', err);
+        }
+    }
+    
     // Company name
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(22);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(company.name || 'Mon Entreprise', 15, 18);
+    pdf.text(company.name || 'Mon Entreprise', companyTextX, 18);
     
     // Status
     const statusLabels = {
@@ -7306,7 +8153,7 @@ function generatePDF(id, type) {
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(...accentColor);
-    pdf.text(statusLabels[company.status] || '', 15, 25);
+    pdf.text(statusLabels[company.status] || '', companyTextX, 25);
     
     // Address line
     pdf.setTextColor(220, 220, 220);
@@ -7514,25 +8361,37 @@ function generatePDF(id, type) {
         pdf.text('Document généré par FacturaPro · facturapro.ma', 105, footerY + 17, { align: 'center' });
     }
     
-    // Add watermark for trial users
+    // Add watermark for non-licensed users (trial, expired, etc.)
     const licenseInfo = License.get();
-    if (licenseInfo.type === 'trial') {
+    const isLicensed = (licenseInfo.type === 'lifetime') || 
+                       ((licenseInfo.type === 'monthly' || licenseInfo.type === 'business') && 
+                        licenseInfo.status === 'active' && !License.isExpired());
+    
+    if (!isLicensed) {
         // Diagonal watermark across page
         pdf.saveGraphicsState();
-        pdf.setGState(new pdf.GState({ opacity: 0.08 }));
+        pdf.setGState(new pdf.GState({ opacity: 0.10 }));
         pdf.setTextColor(27, 58, 107);
-        pdf.setFontSize(60);
+        pdf.setFontSize(58);
         pdf.setFont('helvetica', 'bold');
         pdf.text('FACTURAPRO', 105, 150, { 
             align: 'center', 
             angle: 45 
         });
-        pdf.setFontSize(14);
-        pdf.text('Version d\'essai', 105, 165, { 
+        pdf.setFontSize(13);
+        pdf.text('Version d\'essai - Activez votre licence', 105, 165, { 
             align: 'center', 
             angle: 45 
         });
         pdf.restoreGraphicsState();
+        
+        // Footer watermark text (more discreet, on every page)
+        pdf.setFontSize(8);
+        pdf.setTextColor(150, 150, 150);
+        pdf.setFont('helvetica', 'italic');
+        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturapro.ma', 105, 290, {
+            align: 'center'
+        });
     }
     
     pdf.save(`${doc_data.number}.pdf`);

@@ -566,6 +566,12 @@
         <a class="nav-item" data-page="payments" onclick="navTo('payments')">
             💳 Paiements reçus
         </a>
+        <a class="nav-item" data-page="reports" onclick="navTo('reports')">
+            📊 Rapports & Ventes
+        </a>
+        <a class="nav-item" data-page="tiers" onclick="navTo('tiers')">
+            🏷️ Tarifs & Plans
+        </a>
         
         <div style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px;">
             <a class="nav-item master-only" data-page="admins" onclick="navTo('admins')">
@@ -872,6 +878,359 @@
                     </thead>
                     <tbody id="paymentsTable">
                         <tr><td colspan="7" class="empty">Aucun paiement</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- REPORTS & SALES -->
+        <section class="page" id="page-reports">
+            <div class="topbar">
+                <h1>📊 Rapports & Ventes</h1>
+                <div class="actions">
+                    <select id="reportPeriod" class="search-input" style="width: 160px;" onchange="renderReports()">
+                        <option value="all">Tout</option>
+                        <option value="today">Aujourd'hui</option>
+                        <option value="week">7 derniers jours</option>
+                        <option value="month" selected>Ce mois</option>
+                        <option value="quarter">Ce trimestre</option>
+                        <option value="year">Cette année</option>
+                    </select>
+                    <button class="btn btn-secondary btn-sm" onclick="loadAllData()">🔄</button>
+                    <button class="btn btn-primary btn-sm" onclick="exportReportCSV()">📥 Exporter CSV</button>
+                </div>
+            </div>
+
+            <!-- KPIs principaux -->
+            <div class="stats-grid">
+                <div class="stat-card success">
+                    <div class="stat-label">💰 CA Encaissé</div>
+                    <div class="stat-value" id="rpRevenue">0<span style="font-size: 16px; color: var(--ink-mute);"> DH</span></div>
+                    <div class="stat-trend" id="rpRevenueTrend">—</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">⏳ En attente paiement</div>
+                    <div class="stat-value" id="rpPending">0<span style="font-size: 16px; color: var(--ink-mute);"> DH</span></div>
+                    <div class="stat-trend" id="rpPendingTrend">Codes à relancer</div>
+                </div>
+                <div class="stat-card accent">
+                    <div class="stat-label">🎯 Conversion</div>
+                    <div class="stat-value" id="rpConversion">0<span style="font-size: 16px; color: var(--ink-mute);"> %</span></div>
+                    <div class="stat-trend" id="rpConversionTrend">Demandes → Paiements</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">📦 Licences vendues</div>
+                    <div class="stat-value" id="rpLicensesSold">0</div>
+                    <div class="stat-trend" id="rpLicensesTrend">—</div>
+                </div>
+            </div>
+
+            <!-- Entonnoir de conversion -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔄 Entonnoir de conversion</h2>
+                </div>
+                <div style="padding: 24px;">
+                    <div id="funnelChart"></div>
+                </div>
+            </div>
+
+            <!-- Codes à relancer (CRITIQUE) -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔔 Codes à relancer (à perte si pas suivis)</h2>
+                    <div class="actions">
+                        <span style="font-size: 12px; color: var(--ink-mute);" id="rpToFollowUpCount">0 codes</span>
+                    </div>
+                </div>
+                <div class="alert alert-warning" style="margin: 0 24px 0 24px;">
+                    💡 <strong>Stratégie de relance recommandée</strong> :
+                    <ul style="margin: 8px 0 0 20px; font-size: 13px;">
+                        <li><strong>J+2</strong> : Premier rappel WhatsApp ("Avez-vous reçu votre code ?")</li>
+                        <li><strong>J+5</strong> : Deuxième relance ("Toujours intéressé ?")</li>
+                        <li><strong>J+10</strong> : Dernière relance avec offre spéciale</li>
+                        <li><strong>J+15</strong> : Marquer comme perdu si pas de réponse</li>
+                    </ul>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Client</th>
+                            <th>Type</th>
+                            <th>Montant attendu</th>
+                            <th>Jours depuis génération</th>
+                            <th>Statut relance</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rpFollowUpTable">
+                        <tr><td colspan="7" class="empty">Aucun code en attente</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Détail des codes générés -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📋 Tous les codes générés</h2>
+                    <select id="rpStatusFilter" class="search-input" style="width: 180px;" onchange="renderReports()">
+                        <option value="all">Tous statuts</option>
+                        <option value="pending">⏳ En attente</option>
+                        <option value="used">✅ Activés (payés)</option>
+                        <option value="revoked">❌ Révoqués</option>
+                    </select>
+                </div>
+                <div class="stats-grid" style="padding: 16px 24px; margin: 0;">
+                    <div style="background: var(--surface-soft); padding: 12px; border-radius: 8px;">
+                        <div style="font-size: 11px; color: var(--ink-mute); text-transform: uppercase; font-weight: 700;">⏳ En attente</div>
+                        <div style="font-size: 22px; font-weight: 700; color: var(--warning);" id="rpCountPending">0</div>
+                        <div style="font-size: 11px; color: var(--ink-mute);" id="rpAmountPending">0 DH potentiel</div>
+                    </div>
+                    <div style="background: var(--surface-soft); padding: 12px; border-radius: 8px;">
+                        <div style="font-size: 11px; color: var(--ink-mute); text-transform: uppercase; font-weight: 700;">✅ Activés</div>
+                        <div style="font-size: 22px; font-weight: 700; color: var(--success);" id="rpCountUsed">0</div>
+                        <div style="font-size: 11px; color: var(--ink-mute);" id="rpAmountUsed">0 DH encaissé</div>
+                    </div>
+                    <div style="background: var(--surface-soft); padding: 12px; border-radius: 8px;">
+                        <div style="font-size: 11px; color: var(--ink-mute); text-transform: uppercase; font-weight: 700;">❌ Révoqués</div>
+                        <div style="font-size: 22px; font-weight: 700; color: var(--danger);" id="rpCountRevoked">0</div>
+                        <div style="font-size: 11px; color: var(--ink-mute);" id="rpAmountRevoked">0 DH perdu</div>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Code</th>
+                            <th>Client</th>
+                            <th>Type</th>
+                            <th>Montant</th>
+                            <th>Statut</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rpCodesTable">
+                        <tr><td colspan="7" class="empty">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Top clients -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🏆 Top clients (par CA)</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Codes générés</th>
+                            <th>Montant payé</th>
+                            <th>Dernière action</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rpTopClientsTable">
+                        <tr><td colspan="5" class="empty">Aucun client</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TIERS / PRICING PLANS -->
+        <section class="page" id="page-tiers">
+            <div class="topbar">
+                <h1>🏷️ Tarifs & Plans</h1>
+                <button class="btn btn-secondary btn-sm" onclick="loadAllData()">🔄 Rafraîchir</button>
+            </div>
+
+            <div class="alert">
+                <strong>📋 Vue d'ensemble des plans</strong> — Voir les fonctionnalités par tier et combien de clients dans chaque catégorie. Cette page est en lecture seule (pour l'instant).
+            </div>
+
+            <!-- Stats par tier -->
+            <div class="stats-grid">
+                <div class="stat-card success">
+                    <div class="stat-label">🎁 Lifetime</div>
+                    <div class="stat-value" id="tierCountLifetime">0</div>
+                    <div class="stat-trend" id="tierRevenueLifetime">0 DH généré</div>
+                </div>
+                <div class="stat-card accent">
+                    <div class="stat-label">⭐ Pro Mensuel</div>
+                    <div class="stat-value" id="tierCountMonthly">0</div>
+                    <div class="stat-trend" id="tierRevenueMonthly">0 DH/mois</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">👔 Business</div>
+                    <div class="stat-value" id="tierCountBusiness">0</div>
+                    <div class="stat-trend" id="tierRevenueBusiness">0 DH/mois</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">🆓 En essai</div>
+                    <div class="stat-value" id="tierCountTrial">—</div>
+                    <div class="stat-trend">Estimation</div>
+                </div>
+            </div>
+
+            <!-- Comparaison des plans -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📊 Comparaison des fonctionnalités</h2>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="min-width: 220px;">Fonctionnalité</th>
+                                <th style="text-align: center;">🆓 Essai<br><small style="font-weight: 400; color: var(--ink-mute);">14 jours</small></th>
+                                <th style="text-align: center;">🎁 Lifetime<br><small style="font-weight: 400; color: var(--accent);">499 DH</small></th>
+                                <th style="text-align: center;">⭐ Pro<br><small style="font-weight: 400; color: var(--ink-mute);">99 DH/mois</small></th>
+                                <th style="text-align: center;">👔 Business<br><small style="font-weight: 400; color: var(--ink-mute);">199 DH/mois</small></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Création factures/devis</strong><br><small style="color: var(--ink-mute);">Illimité, conformes Maroc</small></td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Clients & Produits</strong><br><small style="color: var(--ink-mute);">Base illimitée</small></td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Module CNSS / Impôts</strong><br><small style="color: var(--ink-mute);">Calculs auto</small></td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Paiements & Relances</strong><br><small style="color: var(--ink-mute);">3 niveaux automatiques</small></td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Sync cloud multi-appareils</strong></td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                                <td style="text-align: center;">✅</td>
+                            </tr>
+                            <tr style="background: rgba(232, 177, 74, 0.05);">
+                                <td><strong>🎨 Logo personnalisé sur PDF</strong><br><small style="color: var(--ink-mute);">Personnalisez vos factures</small></td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--success);">✅</td>
+                                <td style="text-align: center; color: var(--success);">✅</td>
+                                <td style="text-align: center; color: var(--success);">✅</td>
+                            </tr>
+                            <tr style="background: rgba(232, 177, 74, 0.05);">
+                                <td><strong>🚫 Sans watermark FacturaPro</strong><br><small style="color: var(--ink-mute);">PDF 100% professionnel</small></td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--success);">✅</td>
+                                <td style="text-align: center; color: var(--success);">✅</td>
+                                <td style="text-align: center; color: var(--success);">✅</td>
+                            </tr>
+                            <tr style="background: rgba(201, 169, 91, 0.05);">
+                                <td><strong>♾️ Mises à jour à vie</strong><br><small style="color: var(--ink-mute);">Toutes les nouveautés incluses</small></td>
+                                <td style="text-align: center; color: var(--ink-mute);">—</td>
+                                <td style="text-align: center; color: var(--success); font-weight: 700;">✅ À vie</td>
+                                <td style="text-align: center; color: var(--success);">✅ Tant qu'abonné</td>
+                                <td style="text-align: center; color: var(--success);">✅ Tant qu'abonné</td>
+                            </tr>
+                            <tr>
+                                <td><strong>📱 Support WhatsApp prioritaire</strong></td>
+                                <td style="text-align: center; color: var(--ink-mute);">Email</td>
+                                <td style="text-align: center;">Email</td>
+                                <td style="text-align: center; color: var(--success);">✅</td>
+                                <td style="text-align: center; color: var(--success);">✅ 24/7</td>
+                            </tr>
+                            <tr style="background: rgba(27, 58, 107, 0.05);">
+                                <td><strong>👥 Multi-utilisateurs</strong><br><small style="color: var(--ink-mute);">Partager avec employés/comptable</small></td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--success); font-weight: 700;">✅ Jusqu'à 5</td>
+                            </tr>
+                            <tr style="background: rgba(27, 58, 107, 0.05);">
+                                <td><strong>🏢 Multi-entreprises</strong><br><small style="color: var(--ink-mute);">Plusieurs sociétés en 1 compte</small></td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--success); font-weight: 700;">✅ Jusqu'à 3</td>
+                            </tr>
+                            <tr style="background: rgba(27, 58, 107, 0.05);">
+                                <td><strong>📊 Export comptable (Sage, FEC)</strong><br><small style="color: var(--ink-mute);">Compatible logiciels comptables</small></td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--danger);">❌</td>
+                                <td style="text-align: center; color: var(--success); font-weight: 700;">✅</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Conseils stratégiques -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>💡 Stratégie de différenciation</h2>
+                </div>
+                <div style="padding: 24px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+                        <div style="background: var(--surface-soft); padding: 16px; border-radius: 10px; border-left: 4px solid var(--ink-mute);">
+                            <h4 style="font-family: 'Crimson Pro', serif; margin-bottom: 8px;">🆓 Essai (14 jours)</h4>
+                            <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.6;">
+                                Accès complet pour tester. <strong>Watermark sur PDF</strong> pour motiver à acheter. Idéal pour découvrir toutes les fonctionnalités.
+                            </p>
+                        </div>
+                        <div style="background: var(--surface-soft); padding: 16px; border-radius: 10px; border-left: 4px solid var(--accent);">
+                            <h4 style="font-family: 'Crimson Pro', serif; margin-bottom: 8px;">🎁 Lifetime (499 DH)</h4>
+                            <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.6;">
+                                <strong>Killer offer pour le lancement.</strong> Génère du cash rapidement. Parfait pour AE/Freelance solo. <strong>Limité à 100 places.</strong>
+                            </p>
+                        </div>
+                        <div style="background: var(--surface-soft); padding: 16px; border-radius: 10px; border-left: 4px solid var(--primary);">
+                            <h4 style="font-family: 'Crimson Pro', serif; margin-bottom: 8px;">⭐ Pro (99 DH/mois)</h4>
+                            <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.6;">
+                                Revenus récurrents stables. Cible : AE actifs avec gros volume. <strong>Rentable dès la 6ème mois</strong> vs Lifetime.
+                            </p>
+                        </div>
+                        <div style="background: var(--surface-soft); padding: 16px; border-radius: 10px; border-left: 4px solid var(--success);">
+                            <h4 style="font-family: 'Crimson Pro', serif; margin-bottom: 8px;">👔 Business (199 DH/mois)</h4>
+                            <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.6;">
+                                Marges les plus élevées. Cible : SARL avec employés/comptable. <strong>Multi-users + export comptable</strong> = vraie valeur ajoutée.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top tiers actifs -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📈 Performance par plan</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Plan</th>
+                            <th>Clients actifs</th>
+                            <th>CA total généré</th>
+                            <th>Code en attente</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tiersPerformanceTable">
+                        <tr><td colspan="5" class="empty">Chargement...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -2169,6 +2528,567 @@ function closeModal(id) {
 // ============================================
 // NAVIGATION
 // ============================================
+// ============================================
+// TIERS / PRICING PLANS
+// ============================================
+function renderTiers() {
+    // Stats par tier (depuis admin_codes status='used')
+    const usedCodes = allCodes.filter(c => c.status === 'used');
+    
+    const lifetimeCount = usedCodes.filter(c => c.type === 'lifetime').length;
+    const monthlyCount = usedCodes.filter(c => c.type === 'monthly').length;
+    const businessCount = usedCodes.filter(c => c.type === 'business').length;
+    
+    // Revenus totaux
+    const lifetimeRevenue = allPayments.filter(p => p.type === 'lifetime').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const monthlyRevenue = allPayments.filter(p => p.type === 'monthly').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const businessRevenue = allPayments.filter(p => p.type === 'business').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    
+    document.getElementById('tierCountLifetime').textContent = lifetimeCount;
+    document.getElementById('tierRevenueLifetime').textContent = `${lifetimeRevenue.toLocaleString('fr-FR')} DH généré`;
+    
+    document.getElementById('tierCountMonthly').textContent = monthlyCount;
+    document.getElementById('tierRevenueMonthly').textContent = `${monthlyRevenue.toLocaleString('fr-FR')} DH cumulé`;
+    
+    document.getElementById('tierCountBusiness').textContent = businessCount;
+    document.getElementById('tierRevenueBusiness').textContent = `${businessRevenue.toLocaleString('fr-FR')} DH cumulé`;
+    
+    // Estimation essai (utilisateurs sans licence active)
+    const totalClients = allUsers.length;
+    const activeLicensed = lifetimeCount + monthlyCount + businessCount;
+    const trialEstimate = Math.max(0, totalClients - activeLicensed);
+    document.getElementById('tierCountTrial').textContent = trialEstimate;
+    
+    // Performance table
+    const pendingCodes = allCodes.filter(c => c.status === 'pending');
+    
+    const tiers = [
+        {
+            name: '🎁 Lifetime',
+            count: lifetimeCount,
+            revenue: lifetimeRevenue,
+            pending: pendingCodes.filter(c => c.type === 'lifetime').length,
+            price: 499,
+            type: 'one-time'
+        },
+        {
+            name: '⭐ Pro Mensuel',
+            count: monthlyCount,
+            revenue: monthlyRevenue,
+            pending: pendingCodes.filter(c => c.type === 'monthly').length,
+            price: 99,
+            type: 'recurring'
+        },
+        {
+            name: '👔 Business',
+            count: businessCount,
+            revenue: businessRevenue,
+            pending: pendingCodes.filter(c => c.type === 'business').length,
+            price: 199,
+            type: 'recurring'
+        }
+    ];
+    
+    const tbody = document.getElementById('tiersPerformanceTable');
+    tbody.innerHTML = tiers.map(t => {
+        let statusBadge;
+        if (t.count === 0) {
+            statusBadge = '<span class="badge badge-mute">Aucune vente</span>';
+        } else if (t.count < 5) {
+            statusBadge = '<span class="badge badge-warning">Démarrage</span>';
+        } else if (t.count < 20) {
+            statusBadge = '<span class="badge badge-trial">En croissance</span>';
+        } else {
+            statusBadge = '<span class="badge badge-success">Performant</span>';
+        }
+        
+        return `
+            <tr>
+                <td><strong>${t.name}</strong><br><small style="color: var(--ink-mute);">${t.price} DH${t.type === 'recurring' ? '/mois' : ' (une fois)'}</small></td>
+                <td><strong style="font-size: 18px; color: var(--success);">${t.count}</strong></td>
+                <td><strong>${t.revenue.toLocaleString('fr-FR')} DH</strong></td>
+                <td>${t.pending > 0 ? `<span class="badge badge-warning">${t.pending} à relancer</span>` : '—'}</td>
+                <td>${statusBadge}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ============================================
+// REPORTS & SALES (rapports de ventes)
+// ============================================
+
+// Prix attendus selon le type de licence
+const TIER_PRICES = {
+    lifetime: 499,
+    monthly: 99,
+    business: 199
+};
+
+const TIER_LABELS = {
+    lifetime: '🎁 Lifetime',
+    monthly: '⭐ Pro Mensuel',
+    business: '👔 Business'
+};
+
+function getDateRange(period) {
+    const now = new Date();
+    const start = new Date(now);
+    
+    switch(period) {
+        case 'today':
+            start.setHours(0, 0, 0, 0);
+            break;
+        case 'week':
+            start.setDate(now.getDate() - 7);
+            break;
+        case 'month':
+            start.setDate(1);
+            start.setHours(0, 0, 0, 0);
+            break;
+        case 'quarter':
+            const q = Math.floor(now.getMonth() / 3);
+            start.setMonth(q * 3, 1);
+            start.setHours(0, 0, 0, 0);
+            break;
+        case 'year':
+            start.setMonth(0, 1);
+            start.setHours(0, 0, 0, 0);
+            break;
+        case 'all':
+        default:
+            return null;
+    }
+    return { start, end: now };
+}
+
+function isInRange(dateStr, range) {
+    if (!range) return true;
+    const date = new Date(dateStr);
+    return date >= range.start && date <= range.end;
+}
+
+function renderReports() {
+    const period = document.getElementById('reportPeriod')?.value || 'month';
+    const statusFilter = document.getElementById('rpStatusFilter')?.value || 'all';
+    const range = getDateRange(period);
+    
+    // Filtrer codes selon période
+    const filteredCodes = allCodes.filter(c => isInRange(c.created_at, range));
+    const filteredPayments = allPayments.filter(p => isInRange(p.payment_date, range));
+    const filteredRequests = allRequests.filter(r => isInRange(r.created_at, range));
+    
+    // ═══════════════════════════════════════════
+    // KPIs principaux
+    // ═══════════════════════════════════════════
+    
+    // CA Encaissé = somme des paiements
+    const revenue = filteredPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    document.getElementById('rpRevenue').innerHTML = 
+        `${revenue.toLocaleString('fr-FR')}<span style="font-size: 16px; color: var(--ink-mute);"> DH</span>`;
+    
+    // Trend revenu (vs période précédente)
+    const todayRevenue = allPayments
+        .filter(p => isInRange(p.payment_date, getDateRange('today')))
+        .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    document.getElementById('rpRevenueTrend').textContent = 
+        `+${todayRevenue.toLocaleString('fr-FR')} DH aujourd'hui`;
+    
+    // En attente paiement = codes pending
+    const pendingCodes = filteredCodes.filter(c => c.status === 'pending');
+    const pendingAmount = pendingCodes.reduce((s, c) => s + (TIER_PRICES[c.type] || 0), 0);
+    document.getElementById('rpPending').innerHTML = 
+        `${pendingAmount.toLocaleString('fr-FR')}<span style="font-size: 16px; color: var(--ink-mute);"> DH</span>`;
+    document.getElementById('rpPendingTrend').textContent = 
+        `${pendingCodes.length} code${pendingCodes.length > 1 ? 's' : ''} à relancer`;
+    
+    // Conversion : demandes → paiements effectués
+    const totalRequests = filteredRequests.length;
+    const usedCodes = filteredCodes.filter(c => c.status === 'used').length;
+    const conversionRate = totalRequests > 0 ? Math.round((usedCodes / totalRequests) * 100) : 0;
+    document.getElementById('rpConversion').innerHTML = 
+        `${conversionRate}<span style="font-size: 16px; color: var(--ink-mute);"> %</span>`;
+    document.getElementById('rpConversionTrend').textContent = 
+        `${usedCodes}/${totalRequests} demandes → paiements`;
+    
+    // Licences vendues
+    const licensesSold = filteredCodes.filter(c => c.status === 'used').length;
+    document.getElementById('rpLicensesSold').textContent = licensesSold;
+    const lifetimeSold = filteredCodes.filter(c => c.status === 'used' && c.type === 'lifetime').length;
+    const monthlySold = filteredCodes.filter(c => c.status === 'used' && c.type !== 'lifetime').length;
+    document.getElementById('rpLicensesTrend').textContent = 
+        `${lifetimeSold} Lifetime · ${monthlySold} Mensuel`;
+    
+    // ═══════════════════════════════════════════
+    // Entonnoir
+    // ═══════════════════════════════════════════
+    renderFunnel(filteredRequests.length, filteredCodes.length, usedCodes, revenue);
+    
+    // ═══════════════════════════════════════════
+    // Codes à relancer
+    // ═══════════════════════════════════════════
+    renderFollowUp(filteredCodes.filter(c => c.status === 'pending'));
+    
+    // ═══════════════════════════════════════════
+    // Stats par statut
+    // ═══════════════════════════════════════════
+    const countPending = filteredCodes.filter(c => c.status === 'pending').length;
+    const countUsed = filteredCodes.filter(c => c.status === 'used').length;
+    const countRevoked = filteredCodes.filter(c => c.status === 'revoked').length;
+    
+    const amountPending = filteredCodes.filter(c => c.status === 'pending')
+        .reduce((s, c) => s + (TIER_PRICES[c.type] || 0), 0);
+    const amountUsed = filteredCodes.filter(c => c.status === 'used')
+        .reduce((s, c) => s + (TIER_PRICES[c.type] || 0), 0);
+    const amountRevoked = filteredCodes.filter(c => c.status === 'revoked')
+        .reduce((s, c) => s + (TIER_PRICES[c.type] || 0), 0);
+    
+    document.getElementById('rpCountPending').textContent = countPending;
+    document.getElementById('rpAmountPending').textContent = `${amountPending.toLocaleString('fr-FR')} DH potentiel`;
+    document.getElementById('rpCountUsed').textContent = countUsed;
+    document.getElementById('rpAmountUsed').textContent = `${amountUsed.toLocaleString('fr-FR')} DH encaissé`;
+    document.getElementById('rpCountRevoked').textContent = countRevoked;
+    document.getElementById('rpAmountRevoked').textContent = `${amountRevoked.toLocaleString('fr-FR')} DH perdu`;
+    
+    // ═══════════════════════════════════════════
+    // Tableau des codes
+    // ═══════════════════════════════════════════
+    let displayCodes = filteredCodes;
+    if (statusFilter !== 'all') {
+        displayCodes = displayCodes.filter(c => c.status === statusFilter);
+    }
+    
+    const tbody = document.getElementById('rpCodesTable');
+    if (displayCodes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">Aucun code dans cette période</td></tr>';
+    } else {
+        const statusBadges = {
+            pending: '<span class="badge badge-warning">⏳ En attente</span>',
+            used: '<span class="badge badge-success">✅ Activé</span>',
+            revoked: '<span class="badge badge-danger">❌ Révoqué</span>'
+        };
+        
+        tbody.innerHTML = displayCodes.slice(0, 100).map(c => `
+            <tr>
+                <td>${formatDate(c.created_at)}</td>
+                <td><code style="font-size: 11px;">${c.code}</code></td>
+                <td>${c.client_email || '—'}</td>
+                <td>${TIER_LABELS[c.type] || c.type}</td>
+                <td><strong>${(TIER_PRICES[c.type] || 0).toLocaleString('fr-FR')} DH</strong></td>
+                <td>${statusBadges[c.status] || c.status}</td>
+                <td style="font-size: 11px; color: var(--ink-mute);">${c.note || '—'}</td>
+            </tr>
+        `).join('');
+    }
+    
+    // ═══════════════════════════════════════════
+    // Top clients
+    // ═══════════════════════════════════════════
+    renderTopClients(filteredCodes, filteredPayments);
+}
+
+function renderFunnel(requests, codesGenerated, paymentsReceived, revenue) {
+    const container = document.getElementById('funnelChart');
+    if (!container) return;
+    
+    const maxValue = Math.max(requests, codesGenerated, paymentsReceived, 1);
+    
+    const stages = [
+        { 
+            label: '📥 Demandes reçues', 
+            value: requests, 
+            color: 'var(--warning)',
+            description: 'Clients ayant cliqué "Acheter"'
+        },
+        { 
+            label: '🎁 Codes générés', 
+            value: codesGenerated, 
+            color: 'var(--accent)',
+            description: 'Codes envoyés aux clients'
+        },
+        { 
+            label: '✅ Licences activées', 
+            value: paymentsReceived, 
+            color: 'var(--success)',
+            description: `${revenue.toLocaleString('fr-FR')} DH encaissés`
+        }
+    ];
+    
+    container.innerHTML = stages.map((s, i) => {
+        const width = (s.value / maxValue) * 100;
+        const prevValue = i > 0 ? stages[i-1].value : null;
+        const conversion = prevValue && prevValue > 0 ? Math.round((s.value / prevValue) * 100) : null;
+        
+        return `
+            <div style="margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+                    <div>
+                        <strong style="font-size: 14px;">${s.label}</strong>
+                        <span style="font-size: 11px; color: var(--ink-mute); margin-left: 8px;">${s.description}</span>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: baseline;">
+                        ${conversion !== null ? `<span style="font-size: 11px; color: var(--ink-mute);">${conversion}% conversion</span>` : ''}
+                        <strong style="font-size: 18px; color: ${s.color};">${s.value}</strong>
+                    </div>
+                </div>
+                <div style="background: var(--surface-soft); border-radius: 8px; height: 28px; position: relative; overflow: hidden;">
+                    <div style="background: ${s.color}; height: 100%; width: ${width}%; transition: width 0.5s ease; border-radius: 8px; opacity: 0.85;"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderFollowUp(pendingCodes) {
+    const tbody = document.getElementById('rpFollowUpTable');
+    const countEl = document.getElementById('rpToFollowUpCount');
+    
+    // Trier par ancienneté (plus vieux d'abord = priorité)
+    const sorted = pendingCodes.sort((a, b) => 
+        new Date(a.created_at) - new Date(b.created_at)
+    );
+    
+    if (countEl) countEl.textContent = `${sorted.length} code${sorted.length > 1 ? 's' : ''}`;
+    
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">✨</div>Tous vos codes ont été activés ou bien suivis !</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = sorted.map(c => {
+        const daysSince = Math.floor((Date.now() - new Date(c.created_at).getTime()) / (1000 * 60 * 60 * 24));
+        const amount = TIER_PRICES[c.type] || 0;
+        
+        // Statut de relance
+        let relanceStatus, relanceColor;
+        if (daysSince < 2) {
+            relanceStatus = '🟢 Récent';
+            relanceColor = 'var(--success)';
+        } else if (daysSince < 5) {
+            relanceStatus = '🟡 Relance 1';
+            relanceColor = 'var(--warning)';
+        } else if (daysSince < 10) {
+            relanceStatus = '🟠 Relance 2';
+            relanceColor = '#E89030';
+        } else if (daysSince < 15) {
+            relanceStatus = '🔴 Urgente';
+            relanceColor = 'var(--danger)';
+        } else {
+            relanceStatus = '⚫ Probablement perdu';
+            relanceColor = 'var(--ink-mute)';
+        }
+        
+        return `
+            <tr>
+                <td><code style="font-size: 11px;">${c.code}</code></td>
+                <td><strong>${c.client_email || '—'}</strong></td>
+                <td>${TIER_LABELS[c.type] || c.type}</td>
+                <td><strong>${amount.toLocaleString('fr-FR')} DH</strong></td>
+                <td>
+                    <span style="font-weight: 700; color: ${daysSince > 7 ? 'var(--danger)' : 'var(--ink)'};">
+                        J+${daysSince}
+                    </span>
+                </td>
+                <td><span style="color: ${relanceColor}; font-weight: 600; font-size: 12px;">${relanceStatus}</span></td>
+                <td>
+                    <button class="btn btn-success btn-sm" onclick="relanceFollowUp('${c.code}', '${c.client_email}', '${c.type}', ${amount})" title="Envoyer relance WhatsApp">
+                        📱 Relancer
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="markAsPaid('${c.id}', '${c.client_email}', '${c.type}', ${amount})" title="Marquer comme payé">
+                        ✓ Payé
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="cancelCode('${c.id}')" title="Annuler ce code">
+                        ✕
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function relanceFollowUp(code, email, tier, amount) {
+    const tierName = TIER_LABELS[tier] || tier;
+    const daysSince = (() => {
+        const c = allCodes.find(x => x.code === code);
+        if (!c) return 0;
+        return Math.floor((Date.now() - new Date(c.created_at).getTime()) / (1000 * 60 * 60 * 24));
+    })();
+    
+    let msg;
+    if (daysSince < 5) {
+        msg = `Bonjour 🇲🇦,\n\nJe reviens vers vous concernant votre demande FacturaPro ${tierName} (${amount} DH).\n\n📋 Votre code de licence est prêt :\n*${code}*\n\nAvez-vous reçu nos précédents messages ? Avez-vous des questions sur le paiement ?\n\nJe reste à votre disposition !\n\n— FacturaPro`;
+    } else if (daysSince < 10) {
+        msg = `Bonjour 🇲🇦,\n\nVotre code de licence FacturaPro ${tierName} est toujours en attente :\n*${code}*\n\nMontant : ${amount} DH\n\nÊtes-vous toujours intéressé(e) ? Avez-vous rencontré une difficulté ?\n\nNous pouvons vous proposer :\n• Un délai de paiement\n• Un mode de paiement alternatif\n• Une remise spéciale\n\nDites-moi !\n\n— FacturaPro`;
+    } else {
+        msg = `Bonjour 🇲🇦,\n\nDernier message concernant votre code FacturaPro ${tierName} :\n*${code}*\n\nIl reste valable encore quelques jours. Sans nouvelles de votre part, nous serons obligés de l'annuler.\n\n💎 Offre spéciale finale : -10% sur le prix initial !\n\nMontant : ${Math.round(amount * 0.9)} DH au lieu de ${amount} DH\n\nDernière chance, dites-moi si ça vous intéresse !\n\n— FacturaPro`;
+    }
+    
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    showToast('Message de relance ouvert dans WhatsApp', 'success');
+}
+
+async function markAsPaid(codeId, email, tier, amount) {
+    if (!confirm(`Confirmer que ${email} a bien payé ${amount} DH pour ${TIER_LABELS[tier] || tier} ?\n\nCela va :\n• Enregistrer le paiement\n• Marquer le code comme utilisé`)) {
+        return;
+    }
+    
+    try {
+        // 1. Enregistrer le paiement
+        const { error: payError } = await supaClient
+            .from('admin_payments')
+            .insert({
+                client_email: email,
+                payment_date: new Date().toISOString().split('T')[0],
+                amount: amount,
+                type: tier,
+                payment_mode: 'virement',
+                note: `Marqué payé manuellement (code ${codeId.substring(0, 8)})`
+            });
+        
+        if (payError) throw payError;
+        
+        // 2. Marquer le code comme utilisé
+        const { error: codeError } = await supaClient
+            .from('admin_codes')
+            .update({
+                status: 'used',
+                activated_at: new Date().toISOString()
+            })
+            .eq('id', codeId);
+        
+        if (codeError) throw codeError;
+        
+        showToast('Paiement enregistré ✓', 'success');
+        await loadAllData();
+    } catch (err) {
+        showToast('Erreur : ' + err.message, 'error');
+    }
+}
+
+async function cancelCode(codeId) {
+    if (!confirm('Annuler définitivement ce code ?\n\nLe client ne pourra plus l\'activer. À utiliser si vous êtes sûr que le client ne paiera pas.')) {
+        return;
+    }
+    
+    try {
+        const { error } = await supaClient
+            .from('admin_codes')
+            .update({ status: 'revoked' })
+            .eq('id', codeId);
+        
+        if (error) throw error;
+        
+        showToast('Code annulé', 'success');
+        await loadAllData();
+    } catch (err) {
+        showToast('Erreur : ' + err.message, 'error');
+    }
+}
+
+function renderTopClients(codes, payments) {
+    const tbody = document.getElementById('rpTopClientsTable');
+    
+    // Agréger par email
+    const clientStats = {};
+    
+    codes.forEach(c => {
+        if (!c.client_email) return;
+        const email = c.client_email.toLowerCase();
+        if (!clientStats[email]) {
+            clientStats[email] = {
+                email,
+                codesGenerated: 0,
+                amountPaid: 0,
+                lastAction: c.created_at,
+                hasActiveLicense: false,
+                hasPending: false
+            };
+        }
+        clientStats[email].codesGenerated++;
+        if (c.status === 'used') clientStats[email].hasActiveLicense = true;
+        if (c.status === 'pending') clientStats[email].hasPending = true;
+        if (new Date(c.created_at) > new Date(clientStats[email].lastAction)) {
+            clientStats[email].lastAction = c.created_at;
+        }
+    });
+    
+    payments.forEach(p => {
+        if (!p.client_email) return;
+        const email = p.client_email.toLowerCase();
+        if (!clientStats[email]) {
+            clientStats[email] = {
+                email,
+                codesGenerated: 0,
+                amountPaid: 0,
+                lastAction: p.payment_date,
+                hasActiveLicense: false,
+                hasPending: false
+            };
+        }
+        clientStats[email].amountPaid += parseFloat(p.amount) || 0;
+    });
+    
+    // Trier par montant payé
+    const topClients = Object.values(clientStats)
+        .sort((a, b) => b.amountPaid - a.amountPaid)
+        .slice(0, 20);
+    
+    if (topClients.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Aucun client</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = topClients.map(c => {
+        let statusBadge;
+        if (c.hasActiveLicense) statusBadge = '<span class="badge badge-success">✅ Client payant</span>';
+        else if (c.hasPending) statusBadge = '<span class="badge badge-warning">⏳ En attente</span>';
+        else statusBadge = '<span class="badge badge-mute">🆓 Essai</span>';
+        
+        return `
+            <tr>
+                <td><strong>${c.email}</strong></td>
+                <td>${c.codesGenerated}</td>
+                <td><strong style="color: ${c.amountPaid > 0 ? 'var(--success)' : 'var(--ink-mute)'};">${c.amountPaid.toLocaleString('fr-FR')} DH</strong></td>
+                <td>${formatDate(c.lastAction)}</td>
+                <td>${statusBadge}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function exportReportCSV() {
+    const period = document.getElementById('reportPeriod')?.value || 'month';
+    const range = getDateRange(period);
+    const filteredCodes = allCodes.filter(c => isInRange(c.created_at, range));
+    
+    // Build CSV
+    const headers = ['Date', 'Code', 'Client', 'Type', 'Prix attendu (DH)', 'Statut', 'Date activation', 'Note'];
+    const rows = filteredCodes.map(c => [
+        formatDate(c.created_at),
+        c.code,
+        c.client_email || '',
+        c.type,
+        TIER_PRICES[c.type] || 0,
+        c.status,
+        c.activated_at ? formatDate(c.activated_at) : '',
+        (c.note || '').replace(/[",]/g, ' ')
+    ]);
+    
+    let csv = headers.join(',') + '\n';
+    csv += rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+    
+    // Download
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `facturapro-rapport-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('Rapport CSV téléchargé ✓', 'success');
+}
+
 function navTo(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -2178,6 +3098,8 @@ function navTo(page) {
     // Render page-specific data
     if (page === 'admins') renderAdmins();
     if (page === 'settings') loadSettings();
+    if (page === 'reports') renderReports();
+    if (page === 'tiers') renderTiers();
 }
 
 // ============================================
