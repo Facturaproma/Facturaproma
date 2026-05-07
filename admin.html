@@ -448,7 +448,8 @@
         }
 
         /* === MYINV TABS === */
-        .myinv-tab {
+        .myinv-tab,
+        .treasury-tab {
             background: transparent;
             border: none;
             padding: 10px 16px;
@@ -462,8 +463,8 @@
             transition: all 0.2s;
             white-space: nowrap;
         }
-        .myinv-tab:hover { color: var(--ink); }
-        .myinv-tab.active {
+        .myinv-tab:hover, .treasury-tab:hover { color: var(--ink); }
+        .myinv-tab.active, .treasury-tab.active {
             color: var(--primary);
             border-bottom-color: var(--primary);
         }
@@ -653,6 +654,9 @@
         </a>
         <a class="nav-item" data-page="myinvoicing" onclick="navTo('myinvoicing')">
             📄 Ma Facturation
+        </a>
+        <a class="nav-item" data-page="treasury" onclick="navTo('treasury')">
+            💰 Trésorerie
         </a>
         
         <div style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px;">
@@ -1650,6 +1654,203 @@
                         </thead>
                         <tbody id="fpStatsByType">
                             <tr><td colspan="5" class="empty">Aucune donnée</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TRÉSORERIE / RAPPROCHEMENT -->
+        <section class="page" id="page-treasury">
+            <div class="topbar">
+                <h1>💰 Trésorerie & Rapprochement</h1>
+                <button class="btn btn-secondary btn-sm" onclick="loadAllData(); renderTreasury();">🔄</button>
+            </div>
+
+            <div class="alert">
+                <strong>📊 Vue d'ensemble de votre situation financière</strong> — Suivi des factures émises, paiements reçus, et rapprochement automatique. Détection des anomalies pour ne rien perdre.
+            </div>
+
+            <!-- KPIs principaux -->
+            <div class="stats-grid">
+                <div class="stat-card success">
+                    <div class="stat-label">💰 Encaissé total</div>
+                    <div class="stat-value" id="trReceived">0 DH</div>
+                    <div class="stat-trend" id="trReceivedCount">0 paiements</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">📋 Factures émises</div>
+                    <div class="stat-value" id="trBilled">0 DH</div>
+                    <div class="stat-trend" id="trBilledCount">0 factures</div>
+                </div>
+                <div class="stat-card" style="background: rgba(200, 74, 74, 0.05); border-left: 4px solid var(--danger);">
+                    <div class="stat-label">⏳ En attente</div>
+                    <div class="stat-value" id="trPending" style="color: var(--danger);">0 DH</div>
+                    <div class="stat-trend" id="trPendingCount">0 codes pending</div>
+                </div>
+                <div class="stat-card accent">
+                    <div class="stat-label">✅ Taux de paiement</div>
+                    <div class="stat-value" id="trPaymentRate">—</div>
+                    <div class="stat-trend">Encaissé / Facturé</div>
+                </div>
+            </div>
+
+            <!-- Alertes -->
+            <div id="trAlerts" style="margin-bottom: 16px;"></div>
+
+            <!-- Onglets -->
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 0;">
+                <button class="treasury-tab active" data-tab="reconciled" onclick="switchTreasuryTab('reconciled')">✅ Soldés (Rapprochés)</button>
+                <button class="treasury-tab" data-tab="pending" onclick="switchTreasuryTab('pending')">⏳ En attente paiement</button>
+                <button class="treasury-tab" data-tab="orphan" onclick="switchTreasuryTab('orphan')">⚠️ Anomalies</button>
+                <button class="treasury-tab" data-tab="ledger" onclick="switchTreasuryTab('ledger')">📒 Grand livre</button>
+            </div>
+
+            <!-- ============ ONGLET 1 : SOLDÉS ============ -->
+            <div class="treasury-content" id="treasury-reconciled">
+                <div class="alert" style="background: rgba(46, 125, 91, 0.05); border-color: var(--success);">
+                    ✅ <strong>Rapprochements complets</strong> — Liste des paiements liés à leurs factures et reçus. Tout est en ordre.
+                </div>
+
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>N° Paiement</th>
+                                <th>Client</th>
+                                <th>Type</th>
+                                <th>Date</th>
+                                <th>Montant</th>
+                                <th>Facture liée</th>
+                                <th>Reçu lié</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trReconciledTable">
+                            <tr><td colspan="8" class="empty">Aucun rapprochement</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 2 : EN ATTENTE PAIEMENT ============ -->
+            <div class="treasury-content" id="treasury-pending" style="display: none;">
+                <div class="alert" style="background: rgba(232, 177, 74, 0.08); border-color: var(--warning);">
+                    ⏳ <strong>Codes générés non encore payés</strong> — Ces clients ont reçu un code mais n'ont pas encore payé. Relancez-les avant qu'ils oublient !
+                </div>
+
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Date génération</th>
+                                <th>Client</th>
+                                <th>Type</th>
+                                <th>Montant attendu</th>
+                                <th>Jours écoulés</th>
+                                <th>Urgence</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trPendingTable">
+                            <tr><td colspan="8" class="empty">Tout est à jour ✓</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 3 : ANOMALIES ============ -->
+            <div class="treasury-content" id="treasury-orphan" style="display: none;">
+                <div class="alert" style="background: rgba(200, 74, 74, 0.05); border-color: var(--danger);">
+                    🚨 <strong>Anomalies détectées</strong> — Paiements reçus sans facture, factures sans paiement, écarts de montants... À examiner pour rester comptablement rigoureux.
+                </div>
+
+                <h3 style="margin: 20px 0 10px; font-size: 14px; color: var(--ink);">💸 Paiements orphelins (sans facture/reçu)</h3>
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Montant</th>
+                                <th>Type</th>
+                                <th>Mode</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trOrphanPaymentsTable">
+                            <tr><td colspan="6" class="empty">Aucun paiement orphelin ✓</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 style="margin: 24px 0 10px; font-size: 14px; color: var(--ink);">📋 Documents émis sans paiement validé</h3>
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Numéro</th>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Montant</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trOrphanDocsTable">
+                            <tr><td colspan="6" class="empty">Tous les documents sont liés ✓</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============ ONGLET 4 : GRAND LIVRE ============ -->
+            <div class="treasury-content" id="treasury-ledger" style="display: none;">
+                <div class="alert">
+                    📒 <strong>Grand livre comptable</strong> — Toutes les écritures triées chronologiquement. Utile pour audit et déclaration DGI.
+                </div>
+
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+                    <select id="trLedgerPeriod" onchange="renderTreasuryLedger()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                        <option value="all">Toutes périodes</option>
+                        <option value="ytd" selected>Année en cours</option>
+                        <option value="quarter">Ce trimestre</option>
+                        <option value="month">Ce mois</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="exportTreasuryLedger()">📥 Exporter CSV</button>
+                </div>
+
+                <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 16px;">
+                    <div class="stat-card">
+                        <div class="stat-label">📋 CA HT facturé</div>
+                        <div class="stat-value" id="trLedgerHT">0 DH</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">📊 TVA collectée</div>
+                        <div class="stat-value" id="trLedgerTva">0 DH</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-label">💰 CA TTC encaissé</div>
+                        <div class="stat-value" id="trLedgerTTC">0 DH</div>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>N° Pièce</th>
+                                <th>Type</th>
+                                <th>Client</th>
+                                <th>Débit (DH)</th>
+                                <th>Crédit (DH)</th>
+                                <th>Solde</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trLedgerTable">
+                            <tr><td colspan="7" class="empty">Aucune écriture</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2952,6 +3153,465 @@ function closeModal(id) {
 // TIERS / PRICING PLANS
 // ============================================
 // ============================================
+// TRÉSORERIE & RAPPROCHEMENT
+// ============================================
+let activeTreasuryTab = 'reconciled';
+
+async function initTreasury() {
+    activeTreasuryTab = 'reconciled';
+    switchTreasuryTab('reconciled');
+    await loadFpDocuments();
+    renderTreasury();
+}
+
+function switchTreasuryTab(tab) {
+    activeTreasuryTab = tab;
+    document.querySelectorAll('.treasury-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`.treasury-tab[data-tab="${tab}"]`)?.classList.add('active');
+    document.querySelectorAll('.treasury-content').forEach(c => c.style.display = 'none');
+    const content = document.getElementById(`treasury-${tab}`);
+    if (content) content.style.display = 'block';
+    
+    if (tab === 'ledger') renderTreasuryLedger();
+    else if (tab === 'reconciled') renderTreasuryReconciled();
+    else if (tab === 'pending') renderTreasuryPending();
+    else if (tab === 'orphan') renderTreasuryOrphan();
+}
+
+function renderTreasury() {
+    // === KPIs ===
+    const totalReceived = (allPayments || []).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    document.getElementById('trReceived').textContent = formatCurrency(totalReceived);
+    document.getElementById('trReceivedCount').textContent = `${(allPayments || []).length} paiement${(allPayments || []).length > 1 ? 's' : ''}`;
+    
+    const invoicesEmitted = (fpDocuments || []).filter(d => d.docType === 'invoice');
+    const totalBilled = invoicesEmitted.reduce((s, d) => s + (d.totalTTC || 0), 0);
+    document.getElementById('trBilled').textContent = formatCurrency(totalBilled);
+    document.getElementById('trBilledCount').textContent = `${invoicesEmitted.length} facture${invoicesEmitted.length > 1 ? 's' : ''}`;
+    
+    // En attente = codes pending
+    const TIER_PRICES_TR = { lifetime: 499, monthly: 99, business: 199 };
+    const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
+    const pendingAmount = pendingCodes.reduce((s, c) => s + (TIER_PRICES_TR[c.type] || 0), 0);
+    document.getElementById('trPending').textContent = formatCurrency(pendingAmount);
+    document.getElementById('trPendingCount').textContent = `${pendingCodes.length} code${pendingCodes.length > 1 ? 's' : ''} pending`;
+    
+    // Taux paiement
+    const totalGenerated = pendingAmount + totalReceived;
+    const rate = totalGenerated > 0 ? Math.round((totalReceived / totalGenerated) * 100) : 0;
+    document.getElementById('trPaymentRate').textContent = totalGenerated > 0 ? `${rate}%` : '—';
+    
+    // === ALERTES ===
+    const alerts = [];
+    
+    // Codes anciens non payés
+    const today = new Date();
+    const oldCodes = pendingCodes.filter(c => {
+        if (!c.created_at) return false;
+        const days = Math.floor((today - new Date(c.created_at)) / (1000 * 60 * 60 * 24));
+        return days >= 30;
+    });
+    if (oldCodes.length > 0) {
+        alerts.push({
+            type: 'danger',
+            icon: '🚨',
+            text: `<strong>${oldCodes.length} code${oldCodes.length > 1 ? 's' : ''}</strong> impayé${oldCodes.length > 1 ? 's' : ''} depuis plus de 30 jours. Probablement perdu${oldCodes.length > 1 ? 's' : ''}.`
+        });
+    }
+    
+    // Paiements orphelins
+    const paidPayments = (allPayments || []);
+    const linkedPaymentIds = new Set();
+    (fpDocuments || []).forEach(d => {
+        if (d.payment_db_id) linkedPaymentIds.add(d.payment_db_id);
+    });
+    const orphanPayments = paidPayments.filter(p => !linkedPaymentIds.has(p.id));
+    if (orphanPayments.length > 0) {
+        alerts.push({
+            type: 'warning',
+            icon: '⚠️',
+            text: `<strong>${orphanPayments.length} paiement${orphanPayments.length > 1 ? 's' : ''}</strong> reçu${orphanPayments.length > 1 ? 's' : ''} sans facture/reçu généré${orphanPayments.length > 1 ? 's' : ''}. Vérifiez l'onglet "Anomalies".`
+        });
+    }
+    
+    // Écart facturé vs encaissé
+    if (totalBilled > 0 && Math.abs(totalBilled - totalReceived) > 1) {
+        const diff = totalBilled - totalReceived;
+        if (diff > 0) {
+            alerts.push({
+                type: 'warning',
+                icon: '⚖️',
+                text: `Écart de <strong>${formatCurrency(diff)}</strong> entre facturé et encaissé. À investiguer.`
+            });
+        }
+    }
+    
+    const alertsContainer = document.getElementById('trAlerts');
+    if (alerts.length === 0) {
+        alertsContainer.innerHTML = `<div class="alert" style="background: rgba(46, 125, 91, 0.05); border-color: var(--success);">✅ <strong>Tout est en ordre</strong> — Aucune anomalie détectée. Vos finances sont sous contrôle.</div>`;
+    } else {
+        alertsContainer.innerHTML = alerts.map(a => {
+            const bg = a.type === 'danger' ? 'rgba(200, 74, 74, 0.05)' : 'rgba(232, 177, 74, 0.08)';
+            const border = a.type === 'danger' ? 'var(--danger)' : 'var(--warning)';
+            return `<div class="alert" style="background: ${bg}; border-color: ${border}; margin-bottom: 8px;">${a.icon} ${a.text}</div>`;
+        }).join('');
+    }
+    
+    // Render active tab
+    if (activeTreasuryTab === 'reconciled') renderTreasuryReconciled();
+    else if (activeTreasuryTab === 'pending') renderTreasuryPending();
+    else if (activeTreasuryTab === 'orphan') renderTreasuryOrphan();
+    else if (activeTreasuryTab === 'ledger') renderTreasuryLedger();
+}
+
+// ============================================
+// ONGLET 1 : RAPPROCHEMENTS RÉUSSIS
+// ============================================
+function renderTreasuryReconciled() {
+    const tbody = document.getElementById('trReconciledTable');
+    if (!tbody) return;
+    
+    const TIER_LABELS_TR = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+    
+    // Grouper les docs par payment_db_id
+    const reconciliations = {};
+    (fpDocuments || []).forEach(d => {
+        if (!d.payment_db_id) return;
+        if (!reconciliations[d.payment_db_id]) {
+            reconciliations[d.payment_db_id] = {
+                paymentDbId: d.payment_db_id,
+                paymentNumber: d.payment_number,
+                client_email: d.client_email,
+                client_name: d.client_name,
+                tier: d.tier,
+                date: d.created_at,
+                amount: d.totalTTC,
+                invoice: null,
+                receipt: null
+            };
+        }
+        if (d.docType === 'invoice') reconciliations[d.payment_db_id].invoice = d;
+        if (d.docType === 'receipt') reconciliations[d.payment_db_id].receipt = d;
+    });
+    
+    const list = Object.values(reconciliations).sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">Aucun paiement rapproché pour le moment</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = list.map(r => {
+        const invoiceLink = r.invoice 
+            ? `<a onclick="downloadFpDoc('${r.invoice.id}')" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${r.invoice.number}</code></a>`
+            : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>';
+        const receiptLink = r.receipt
+            ? `<a onclick="downloadFpDoc('${r.receipt.id}')" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${r.receipt.number}</code></a>`
+            : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>';
+        
+        return `
+            <tr>
+                <td><code style="font-size: 11px;">${r.paymentNumber || '—'}</code></td>
+                <td><strong>${r.client_email}</strong>${r.client_name ? `<br><small style="color: var(--ink-mute);">${r.client_name}</small>` : ''}</td>
+                <td>${TIER_LABELS_TR[r.tier] || r.tier}</td>
+                <td>${formatDate(r.date)}</td>
+                <td><strong>${formatCurrency(r.amount)}</strong></td>
+                <td>${invoiceLink}</td>
+                <td>${receiptLink}</td>
+                <td><span class="badge badge-success">✅ Soldé</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ============================================
+// ONGLET 2 : EN ATTENTE PAIEMENT
+// ============================================
+function renderTreasuryPending() {
+    const tbody = document.getElementById('trPendingTable');
+    if (!tbody) return;
+    
+    const TIER_LABELS_TR = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+    const TIER_PRICES_TR = { lifetime: 499, monthly: 99, business: 199 };
+    
+    const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
+    const sorted = pendingCodes.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">✨ Aucun paiement en attente</td></tr>';
+        return;
+    }
+    
+    const today = new Date();
+    
+    tbody.innerHTML = sorted.map(c => {
+        const days = Math.floor((today - new Date(c.created_at)) / (1000 * 60 * 60 * 24));
+        const amount = TIER_PRICES_TR[c.type] || 0;
+        
+        let urgenceLabel, urgenceColor;
+        if (days < 3) { urgenceLabel = '🟢 Récent'; urgenceColor = 'var(--success)'; }
+        else if (days < 7) { urgenceLabel = '🟡 À surveiller'; urgenceColor = 'var(--warning)'; }
+        else if (days < 15) { urgenceLabel = '🟠 À relancer'; urgenceColor = '#E89030'; }
+        else if (days < 30) { urgenceLabel = '🔴 Urgent'; urgenceColor = 'var(--danger)'; }
+        else { urgenceLabel = '⚫ Probablement perdu'; urgenceColor = 'var(--ink-mute)'; }
+        
+        return `
+            <tr>
+                <td><code style="font-size: 11px;">${c.code}</code></td>
+                <td>${formatDate(c.created_at)}</td>
+                <td><strong>${c.client_email || '—'}</strong></td>
+                <td>${TIER_LABELS_TR[c.type] || c.type}</td>
+                <td><strong>${formatCurrency(amount)}</strong></td>
+                <td><strong style="color: ${days > 7 ? 'var(--danger)' : 'var(--ink)'};">J+${days}</strong></td>
+                <td><span style="color: ${urgenceColor}; font-weight: 600; font-size: 12px;">${urgenceLabel}</span></td>
+                <td>
+                    <button class="btn btn-success btn-sm" onclick="markAsPaid('${c.id}', '${c.client_email}', '${c.type}', ${amount})" title="Marquer payé">✓ Payé</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ============================================
+// ONGLET 3 : ANOMALIES
+// ============================================
+function renderTreasuryOrphan() {
+    const TIER_LABELS_TR = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+    
+    // === Paiements orphelins ===
+    const linkedPaymentIds = new Set();
+    (fpDocuments || []).forEach(d => {
+        if (d.payment_db_id) linkedPaymentIds.add(d.payment_db_id);
+    });
+    const orphanPayments = (allPayments || []).filter(p => !linkedPaymentIds.has(p.id));
+    
+    const tbodyP = document.getElementById('trOrphanPaymentsTable');
+    if (orphanPayments.length === 0) {
+        tbodyP.innerHTML = '<tr><td colspan="6" class="empty">Aucun paiement orphelin ✓</td></tr>';
+    } else {
+        tbodyP.innerHTML = orphanPayments.map(p => `
+            <tr>
+                <td>${formatDate(p.payment_date)}</td>
+                <td><strong>${p.client_email || '—'}</strong></td>
+                <td><strong>${formatCurrency(p.amount)}</strong></td>
+                <td>${TIER_LABELS_TR[p.type] || p.type}</td>
+                <td><span style="font-size: 11px;">${p.payment_mode || 'virement'}</span></td>
+                <td>
+                    <button class="btn btn-primary btn-sm" onclick="generateMissingDocs('${p.id}', '${p.client_email}', '${p.type}', ${p.amount})" title="Générer facture/reçu manquant">📄 Régulariser</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    // === Documents orphelins (sans payment_db_id) ===
+    const orphanDocs = (fpDocuments || []).filter(d => !d.payment_db_id);
+    
+    const tbodyD = document.getElementById('trOrphanDocsTable');
+    if (orphanDocs.length === 0) {
+        tbodyD.innerHTML = '<tr><td colspan="6" class="empty">Tous les documents sont liés ✓</td></tr>';
+    } else {
+        tbodyD.innerHTML = orphanDocs.map(d => {
+            const typeBadge = d.docType === 'invoice'
+                ? '<span class="badge" style="background: var(--primary); color: white;">📋 Facture</span>'
+                : '<span class="badge" style="background: var(--accent); color: var(--ink);">📄 Reçu</span>';
+            return `
+                <tr>
+                    <td>${typeBadge}</td>
+                    <td><code style="font-size: 11px;">${d.number}</code></td>
+                    <td>${formatDate(d.created_at)}</td>
+                    <td><strong>${d.client_email || '—'}</strong></td>
+                    <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc('${d.id}')">📥</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteFpDoc('${d.id}')">🗑️</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+}
+
+async function generateMissingDocs(paymentDbId, email, tier, amount) {
+    if (!confirm(`Générer facture + reçu pour ce paiement de ${amount} DH (${email}) ?`)) return;
+    
+    try {
+        const created = await createFpDocumentForPayment({
+            client_email: email,
+            amount: amount,
+            type: tier,
+            payment_id: '',
+            payment_db_id: paymentDbId
+        });
+        
+        if (created && created.length > 0) {
+            showToast(`✓ ${created.length} document${created.length > 1 ? 's' : ''} généré${created.length > 1 ? 's' : ''}`, 'success');
+            await loadFpDocuments();
+            renderTreasury();
+        } else {
+            showToast('Configurez d\'abord Ma Facturation', 'error');
+        }
+    } catch (err) {
+        showToast('Erreur : ' + err.message, 'error');
+    }
+}
+
+// ============================================
+// ONGLET 4 : GRAND LIVRE
+// ============================================
+function renderTreasuryLedger() {
+    const period = document.getElementById('trLedgerPeriod')?.value || 'ytd';
+    const range = getLedgerRange(period);
+    
+    // Construire les écritures depuis paiements + factures
+    const entries = [];
+    
+    // Pour chaque facture (génère un débit créance)
+    (fpDocuments || []).filter(d => d.docType === 'invoice').forEach(d => {
+        if (range && (new Date(d.created_at) < range.start || new Date(d.created_at) > range.end)) return;
+        entries.push({
+            date: d.created_at,
+            number: d.number,
+            type: 'Facture',
+            client: d.client_email,
+            debit: d.totalTTC,
+            credit: 0,
+            ttc: d.totalTTC,
+            ht: d.totalHT,
+            tva: d.tva,
+            doc: d
+        });
+    });
+    
+    // Pour chaque paiement (génère un crédit caisse)
+    (allPayments || []).forEach(p => {
+        if (range && (new Date(p.payment_date) < range.start || new Date(p.payment_date) > range.end)) return;
+        entries.push({
+            date: p.payment_date,
+            number: 'Encaissement',
+            type: 'Paiement',
+            client: p.client_email,
+            debit: 0,
+            credit: parseFloat(p.amount) || 0,
+            ttc: parseFloat(p.amount) || 0
+        });
+    });
+    
+    // Trier chronologiquement
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Calculer solde progressif
+    let solde = 0;
+    entries.forEach(e => {
+        solde += e.debit - e.credit;
+        e.solde = solde;
+    });
+    
+    // Stats
+    const totalHT = entries.filter(e => e.ht).reduce((s, e) => s + e.ht, 0);
+    const totalTva = entries.filter(e => e.tva).reduce((s, e) => s + e.tva, 0);
+    const totalEncaissements = entries.filter(e => e.credit > 0).reduce((s, e) => s + e.credit, 0);
+    
+    document.getElementById('trLedgerHT').textContent = formatCurrency(totalHT);
+    document.getElementById('trLedgerTva').textContent = formatCurrency(totalTva);
+    document.getElementById('trLedgerTTC').textContent = formatCurrency(totalEncaissements);
+    
+    const tbody = document.getElementById('trLedgerTable');
+    if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">Aucune écriture dans cette période</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = entries.map(e => `
+        <tr>
+            <td>${formatDate(e.date)}</td>
+            <td><code style="font-size: 11px;">${e.number}</code></td>
+            <td>${e.type === 'Facture' ? '<span class="badge" style="background: var(--primary); color: white;">📋</span>' : '<span class="badge badge-success">💰</span>'} ${e.type}</td>
+            <td><small>${e.client}</small></td>
+            <td style="text-align: right; ${e.debit > 0 ? 'color: var(--danger); font-weight: 700;' : 'color: var(--ink-mute);'}">${e.debit > 0 ? formatCurrency(e.debit) : '—'}</td>
+            <td style="text-align: right; ${e.credit > 0 ? 'color: var(--success); font-weight: 700;' : 'color: var(--ink-mute);'}">${e.credit > 0 ? formatCurrency(e.credit) : '—'}</td>
+            <td style="text-align: right; font-weight: 700; color: ${e.solde > 0 ? 'var(--danger)' : 'var(--success)'};">${formatCurrency(e.solde)}</td>
+        </tr>
+    `).join('');
+}
+
+function getLedgerRange(period) {
+    const now = new Date();
+    let start;
+    
+    switch (period) {
+        case 'month':
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        case 'quarter':
+            const q = Math.floor(now.getMonth() / 3);
+            start = new Date(now.getFullYear(), q * 3, 1);
+            break;
+        case 'ytd':
+            start = new Date(now.getFullYear(), 0, 1);
+            break;
+        case 'all':
+        default:
+            return null;
+    }
+    return { start, end: now };
+}
+
+function exportTreasuryLedger() {
+    const period = document.getElementById('trLedgerPeriod')?.value || 'ytd';
+    const range = getLedgerRange(period);
+    
+    const entries = [];
+    
+    (fpDocuments || []).filter(d => d.docType === 'invoice').forEach(d => {
+        if (range && (new Date(d.created_at) < range.start || new Date(d.created_at) > range.end)) return;
+        entries.push({
+            date: formatDate(d.created_at),
+            number: d.number,
+            type: 'Facture',
+            client: d.client_email,
+            ht: (d.totalHT || 0).toFixed(2),
+            tva: (d.tva || 0).toFixed(2),
+            ttc: (d.totalTTC || 0).toFixed(2),
+            debit: (d.totalTTC || 0).toFixed(2),
+            credit: '0.00'
+        });
+    });
+    
+    (allPayments || []).forEach(p => {
+        if (range && (new Date(p.payment_date) < range.start || new Date(p.payment_date) > range.end)) return;
+        entries.push({
+            date: formatDate(p.payment_date),
+            number: 'Encaissement',
+            type: 'Paiement',
+            client: p.client_email || '',
+            ht: '0.00',
+            tva: '0.00',
+            ttc: (parseFloat(p.amount) || 0).toFixed(2),
+            debit: '0.00',
+            credit: (parseFloat(p.amount) || 0).toFixed(2)
+        });
+    });
+    
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    const headers = ['Date', 'N° Pièce', 'Type', 'Client', 'HT (DH)', 'TVA (DH)', 'TTC (DH)', 'Débit', 'Crédit'];
+    let csv = headers.join(';') + '\n';
+    csv += entries.map(e => [e.date, e.number, e.type, e.client, e.ht, e.tva, e.ttc, e.debit, e.credit]
+        .map(c => String(c).includes(';') ? `"${c}"` : c)
+        .join(';')
+    ).join('\n');
+    
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `grand-livre-${period}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Grand livre exporté ✓', 'success');
+}
+
+// ============================================
 // MA FACTURATION - Vente de licences (FacturaPro)
 // ============================================
 
@@ -3153,15 +3813,29 @@ function removeFpLogo() {
 
 // === GÉNÉRATION DE NUMÉROS ===
 function getNextFpDocNumber(type) {
-    // type = 'invoice' ou 'receipt'
+    // type = 'invoice', 'receipt', ou 'payment'
     const year = new Date().getFullYear();
-    const docs = fpDocuments.filter(d => d.docType === type);
+    
+    let docs, prefix;
+    if (type === 'payment') {
+        // Numéros de paiement : on compte les paiements uniques
+        const seenPayments = new Set();
+        fpDocuments.forEach(d => {
+            if (d.payment_number) seenPayments.add(d.payment_number);
+        });
+        const yearPayments = Array.from(seenPayments).filter(n => n.includes(`-${year}-`));
+        const next = yearPayments.length + 1;
+        prefix = 'PAY';
+        return `${prefix}-${year}-${String(next).padStart(3, '0')}`;
+    }
+    
+    docs = fpDocuments.filter(d => d.docType === type);
     const yearDocs = docs.filter(d => {
         try { return new Date(d.created_at).getFullYear() === year; } catch { return false; }
     });
     const next = yearDocs.length + 1;
     
-    const prefix = type === 'invoice' 
+    prefix = type === 'invoice' 
         ? (document.getElementById('fpCompanyInvPrefix')?.value || 'LIC')
         : (document.getElementById('fpCompanyReceiptPrefix')?.value || 'REC');
     
@@ -3507,11 +4181,27 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     // === MENTION PAIEMENT (pour reçu uniquement) ===
     if (!isInvoice) {
         pdf.setFillColor(46, 125, 91);
-        pdf.roundedRect(15, yPos, 180, 12, 2, 2, 'F');
+        pdf.roundedRect(15, yPos, 180, 14, 2, 2, 'F');
         pdf.setTextColor(255, 255, 255);
         pdf.setFontSize(11);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`✓ PAIEMENT REÇU LE ${formatDate(doc.created_at)}`, 105, yPos + 7.5, { align: 'center' });
+        pdf.text(`✓ PAIEMENT REÇU LE ${formatDate(doc.created_at)}`, 105, yPos + 6, { align: 'center' });
+        if (doc.payment_number) {
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(`Réf. paiement : ${doc.payment_number}`, 105, yPos + 11, { align: 'center' });
+        }
+        yPos += 20;
+    }
+    
+    // === RÉFÉRENCE FACTURE (pour facture, si payée) ===
+    if (isInvoice && doc.status === 'reconciled' && doc.payment_number) {
+        pdf.setFillColor(46, 125, 91);
+        pdf.roundedRect(15, yPos, 180, 12, 2, 2, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`✓ FACTURE SOLDÉE — Paiement réf. ${doc.payment_number}`, 105, yPos + 7.5, { align: 'center' });
         yPos += 18;
     }
     
@@ -3605,7 +4295,7 @@ async function deleteFpDoc(docId) {
 
 // === CRÉATION AUTOMATIQUE D'UN DOC LORS DU PAIEMENT ===
 async function createFpDocumentForPayment(payment) {
-    // payment = { client_email, client_name (optional), amount, type, payment_id }
+    // payment = { client_email, client_name (optional), amount, type, payment_id, payment_db_id }
     
     // Récupérer la config
     const { data: settingsData } = await supaClient
@@ -3632,7 +4322,12 @@ async function createFpDocumentForPayment(payment) {
         docsToCreate.push('invoice');
     }
     
+    // === Génération d'un numéro de paiement unique ===
+    const paymentNumber = getNextFpDocNumber('payment');
+    
     const created = [];
+    const groupId = 'group-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+    
     for (const docType of docsToCreate) {
         const number = getNextFpDocNumber(docType);
         const tvaRate = cfg.tvaRate ?? 20;
@@ -3652,7 +4347,11 @@ async function createFpDocumentForPayment(payment) {
             tva: Math.round(tva * 100) / 100,
             tvaRate,
             totalTTC,
-            payment_id: payment.payment_id,
+            payment_id: payment.payment_id,        // Lien vers le code admin
+            payment_db_id: payment.payment_db_id,  // Lien vers admin_payments.id
+            payment_number: paymentNumber,         // Numéro PAY-2026-XXX
+            group_id: groupId,                     // Lie facture + reçu ensemble
+            status: 'reconciled',                  // Soldé (paiement reçu)
             created_at: new Date().toISOString()
         };
         
@@ -4217,13 +4916,13 @@ function relanceFollowUp(code, email, tier, amount) {
 }
 
 async function markAsPaid(codeId, email, tier, amount) {
-    if (!confirm(`Confirmer que ${email} a bien payé ${amount} DH pour ${TIER_LABELS[tier] || tier} ?\n\nCela va :\n• Enregistrer le paiement\n• Marquer le code comme utilisé\n• Générer reçu + facture automatiquement`)) {
+    if (!confirm(`Confirmer que ${email} a bien payé ${amount} DH pour ${TIER_LABELS[tier] || tier} ?\n\nCela va :\n• Enregistrer le paiement\n• Marquer le code comme utilisé\n• Générer reçu + facture liés au paiement (rapprochement automatique)`)) {
         return;
     }
     
     try {
-        // 1. Enregistrer le paiement
-        const { error: payError } = await supaClient
+        // 1. Enregistrer le paiement (récupérer l'ID retourné)
+        const { data: paymentData, error: payError } = await supaClient
             .from('admin_payments')
             .insert({
                 client_email: email,
@@ -4231,10 +4930,14 @@ async function markAsPaid(codeId, email, tier, amount) {
                 amount: amount,
                 type: tier,
                 payment_mode: 'virement',
-                note: `Marqué payé manuellement (code ${codeId.substring(0, 8)})`
-            });
+                note: `Code activé : ${codeId.substring(0, 8)}`
+            })
+            .select()
+            .single();
         
         if (payError) throw payError;
+        
+        const paymentDbId = paymentData?.id;
         
         // 2. Marquer le code comme utilisé
         const { error: codeError } = await supaClient
@@ -4247,23 +4950,24 @@ async function markAsPaid(codeId, email, tier, amount) {
         
         if (codeError) throw codeError;
         
-        // 3. ✨ NOUVEAU : Générer automatiquement reçu + facture
+        // 3. ✨ Générer automatiquement reçu + facture avec rapprochement
         try {
             const created = await createFpDocumentForPayment({
                 client_email: email,
                 amount: amount,
                 type: tier,
-                payment_id: codeId
+                payment_id: codeId,           // Lien avec le code
+                payment_db_id: paymentDbId    // Lien avec admin_payments
             });
             
             if (created && created.length > 0) {
-                showToast(`Paiement enregistré ✓ ${created.length} document${created.length > 1 ? 's' : ''} généré${created.length > 1 ? 's' : ''}`, 'success');
+                showToast(`✓ Paiement rapproché · ${created.length} document${created.length > 1 ? 's' : ''} généré${created.length > 1 ? 's' : ''}`, 'success');
             } else {
-                showToast('Paiement enregistré ✓ (configurez Ma Facturation pour générer reçu/facture)', 'success');
+                showToast('Paiement enregistré ✓ (configurez Ma Facturation)', 'success');
             }
         } catch (docErr) {
             console.warn('Could not auto-generate documents:', docErr);
-            showToast('Paiement enregistré ✓ (génération doc échouée)', 'success');
+            showToast('Paiement enregistré (génération doc échouée)', 'success');
         }
         
         await loadAllData();
@@ -4408,6 +5112,7 @@ function navTo(page) {
     if (page === 'reports') renderReports();
     if (page === 'tiers') renderTiers();
     if (page === 'myinvoicing') initMyInvoicing();
+    if (page === 'treasury') initTreasury();
 }
 
 // ============================================
