@@ -11,6 +11,10 @@
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
+    <!-- jsPDF for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -443,6 +447,81 @@
             margin: 12px 0;
         }
 
+        /* === MYINV TABS === */
+        .myinv-tab {
+            background: transparent;
+            border: none;
+            padding: 10px 16px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink-mute);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .myinv-tab:hover { color: var(--ink); }
+        .myinv-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .calc-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .calc-card h3 {
+            margin-bottom: 16px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        @media (max-width: 700px) {
+            .form-row { grid-template-columns: 1fr; }
+        }
+        
+        .form-group {
+            margin-bottom: 14px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ink-soft);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+            transition: border 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
         .alert {
             background: rgba(27, 58, 107, 0.04);
             border-left: 3px solid var(--primary);
@@ -571,6 +650,9 @@
         </a>
         <a class="nav-item" data-page="tiers" onclick="navTo('tiers')">
             🏷️ Tarifs & Plans
+        </a>
+        <a class="nav-item" data-page="myinvoicing" onclick="navTo('myinvoicing')">
+            📄 Ma Facturation
         </a>
         
         <div style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px;">
@@ -1233,6 +1315,344 @@
                         <tr><td colspan="5" class="empty">Chargement...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </section>
+
+        <!-- MA FACTURATION (FacturaPro émet ses factures) -->
+        <section class="page" id="page-myinvoicing">
+            <div class="topbar">
+                <h1>📄 Ma Facturation</h1>
+                <button class="btn btn-secondary btn-sm" onclick="loadAllData()">🔄 Rafraîchir</button>
+            </div>
+
+            <div class="alert">
+                <strong>📋 À propos de Ma Facturation</strong> — Ici, vous configurez votre entreprise FacturaPro et émettez des factures officielles + reçus pour vos clients qui achètent des licences. Conforme à la réglementation marocaine.
+            </div>
+
+            <!-- Onglets -->
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 0;">
+                <button class="myinv-tab active" data-tab="config" onclick="switchMyInvTab('config')">⚙️ Configuration</button>
+                <button class="myinv-tab" data-tab="documents" onclick="switchMyInvTab('documents')">📄 Documents émis</button>
+                <button class="myinv-tab" data-tab="stats" onclick="switchMyInvTab('stats')">📊 Statistiques</button>
+            </div>
+
+            <!-- ================ ONGLET 1 : CONFIGURATION ================ -->
+            <div class="myinv-content" id="myinv-config">
+                <div class="alert" style="background: rgba(232, 177, 74, 0.08); border-color: var(--warning);">
+                    ⚠️ <strong>Important</strong> : Renseignez ces informations avec précision. Elles apparaîtront sur toutes les factures que vous émettez à vos clients. Conformité légale obligatoire au Maroc.
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 350px; gap: 24px; align-items: start;">
+                    <div class="calc-card">
+                        <h3>🏢 Informations légales</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Nom de l'entreprise *</label>
+                                <input type="text" id="fpCompanyName" placeholder="Ex: FacturaPro SARL">
+                            </div>
+                            <div class="form-group">
+                                <label>Forme juridique</label>
+                                <select id="fpCompanyForm">
+                                    <option value="sarl">SARL</option>
+                                    <option value="sa">SA</option>
+                                    <option value="sarlu">SARL.AU</option>
+                                    <option value="sas">SAS</option>
+                                    <option value="ae">Auto-Entrepreneur</option>
+                                    <option value="freelance">Profession libérale</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>ICE *</label>
+                                <input type="text" id="fpCompanyICE" placeholder="000123456789012">
+                            </div>
+                            <div class="form-group">
+                                <label>IF (Identifiant Fiscal) *</label>
+                                <input type="text" id="fpCompanyIF" placeholder="12345678">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>RC (Registre Commerce)</label>
+                                <input type="text" id="fpCompanyRC" placeholder="123456">
+                            </div>
+                            <div class="form-group">
+                                <label>Patente / Taxe Pro</label>
+                                <input type="text" id="fpCompanyPatente" placeholder="12345678">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>CNSS</label>
+                            <input type="text" id="fpCompanyCNSS" placeholder="1234567">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Capital social (DH)</label>
+                            <input type="text" id="fpCompanyCapital" placeholder="100 000">
+                        </div>
+
+                        <h3 style="margin-top: 32px;">📍 Adresse & Contact</h3>
+                        
+                        <div class="form-group">
+                            <label>Adresse complète *</label>
+                            <input type="text" id="fpCompanyAddress" placeholder="123 Avenue Mohammed V">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Ville *</label>
+                                <input type="text" id="fpCompanyCity" placeholder="Casablanca">
+                            </div>
+                            <div class="form-group">
+                                <label>Code postal</label>
+                                <input type="text" id="fpCompanyZip" placeholder="20000">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Téléphone *</label>
+                                <input type="tel" id="fpCompanyPhone" placeholder="+212 6XX XX XX XX">
+                            </div>
+                            <div class="form-group">
+                                <label>Email *</label>
+                                <input type="email" id="fpCompanyEmail" placeholder="contact@facturapro.ma">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Site web</label>
+                            <input type="url" id="fpCompanyWebsite" placeholder="https://facturapro.ma">
+                        </div>
+
+                        <h3 style="margin-top: 32px;">🏦 Coordonnées bancaires</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Banque</label>
+                                <input type="text" id="fpCompanyBank" placeholder="Attijariwafa Bank">
+                            </div>
+                            <div class="form-group">
+                                <label>RIB</label>
+                                <input type="text" id="fpCompanyRIB" placeholder="007 780 0001234567890123 45">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Code SWIFT (optionnel)</label>
+                            <input type="text" id="fpCompanySwift" placeholder="BCMAMAMC">
+                        </div>
+
+                        <h3 style="margin-top: 32px;">⚙️ Paramètres facturation</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Taux TVA (%)</label>
+                                <select id="fpCompanyTvaRate">
+                                    <option value="20" selected>20% (standard)</option>
+                                    <option value="14">14%</option>
+                                    <option value="10">10%</option>
+                                    <option value="7">7%</option>
+                                    <option value="0">0% (TVA non applicable)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Préfixe factures</label>
+                                <input type="text" id="fpCompanyInvPrefix" placeholder="LIC" value="LIC">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Préfixe reçus</label>
+                                <input type="text" id="fpCompanyReceiptPrefix" placeholder="REC" value="REC">
+                            </div>
+                            <div class="form-group">
+                                <label>Mode auto-génération</label>
+                                <select id="fpCompanyAutoMode">
+                                    <option value="both" selected>Reçu + Facture</option>
+                                    <option value="receipt">Reçu seulement</option>
+                                    <option value="invoice">Facture seulement</option>
+                                    <option value="manual">Manuel (je clique)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <h3 style="margin-top: 32px;">📝 Mentions personnalisées</h3>
+                        
+                        <div class="form-group">
+                            <label>Mention de remerciement (en bas de facture)</label>
+                            <textarea id="fpCompanyThankYou" rows="2" placeholder="Merci pour votre confiance ! Pour toute question, contactez-nous.">Merci pour votre confiance !</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Conditions de paiement / Notes légales</label>
+                            <textarea id="fpCompanyTerms" rows="3" placeholder="Paiement à réception. En cas de retard, des pénalités au taux légal seront appliquées."></textarea>
+                        </div>
+
+                        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
+                            <button class="btn btn-primary btn-large" onclick="saveFpCompany()">💾 Enregistrer la configuration</button>
+                            <button class="btn btn-secondary" onclick="testFpInvoice()" style="margin-left: 8px;">🔍 Aperçu facture test</button>
+                        </div>
+                    </div>
+
+                    <!-- Sidebar -->
+                    <div>
+                        <div class="calc-card">
+                            <h3>🎨 Logo</h3>
+                            <div id="fpLogoPreview" style="text-align: center; padding: 20px; background: var(--surface-soft); border-radius: 10px; margin-bottom: 12px; min-height: 120px; display: flex; align-items: center; justify-content: center;">
+                                <span style="color: var(--ink-mute); font-size: 13px;">Aucun logo</span>
+                            </div>
+                            <input type="file" id="fpLogoInput" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;" onchange="handleFpLogoUpload(event)">
+                            <button class="btn btn-secondary" onclick="document.getElementById('fpLogoInput').click()" style="width: 100%; margin-bottom: 8px;">
+                                📤 Uploader un logo
+                            </button>
+                            <button class="btn btn-secondary" onclick="removeFpLogo()" style="width: 100%; font-size: 12px; color: var(--danger);" id="fpRemoveLogoBtn">
+                                🗑️ Supprimer
+                            </button>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">
+                                💡 PNG/JPG/WebP · Max 500 KB · Apparaît en haut des factures
+                            </div>
+                        </div>
+
+                        <div class="calc-card" style="margin-top: 16px;">
+                            <h3>📊 État config</h3>
+                            <div id="fpConfigStatus">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+
+                        <div class="calc-card" style="margin-top: 16px; background: rgba(46, 125, 91, 0.05); border-left: 4px solid var(--success);">
+                            <h3>💡 Conseils</h3>
+                            <ul style="font-size: 12px; line-height: 1.7; color: var(--ink-soft); padding-left: 16px;">
+                                <li>Utilisez le mode <strong>"Reçu + Facture"</strong> pour rester pro et conforme</li>
+                                <li>Le reçu est envoyé immédiatement après le paiement</li>
+                                <li>La facture officielle suit avec ICE, IF, et TVA détaillée</li>
+                                <li>Si TVA 20% : applicable aux SARL non exonérées</li>
+                                <li>Vérifiez votre RIB pour éviter les retours bancaires</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================ ONGLET 2 : DOCUMENTS ÉMIS ================ -->
+            <div class="myinv-content" id="myinv-documents" style="display: none;">
+                <div class="stats-grid" style="margin-bottom: 16px;">
+                    <div class="stat-card success">
+                        <div class="stat-label">💰 Total facturé</div>
+                        <div class="stat-value" id="fpStatTotalAmount">0 DH</div>
+                        <div class="stat-trend" id="fpStatTotalCount">0 documents</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">📄 Reçus</div>
+                        <div class="stat-value" id="fpStatReceiptCount">0</div>
+                        <div class="stat-trend" id="fpStatReceiptAmount">0 DH</div>
+                    </div>
+                    <div class="stat-card accent">
+                        <div class="stat-label">📋 Factures</div>
+                        <div class="stat-value" id="fpStatInvoiceCount">0</div>
+                        <div class="stat-trend" id="fpStatInvoiceAmount">0 DH</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">📊 TVA collectée</div>
+                        <div class="stat-value" id="fpStatTvaAmount">0 DH</div>
+                        <div class="stat-trend">À reverser à la DGI</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+                    <select id="fpDocFilterType" onchange="renderFpDocuments()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                        <option value="all">Tous les documents</option>
+                        <option value="invoice">📋 Factures</option>
+                        <option value="receipt">📄 Reçus</option>
+                    </select>
+                    <input type="text" id="fpDocFilterSearch" placeholder="🔍 Rechercher (client, numéro)..." oninput="renderFpDocuments()" style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                    <button class="btn btn-primary btn-sm" onclick="exportFpDocuments()">📥 Exporter CSV</button>
+                </div>
+
+                <div class="table-card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Numéro</th>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Type licence</th>
+                                <th>Montant TTC</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fpDocsTable">
+                            <tr><td colspan="7" class="empty">Aucun document émis</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ================ ONGLET 3 : STATISTIQUES ================ -->
+            <div class="myinv-content" id="myinv-stats" style="display: none;">
+                <div class="alert">
+                    💡 <strong>Pour ta comptabilité</strong> — Toutes ces données te servent pour ta propre déclaration fiscale (DGI).
+                </div>
+
+                <div class="stats-grid" style="margin-bottom: 16px;">
+                    <div class="stat-card success">
+                        <div class="stat-label">💼 CA HT total</div>
+                        <div class="stat-value" id="fpStatHT">0 DH</div>
+                        <div class="stat-trend">Toutes périodes</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">📊 TVA collectée</div>
+                        <div class="stat-value" id="fpStatTva">0 DH</div>
+                        <div class="stat-trend">À reverser DGI</div>
+                    </div>
+                    <div class="stat-card accent">
+                        <div class="stat-label">💰 CA TTC total</div>
+                        <div class="stat-value" id="fpStatTTC">0 DH</div>
+                        <div class="stat-trend">Total encaissé</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">📈 Ce mois</div>
+                        <div class="stat-value" id="fpStatThisMonth">0 DH</div>
+                        <div class="stat-trend" id="fpStatThisMonthCount">0 ventes</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📅 Évolution mensuelle</h2>
+                    </div>
+                    <div style="padding: 24px;">
+                        <div id="fpStatsChart" style="display: flex; gap: 4px; align-items: flex-end; height: 200px; padding: 0 8px;"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📋 Récap par type de licence</h2>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Quantité vendue</th>
+                                <th>CA HT</th>
+                                <th>TVA</th>
+                                <th>CA TTC</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fpStatsByType">
+                            <tr><td colspan="5" class="empty">Aucune donnée</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </section>
 
@@ -2531,6 +2951,875 @@ function closeModal(id) {
 // ============================================
 // TIERS / PRICING PLANS
 // ============================================
+// ============================================
+// MA FACTURATION - Vente de licences (FacturaPro)
+// ============================================
+
+let activeMyInvTab = 'config';
+let fpDocuments = []; // Cache documents émis
+
+async function initMyInvoicing() {
+    activeMyInvTab = 'config';
+    switchMyInvTab('config');
+    await loadFpCompany();
+    await loadFpDocuments();
+}
+
+function switchMyInvTab(tab) {
+    activeMyInvTab = tab;
+    document.querySelectorAll('.myinv-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`.myinv-tab[data-tab="${tab}"]`)?.classList.add('active');
+    document.querySelectorAll('.myinv-content').forEach(c => c.style.display = 'none');
+    const content = document.getElementById(`myinv-${tab}`);
+    if (content) content.style.display = 'block';
+    
+    if (tab === 'documents') renderFpDocuments();
+    if (tab === 'stats') renderFpStats();
+}
+
+// === CONFIGURATION DE L'ENTREPRISE FACTURAPRO ===
+async function loadFpCompany() {
+    try {
+        const { data, error } = await supaClient
+            .from('admin_settings')
+            .select('value')
+            .eq('key', 'fp_company_config')
+            .maybeSingle();
+        
+        const cfg = (data && data.value) || {};
+        
+        document.getElementById('fpCompanyName').value = cfg.name || '';
+        document.getElementById('fpCompanyForm').value = cfg.form || 'sarl';
+        document.getElementById('fpCompanyICE').value = cfg.ice || '';
+        document.getElementById('fpCompanyIF').value = cfg.if || '';
+        document.getElementById('fpCompanyRC').value = cfg.rc || '';
+        document.getElementById('fpCompanyPatente').value = cfg.patente || '';
+        document.getElementById('fpCompanyCNSS').value = cfg.cnss || '';
+        document.getElementById('fpCompanyCapital').value = cfg.capital || '';
+        document.getElementById('fpCompanyAddress').value = cfg.address || '';
+        document.getElementById('fpCompanyCity').value = cfg.city || '';
+        document.getElementById('fpCompanyZip').value = cfg.zip || '';
+        document.getElementById('fpCompanyPhone').value = cfg.phone || '';
+        document.getElementById('fpCompanyEmail').value = cfg.email || '';
+        document.getElementById('fpCompanyWebsite').value = cfg.website || '';
+        document.getElementById('fpCompanyBank').value = cfg.bank || '';
+        document.getElementById('fpCompanyRIB').value = cfg.rib || '';
+        document.getElementById('fpCompanySwift').value = cfg.swift || '';
+        document.getElementById('fpCompanyTvaRate').value = cfg.tvaRate ?? '20';
+        document.getElementById('fpCompanyInvPrefix').value = cfg.invPrefix || 'LIC';
+        document.getElementById('fpCompanyReceiptPrefix').value = cfg.receiptPrefix || 'REC';
+        document.getElementById('fpCompanyAutoMode').value = cfg.autoMode || 'both';
+        document.getElementById('fpCompanyThankYou').value = cfg.thankYou || 'Merci pour votre confiance !';
+        document.getElementById('fpCompanyTerms').value = cfg.terms || '';
+        
+        // Logo
+        updateFpLogoPreview(cfg.logo);
+        
+        // Status
+        updateFpConfigStatus(cfg);
+    } catch (err) {
+        console.warn('Could not load FP company config:', err);
+    }
+}
+
+async function saveFpCompany() {
+    const cfg = {
+        name: document.getElementById('fpCompanyName').value.trim(),
+        form: document.getElementById('fpCompanyForm').value,
+        ice: document.getElementById('fpCompanyICE').value.trim(),
+        if: document.getElementById('fpCompanyIF').value.trim(),
+        rc: document.getElementById('fpCompanyRC').value.trim(),
+        patente: document.getElementById('fpCompanyPatente').value.trim(),
+        cnss: document.getElementById('fpCompanyCNSS').value.trim(),
+        capital: document.getElementById('fpCompanyCapital').value.trim(),
+        address: document.getElementById('fpCompanyAddress').value.trim(),
+        city: document.getElementById('fpCompanyCity').value.trim(),
+        zip: document.getElementById('fpCompanyZip').value.trim(),
+        phone: document.getElementById('fpCompanyPhone').value.trim(),
+        email: document.getElementById('fpCompanyEmail').value.trim(),
+        website: document.getElementById('fpCompanyWebsite').value.trim(),
+        bank: document.getElementById('fpCompanyBank').value.trim(),
+        rib: document.getElementById('fpCompanyRIB').value.trim(),
+        swift: document.getElementById('fpCompanySwift').value.trim(),
+        tvaRate: parseFloat(document.getElementById('fpCompanyTvaRate').value) || 20,
+        invPrefix: document.getElementById('fpCompanyInvPrefix').value.trim() || 'LIC',
+        receiptPrefix: document.getElementById('fpCompanyReceiptPrefix').value.trim() || 'REC',
+        autoMode: document.getElementById('fpCompanyAutoMode').value,
+        thankYou: document.getElementById('fpCompanyThankYou').value.trim(),
+        terms: document.getElementById('fpCompanyTerms').value.trim(),
+        logo: window._fpLogoData || null
+    };
+    
+    if (!cfg.name) {
+        showToast('Le nom de l\'entreprise est obligatoire', 'error');
+        return;
+    }
+    if (!cfg.ice || !cfg.if) {
+        showToast('ICE et IF sont obligatoires pour des factures conformes', 'error');
+        return;
+    }
+    
+    try {
+        const { error } = await supaClient
+            .from('admin_settings')
+            .upsert({ key: 'fp_company_config', value: cfg }, { onConflict: 'key' });
+        
+        if (error) throw error;
+        
+        showToast('✓ Configuration enregistrée', 'success');
+        updateFpConfigStatus(cfg);
+    } catch (err) {
+        showToast('Erreur : ' + err.message, 'error');
+    }
+}
+
+function updateFpConfigStatus(cfg) {
+    const required = [
+        { key: 'name', label: 'Nom entreprise' },
+        { key: 'ice', label: 'ICE' },
+        { key: 'if', label: 'IF' },
+        { key: 'address', label: 'Adresse' },
+        { key: 'phone', label: 'Téléphone' },
+        { key: 'email', label: 'Email' },
+        { key: 'rib', label: 'RIB bancaire' },
+        { key: 'logo', label: 'Logo' }
+    ];
+    
+    const filled = required.filter(r => cfg && cfg[r.key]).length;
+    const total = required.length;
+    const pct = Math.round((filled / total) * 100);
+    
+    const status = document.getElementById('fpConfigStatus');
+    if (!status) return;
+    
+    let color, label;
+    if (pct === 100) { color = 'var(--success)'; label = '✅ Configuration complète'; }
+    else if (pct >= 70) { color = 'var(--warning)'; label = '⚠️ Presque complète'; }
+    else { color = 'var(--danger)'; label = '🚨 Configuration incomplète'; }
+    
+    status.innerHTML = `
+        <div style="margin-bottom: 8px;">
+            <strong style="color: ${color};">${label}</strong>
+            <div style="font-size: 12px; color: var(--ink-mute); margin-top: 2px;">${filled}/${total} champs remplis (${pct}%)</div>
+        </div>
+        <div style="background: var(--surface-soft); border-radius: 6px; height: 6px; overflow: hidden; margin-top: 8px;">
+            <div style="background: ${color}; height: 100%; width: ${pct}%; transition: width 0.3s;"></div>
+        </div>
+        <div style="margin-top: 12px; font-size: 11px;">
+            ${required.map(r => `<div style="margin: 3px 0;">${(cfg && cfg[r.key]) ? '✅' : '❌'} ${r.label}</div>`).join('')}
+        </div>
+    `;
+}
+
+// === LOGO MANAGEMENT ===
+function updateFpLogoPreview(logoData) {
+    const preview = document.getElementById('fpLogoPreview');
+    const removeBtn = document.getElementById('fpRemoveLogoBtn');
+    
+    window._fpLogoData = logoData;
+    
+    if (logoData) {
+        preview.innerHTML = `<img src="${logoData}" style="max-width: 100%; max-height: 100px; object-fit: contain;" alt="Logo">`;
+        if (removeBtn) removeBtn.style.display = 'block';
+    } else {
+        preview.innerHTML = '<span style="color: var(--ink-mute); font-size: 13px;">Aucun logo</span>';
+        if (removeBtn) removeBtn.style.display = 'none';
+    }
+}
+
+function handleFpLogoUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (file.size > 500 * 1024) {
+        showToast('Logo trop volumineux. Max 500 KB.', 'error');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        updateFpLogoPreview(e.target.result);
+        showToast('Logo chargé. Cliquez "Enregistrer" pour sauvegarder.', 'success');
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeFpLogo() {
+    if (!confirm('Supprimer le logo ?')) return;
+    updateFpLogoPreview(null);
+    document.getElementById('fpLogoInput').value = '';
+    showToast('Logo supprimé. Cliquez "Enregistrer" pour valider.', 'success');
+}
+
+// === GÉNÉRATION DE NUMÉROS ===
+function getNextFpDocNumber(type) {
+    // type = 'invoice' ou 'receipt'
+    const year = new Date().getFullYear();
+    const docs = fpDocuments.filter(d => d.docType === type);
+    const yearDocs = docs.filter(d => {
+        try { return new Date(d.created_at).getFullYear() === year; } catch { return false; }
+    });
+    const next = yearDocs.length + 1;
+    
+    const prefix = type === 'invoice' 
+        ? (document.getElementById('fpCompanyInvPrefix')?.value || 'LIC')
+        : (document.getElementById('fpCompanyReceiptPrefix')?.value || 'REC');
+    
+    return `${prefix}-${year}-${String(next).padStart(3, '0')}`;
+}
+
+// === LOAD DOCUMENTS ===
+async function loadFpDocuments() {
+    try {
+        const { data, error } = await supaClient
+            .from('admin_settings')
+            .select('value')
+            .eq('key', 'fp_documents_emitted')
+            .maybeSingle();
+        
+        fpDocuments = (data?.value && Array.isArray(data.value)) ? data.value : [];
+    } catch (err) {
+        console.warn('Could not load FP documents:', err);
+        fpDocuments = [];
+    }
+}
+
+async function saveFpDocuments() {
+    try {
+        const { error } = await supaClient
+            .from('admin_settings')
+            .upsert({ key: 'fp_documents_emitted', value: fpDocuments }, { onConflict: 'key' });
+        if (error) throw error;
+    } catch (err) {
+        console.warn('Could not save FP documents:', err);
+    }
+}
+
+// === RENDER LISTE ===
+function renderFpDocuments() {
+    const filterType = document.getElementById('fpDocFilterType')?.value || 'all';
+    const search = (document.getElementById('fpDocFilterSearch')?.value || '').toLowerCase();
+    
+    let docs = [...fpDocuments];
+    if (filterType !== 'all') {
+        docs = docs.filter(d => d.docType === filterType);
+    }
+    if (search) {
+        docs = docs.filter(d => 
+            (d.number || '').toLowerCase().includes(search) ||
+            (d.client_email || '').toLowerCase().includes(search) ||
+            (d.client_name || '').toLowerCase().includes(search)
+        );
+    }
+    docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    // Stats
+    const totalAmount = fpDocuments.reduce((s, d) => s + (d.totalTTC || 0), 0);
+    const receipts = fpDocuments.filter(d => d.docType === 'receipt');
+    const invoices = fpDocuments.filter(d => d.docType === 'invoice');
+    const totalTva = invoices.reduce((s, d) => s + (d.tva || 0), 0);
+    
+    document.getElementById('fpStatTotalAmount').textContent = formatCurrency(totalAmount);
+    document.getElementById('fpStatTotalCount').textContent = `${fpDocuments.length} document${fpDocuments.length > 1 ? 's' : ''}`;
+    document.getElementById('fpStatReceiptCount').textContent = receipts.length;
+    document.getElementById('fpStatReceiptAmount').textContent = formatCurrency(receipts.reduce((s, d) => s + (d.totalTTC || 0), 0));
+    document.getElementById('fpStatInvoiceCount').textContent = invoices.length;
+    document.getElementById('fpStatInvoiceAmount').textContent = formatCurrency(invoices.reduce((s, d) => s + (d.totalTTC || 0), 0));
+    document.getElementById('fpStatTvaAmount').textContent = formatCurrency(totalTva);
+    
+    // Table
+    const tbody = document.getElementById('fpDocsTable');
+    if (docs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">Aucun document à afficher</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = docs.map(d => {
+        const typeBadge = d.docType === 'invoice' 
+            ? '<span class="badge" style="background: var(--primary); color: white;">📋 Facture</span>'
+            : '<span class="badge" style="background: var(--accent); color: var(--ink);">📄 Reçu</span>';
+        
+        const tierLabels = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+        const tierLabel = tierLabels[d.tier] || d.tier || '—';
+        
+        return `
+            <tr>
+                <td>${typeBadge}</td>
+                <td><code style="font-size: 11px;">${d.number || '—'}</code></td>
+                <td>${formatDate(d.created_at)}</td>
+                <td><strong>${d.client_email || '—'}</strong>${d.client_name ? `<br><small style="color: var(--ink-mute);">${d.client_name}</small>` : ''}</td>
+                <td>${tierLabel}</td>
+                <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
+                <td>
+                    <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc('${d.id}')" title="Télécharger PDF">📥</button>
+                    <button class="btn btn-secondary btn-sm" onclick="sendFpDoc('${d.id}')" title="Envoyer">📱</button>
+                    <button class="btn btn-secondary btn-sm" onclick="deleteFpDoc('${d.id}')" title="Supprimer" style="color: var(--danger);">🗑️</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// === GÉNÉRATION PDF (Reçu OU Facture) ===
+async function generateFpDocPDF(doc, downloadDirectly = true) {
+    if (typeof window.jspdf === 'undefined') {
+        showToast('Erreur : jsPDF non chargé', 'error');
+        return;
+    }
+    
+    // Récupérer la config
+    const { data: settingsData } = await supaClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'fp_company_config')
+        .maybeSingle();
+    
+    const cfg = (settingsData && settingsData.value) || {};
+    
+    if (!cfg.name) {
+        showToast('Configurez d\'abord votre entreprise', 'error');
+        navTo('myinvoicing');
+        return;
+    }
+    
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    
+    // Colors
+    const primaryColor = [27, 58, 107];
+    const accentColor = [201, 169, 91];
+    const grayDark = [74, 84, 104];
+    const grayLight = [240, 237, 230];
+    
+    // Helper format currency for PDF
+    const fmt = (n) => {
+        const num = n || 0;
+        const fixed = Math.abs(num).toFixed(2);
+        const [int, dec] = fixed.split('.');
+        const intF = int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        return `${num < 0 ? '-' : ''}${intF},${dec} DH`;
+    };
+    
+    const isInvoice = doc.docType === 'invoice';
+    const docTitle = isInvoice ? 'FACTURE' : 'REÇU';
+    
+    // === HEADER ===
+    pdf.setFillColor(...primaryColor);
+    pdf.rect(0, 0, 210, 38, 'F');
+    pdf.setFillColor(...accentColor);
+    pdf.rect(0, 38, 210, 1.5, 'F');
+    
+    let textX = 15;
+    
+    // Logo
+    if (cfg.logo) {
+        try {
+            pdf.addImage(cfg.logo, 'PNG', 12, 7, 24, 24);
+            textX = 42;
+        } catch (e) { console.warn('Logo error:', e); }
+    }
+    
+    // Nom entreprise
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(22);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(cfg.name || 'FacturaPro', textX, 18);
+    
+    // Forme juridique
+    const formLabels = { sarl: 'SARL', sa: 'SA', sarlu: 'SARL.AU', sas: 'SAS', ae: 'Auto-Entrepreneur', freelance: 'Profession libérale' };
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(...accentColor);
+    pdf.text(formLabels[cfg.form] || '', textX, 25);
+    
+    // Doc title (right)
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(28);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(docTitle, 195, 22, { align: 'right' });
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(...accentColor);
+    pdf.text(doc.number || '', 195, 30, { align: 'right' });
+    
+    // === COMPANY INFO LINE ===
+    let yPos = 48;
+    pdf.setTextColor(...grayDark);
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'normal');
+    
+    const companyInfo = [];
+    if (cfg.ice) companyInfo.push(`ICE : ${cfg.ice}`);
+    if (cfg.if) companyInfo.push(`IF : ${cfg.if}`);
+    if (cfg.rc) companyInfo.push(`RC : ${cfg.rc}`);
+    if (cfg.patente) companyInfo.push(`Patente : ${cfg.patente}`);
+    if (cfg.cnss) companyInfo.push(`CNSS : ${cfg.cnss}`);
+    if (cfg.phone) companyInfo.push(`Tél : ${cfg.phone}`);
+    
+    pdf.text(companyInfo.join('  ·  '), 15, yPos);
+    yPos += 4;
+    
+    // Adresse
+    const addrParts = [];
+    if (cfg.address) addrParts.push(cfg.address);
+    if (cfg.zip) addrParts.push(cfg.zip);
+    if (cfg.city) addrParts.push(cfg.city);
+    if (addrParts.length > 0) {
+        pdf.text(addrParts.join(', '), 15, yPos);
+        yPos += 4;
+    }
+    if (cfg.email) {
+        pdf.text(`Email : ${cfg.email}` + (cfg.website ? `   ·   ${cfg.website}` : ''), 15, yPos);
+        yPos += 4;
+    }
+    
+    // === DATES & DOC INFO ===
+    yPos += 6;
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(9);
+    pdf.text('Date d\'émission', 15, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(formatDate(doc.created_at), 60, yPos);
+    
+    if (isInvoice) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Échéance', 110, yPos);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(formatDate(doc.created_at), 145, yPos);
+    } else {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Statut', 110, yPos);
+        pdf.setTextColor(...accentColor);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('PAYÉ ✓', 145, yPos);
+        pdf.setTextColor(...grayDark);
+    }
+    yPos += 12;
+    
+    // === CLIENT BLOCK ===
+    pdf.setFillColor(...grayLight);
+    pdf.roundedRect(15, yPos, 90, 30, 2, 2, 'F');
+    
+    pdf.setTextColor(...primaryColor);
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('FACTURÉ À', 20, yPos + 7);
+    
+    pdf.setFontSize(11);
+    pdf.text(doc.client_name || doc.client_email || 'Client', 20, yPos + 14);
+    
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(...grayDark);
+    if (doc.client_email) pdf.text(doc.client_email, 20, yPos + 20);
+    if (doc.client_ice) pdf.text(`ICE : ${doc.client_ice}`, 20, yPos + 26);
+    
+    yPos += 40;
+    
+    // === ITEMS TABLE ===
+    const tierLabels = { 
+        lifetime: 'Licence Lifetime - Accès à vie', 
+        monthly: 'Licence Pro Mensuelle', 
+        business: 'Licence Business Mensuelle' 
+    };
+    
+    const tvaRate = cfg.tvaRate ?? 20;
+    const totalTTC = doc.totalTTC || 0;
+    let totalHT, tvaAmount;
+    
+    if (tvaRate > 0) {
+        // Si la TVA est applicable, calculer HT depuis TTC
+        totalHT = totalTTC / (1 + tvaRate / 100);
+        tvaAmount = totalTTC - totalHT;
+    } else {
+        totalHT = totalTTC;
+        tvaAmount = 0;
+    }
+    
+    pdf.autoTable({
+        startY: yPos,
+        head: [['Désignation', 'Qté', 'P.U. HT', 'TVA', 'Total HT']],
+        body: [[
+            tierLabels[doc.tier] || 'Licence FacturaPro',
+            '1',
+            fmt(totalHT),
+            tvaRate + '%',
+            fmt(totalHT)
+        ]],
+        theme: 'plain',
+        headStyles: {
+            fillColor: primaryColor,
+            textColor: [255, 255, 255],
+            fontSize: 10,
+            fontStyle: 'bold',
+            cellPadding: 5
+        },
+        bodyStyles: {
+            fontSize: 10,
+            cellPadding: 5,
+            textColor: grayDark
+        },
+        alternateRowStyles: { fillColor: [250, 248, 243] },
+        columnStyles: {
+            0: { cellWidth: 80 },
+            1: { cellWidth: 18, halign: 'center' },
+            2: { cellWidth: 32, halign: 'right' },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
+        },
+        margin: { left: 15, right: 15 }
+    });
+    
+    yPos = pdf.lastAutoTable.finalY + 10;
+    
+    // === TOTALS ===
+    const totalsX = 120;
+    pdf.setFontSize(11);
+    pdf.setTextColor(...grayDark);
+    
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('Sous-total HT', totalsX, yPos);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(fmt(totalHT), 195, yPos, { align: 'right' });
+    yPos += 7;
+    
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`TVA (${tvaRate}%)`, totalsX, yPos);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(fmt(tvaAmount), 195, yPos, { align: 'right' });
+    yPos += 5;
+    
+    pdf.line(totalsX, yPos, 195, yPos);
+    yPos += 8;
+    
+    // Grand Total
+    pdf.setFillColor(...primaryColor);
+    pdf.roundedRect(totalsX - 2, yPos - 6, 79, 12, 1.5, 1.5, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    pdf.text('Total TTC', totalsX + 2, yPos + 1);
+    pdf.setTextColor(...accentColor);
+    pdf.setFontSize(13);
+    pdf.text(fmt(totalTTC), 193, yPos + 1, { align: 'right' });
+    yPos += 18;
+    
+    // === MENTION PAIEMENT (pour reçu uniquement) ===
+    if (!isInvoice) {
+        pdf.setFillColor(46, 125, 91);
+        pdf.roundedRect(15, yPos, 180, 12, 2, 2, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`✓ PAIEMENT REÇU LE ${formatDate(doc.created_at)}`, 105, yPos + 7.5, { align: 'center' });
+        yPos += 18;
+    }
+    
+    // === BANK DETAILS (pour facture) ===
+    if (isInvoice && (cfg.bank || cfg.rib)) {
+        pdf.setFillColor(...grayLight);
+        pdf.roundedRect(15, yPos, 180, 18, 2, 2, 'F');
+        pdf.setTextColor(...primaryColor);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('COORDONNÉES BANCAIRES', 20, yPos + 6);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(...grayDark);
+        let bankY = yPos + 11;
+        if (cfg.bank) { pdf.text(`Banque : ${cfg.bank}`, 20, bankY); bankY += 4; }
+        if (cfg.rib) pdf.text(`RIB : ${cfg.rib}`, 20, bankY);
+        if (cfg.swift) pdf.text(`SWIFT : ${cfg.swift}`, 110, bankY);
+        yPos += 22;
+    }
+    
+    // === THANK YOU ===
+    if (cfg.thankYou) {
+        pdf.setTextColor(...primaryColor);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'italic');
+        pdf.text(cfg.thankYou, 105, yPos, { align: 'center' });
+        yPos += 6;
+    }
+    
+    // === FOOTER ===
+    pdf.setTextColor(150, 150, 150);
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'normal');
+    let footerLine = `${cfg.name}${cfg.capital ? ` - Capital : ${cfg.capital} DH` : ''}`;
+    pdf.text(footerLine, 105, 285, { align: 'center' });
+    if (cfg.ice) {
+        pdf.text(`ICE : ${cfg.ice}   ·   IF : ${cfg.if}   ·   RC : ${cfg.rc || '—'}`, 105, 289, { align: 'center' });
+    }
+    pdf.text('Document généré par FacturaPro - facturapro.ma', 105, 293, { align: 'center' });
+    
+    if (downloadDirectly) {
+        pdf.save(`${doc.number}.pdf`);
+    } else {
+        return pdf;
+    }
+}
+
+// === ACTIONS DOCUMENTS ===
+async function downloadFpDoc(docId) {
+    const doc = fpDocuments.find(d => d.id === docId);
+    if (!doc) return showToast('Document introuvable', 'error');
+    await generateFpDocPDF(doc, true);
+    showToast('PDF téléchargé ✓', 'success');
+}
+
+async function sendFpDoc(docId) {
+    const doc = fpDocuments.find(d => d.id === docId);
+    if (!doc) return showToast('Document introuvable', 'error');
+    
+    const docTypeLabel = doc.docType === 'invoice' ? 'facture' : 'reçu';
+    const tierLabels = { lifetime: 'Lifetime', monthly: 'Pro Mensuel', business: 'Business' };
+    
+    const msg = `Bonjour ${doc.client_name || ''} 🇲🇦,\n\n` +
+        `Merci pour votre confiance !\n\n` +
+        `📄 Vous trouverez ci-joint votre ${docTypeLabel} pour votre licence FacturaPro ${tierLabels[doc.tier] || ''}.\n\n` +
+        `📋 Détails :\n` +
+        `• Référence : ${doc.number}\n` +
+        `• Montant : ${formatCurrency(doc.totalTTC || 0)}\n` +
+        `• Date : ${formatDate(doc.created_at)}\n\n` +
+        `Pour toute question, n'hésitez pas.\n\nCordialement.`;
+    
+    // Télécharger le PDF d'abord
+    await generateFpDocPDF(doc, true);
+    
+    // Ouvrir WhatsApp
+    setTimeout(() => {
+        window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+        showToast('PDF téléchargé. Joignez-le au message WhatsApp.', 'success');
+    }, 500);
+}
+
+async function deleteFpDoc(docId) {
+    if (!confirm('Supprimer ce document ?\n\n⚠️ La suppression est définitive.')) return;
+    
+    fpDocuments = fpDocuments.filter(d => d.id !== docId);
+    await saveFpDocuments();
+    renderFpDocuments();
+    showToast('Document supprimé', 'success');
+}
+
+// === CRÉATION AUTOMATIQUE D'UN DOC LORS DU PAIEMENT ===
+async function createFpDocumentForPayment(payment) {
+    // payment = { client_email, client_name (optional), amount, type, payment_id }
+    
+    // Récupérer la config
+    const { data: settingsData } = await supaClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'fp_company_config')
+        .maybeSingle();
+    
+    const cfg = (settingsData && settingsData.value) || {};
+    if (!cfg.name) {
+        console.warn('FP company not configured, skipping doc generation');
+        return;
+    }
+    
+    await loadFpDocuments();
+    
+    const autoMode = cfg.autoMode || 'both';
+    const docsToCreate = [];
+    
+    if (autoMode === 'both' || autoMode === 'receipt') {
+        docsToCreate.push('receipt');
+    }
+    if (autoMode === 'both' || autoMode === 'invoice') {
+        docsToCreate.push('invoice');
+    }
+    
+    const created = [];
+    for (const docType of docsToCreate) {
+        const number = getNextFpDocNumber(docType);
+        const tvaRate = cfg.tvaRate ?? 20;
+        const totalTTC = payment.amount || 0;
+        const totalHT = tvaRate > 0 ? totalTTC / (1 + tvaRate / 100) : totalTTC;
+        const tva = totalTTC - totalHT;
+        
+        const newDoc = {
+            id: 'fpdoc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+            number,
+            docType,
+            tier: payment.type,
+            client_email: payment.client_email,
+            client_name: payment.client_name || '',
+            client_ice: payment.client_ice || '',
+            totalHT: Math.round(totalHT * 100) / 100,
+            tva: Math.round(tva * 100) / 100,
+            tvaRate,
+            totalTTC,
+            payment_id: payment.payment_id,
+            created_at: new Date().toISOString()
+        };
+        
+        fpDocuments.push(newDoc);
+        created.push(newDoc);
+    }
+    
+    if (created.length > 0) {
+        await saveFpDocuments();
+    }
+    
+    return created;
+}
+
+// === STATS ===
+async function renderFpStats() {
+    await loadFpDocuments();
+    
+    const invoices = fpDocuments.filter(d => d.docType === 'invoice');
+    const totalHT = invoices.reduce((s, d) => s + (d.totalHT || 0), 0);
+    const totalTva = invoices.reduce((s, d) => s + (d.tva || 0), 0);
+    const totalTTC = invoices.reduce((s, d) => s + (d.totalTTC || 0), 0);
+    
+    document.getElementById('fpStatHT').textContent = formatCurrency(totalHT);
+    document.getElementById('fpStatTva').textContent = formatCurrency(totalTva);
+    document.getElementById('fpStatTTC').textContent = formatCurrency(totalTTC);
+    
+    // This month
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonth = invoices.filter(d => new Date(d.created_at) >= monthStart);
+    document.getElementById('fpStatThisMonth').textContent = formatCurrency(thisMonth.reduce((s, d) => s + (d.totalTTC || 0), 0));
+    document.getElementById('fpStatThisMonthCount').textContent = `${thisMonth.length} vente${thisMonth.length > 1 ? 's' : ''}`;
+    
+    // Chart 12 months
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({
+            year: d.getFullYear(),
+            month: d.getMonth(),
+            label: d.toLocaleDateString('fr-FR', { month: 'short' }),
+            total: 0
+        });
+    }
+    invoices.forEach(d => {
+        try {
+            const date = new Date(d.created_at);
+            const m = months.find(x => x.year === date.getFullYear() && x.month === date.getMonth());
+            if (m) m.total += (d.totalTTC || 0);
+        } catch {}
+    });
+    
+    const max = Math.max(...months.map(m => m.total), 1);
+    const chart = document.getElementById('fpStatsChart');
+    if (chart) {
+        chart.innerHTML = months.map(m => {
+            const h = (m.total / max) * 100;
+            return `
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end;">
+                    <div style="background: linear-gradient(180deg, var(--accent), var(--primary)); width: 80%; height: ${Math.max(h, 1)}%; border-radius: 4px 4px 0 0;" title="${m.label} : ${formatCurrency(m.total)}"></div>
+                    <div style="font-size: 10px; color: var(--ink-mute); margin-top: 4px;">${m.label}</div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    // By type
+    const byType = {};
+    invoices.forEach(d => {
+        const t = d.tier || 'unknown';
+        if (!byType[t]) byType[t] = { tier: t, count: 0, ht: 0, tva: 0, ttc: 0 };
+        byType[t].count++;
+        byType[t].ht += d.totalHT || 0;
+        byType[t].tva += d.tva || 0;
+        byType[t].ttc += d.totalTTC || 0;
+    });
+    
+    const tierLabels = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+    const sorted = Object.values(byType).sort((a, b) => b.ttc - a.ttc);
+    const tbody = document.getElementById('fpStatsByType');
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Aucune vente enregistrée</td></tr>';
+    } else {
+        tbody.innerHTML = sorted.map(t => `
+            <tr>
+                <td><strong>${tierLabels[t.tier] || t.tier}</strong></td>
+                <td>${t.count}</td>
+                <td>${formatCurrency(t.ht)}</td>
+                <td>${formatCurrency(t.tva)}</td>
+                <td><strong>${formatCurrency(t.ttc)}</strong></td>
+            </tr>
+        `).join('');
+    }
+}
+
+// === TEST APERÇU ===
+async function testFpInvoice() {
+    const cfg = {
+        name: document.getElementById('fpCompanyName').value.trim(),
+        ice: document.getElementById('fpCompanyICE').value.trim(),
+        if: document.getElementById('fpCompanyIF').value.trim()
+    };
+    
+    if (!cfg.name || !cfg.ice || !cfg.if) {
+        showToast('Remplissez au moins Nom, ICE et IF avant de tester', 'error');
+        return;
+    }
+    
+    // Sauvegarder d'abord pour s'assurer que la config est à jour
+    await saveFpCompany();
+    
+    // Créer un doc test
+    const testDoc = {
+        id: 'test-' + Date.now(),
+        number: 'TEST-2026-001',
+        docType: 'invoice',
+        tier: 'lifetime',
+        client_email: 'client.test@email.com',
+        client_name: 'Mohamed Test',
+        client_ice: '987654321',
+        totalTTC: 499,
+        created_at: new Date().toISOString()
+    };
+    
+    await generateFpDocPDF(testDoc, true);
+    showToast('Aperçu généré ✓', 'success');
+}
+
+// === EXPORT CSV ===
+function exportFpDocuments() {
+    if (fpDocuments.length === 0) {
+        showToast('Aucun document à exporter', 'error');
+        return;
+    }
+    
+    const headers = ['Type', 'Numéro', 'Date', 'Client Email', 'Client Nom', 'Type Licence', 'Total HT', 'TVA', 'Total TTC'];
+    const tierLabels = { lifetime: 'Lifetime', monthly: 'Pro Mensuel', business: 'Business' };
+    
+    const rows = fpDocuments.map(d => [
+        d.docType === 'invoice' ? 'Facture' : 'Reçu',
+        d.number || '',
+        formatDate(d.created_at),
+        d.client_email || '',
+        d.client_name || '',
+        tierLabels[d.tier] || d.tier || '',
+        (d.totalHT || 0).toFixed(2),
+        (d.tva || 0).toFixed(2),
+        (d.totalTTC || 0).toFixed(2)
+    ]);
+    
+    let csv = headers.join(';') + '\n';
+    csv += rows.map(r => r.map(c => {
+        const s = String(c || '');
+        return s.includes(';') ? `"${s}"` : s;
+    }).join(';')).join('\n');
+    
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `facturapro-mes-factures-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV téléchargé ✓', 'success');
+}
+
 function renderTiers() {
     // Stats par tier (depuis admin_codes status='used')
     const usedCodes = allCodes.filter(c => c.status === 'used');
@@ -2928,7 +4217,7 @@ function relanceFollowUp(code, email, tier, amount) {
 }
 
 async function markAsPaid(codeId, email, tier, amount) {
-    if (!confirm(`Confirmer que ${email} a bien payé ${amount} DH pour ${TIER_LABELS[tier] || tier} ?\n\nCela va :\n• Enregistrer le paiement\n• Marquer le code comme utilisé`)) {
+    if (!confirm(`Confirmer que ${email} a bien payé ${amount} DH pour ${TIER_LABELS[tier] || tier} ?\n\nCela va :\n• Enregistrer le paiement\n• Marquer le code comme utilisé\n• Générer reçu + facture automatiquement`)) {
         return;
     }
     
@@ -2958,7 +4247,25 @@ async function markAsPaid(codeId, email, tier, amount) {
         
         if (codeError) throw codeError;
         
-        showToast('Paiement enregistré ✓', 'success');
+        // 3. ✨ NOUVEAU : Générer automatiquement reçu + facture
+        try {
+            const created = await createFpDocumentForPayment({
+                client_email: email,
+                amount: amount,
+                type: tier,
+                payment_id: codeId
+            });
+            
+            if (created && created.length > 0) {
+                showToast(`Paiement enregistré ✓ ${created.length} document${created.length > 1 ? 's' : ''} généré${created.length > 1 ? 's' : ''}`, 'success');
+            } else {
+                showToast('Paiement enregistré ✓ (configurez Ma Facturation pour générer reçu/facture)', 'success');
+            }
+        } catch (docErr) {
+            console.warn('Could not auto-generate documents:', docErr);
+            showToast('Paiement enregistré ✓ (génération doc échouée)', 'success');
+        }
+        
         await loadAllData();
     } catch (err) {
         showToast('Erreur : ' + err.message, 'error');
@@ -3100,6 +4407,7 @@ function navTo(page) {
     if (page === 'settings') loadSettings();
     if (page === 'reports') renderReports();
     if (page === 'tiers') renderTiers();
+    if (page === 'myinvoicing') initMyInvoicing();
 }
 
 // ============================================
@@ -3335,6 +4643,15 @@ function formatDate(d) {
     if (!d) return '—';
     const date = new Date(d);
     return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatCurrency(amount, withSymbol = true) {
+    const num = amount || 0;
+    const fixed = Math.abs(num).toFixed(2);
+    const [intPart, decPart] = fixed.split('.');
+    const intF = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const result = `${num < 0 ? '-' : ''}${intF},${decPart}`;
+    return withSymbol ? `${result} DH` : result;
 }
 
 function showToast(msg, type = 'info') {
