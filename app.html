@@ -2223,6 +2223,85 @@
 
         @media (max-width: 700px) { .calc-grid { grid-template-columns: 1fr; } }
 
+        /* === RTL SUPPORT (Arabic) === */
+        [dir="rtl"] {
+            text-align: right;
+        }
+        [dir="rtl"] .sidebar {
+            border-right: none;
+            border-left: 1px solid var(--border);
+        }
+        [dir="rtl"] .nav-item {
+            text-align: right;
+        }
+        [dir="rtl"] .nav-icon {
+            margin-right: 0;
+            margin-left: 10px;
+        }
+        [dir="rtl"] .nav-badge {
+            margin-left: 0;
+            margin-right: auto;
+        }
+        [dir="rtl"] .topbar {
+            flex-direction: row-reverse;
+        }
+        [dir="rtl"] .user-menu-dropdown {
+            left: auto;
+            right: 0;
+        }
+        [dir="rtl"] .sync-indicator {
+            right: auto;
+            left: 20px;
+        }
+        [dir="rtl"] .pwa-install-banner {
+            flex-direction: row-reverse;
+        }
+        [dir="rtl"] .stat-card,
+        [dir="rtl"] .calc-card {
+            text-align: right;
+        }
+        [dir="rtl"] .calc-line {
+            flex-direction: row-reverse;
+        }
+        [dir="rtl"] table th,
+        [dir="rtl"] table td {
+            text-align: right;
+        }
+        [dir="rtl"] .modal-content {
+            text-align: right;
+        }
+        [dir="rtl"] .form-group label {
+            text-align: right;
+        }
+        [dir="rtl"] input,
+        [dir="rtl"] textarea,
+        [dir="rtl"] select {
+            text-align: right;
+            direction: rtl;
+        }
+        [dir="rtl"] input[type="email"],
+        [dir="rtl"] input[type="tel"],
+        [dir="rtl"] input[type="url"],
+        [dir="rtl"] input[type="number"],
+        [dir="rtl"] code {
+            direction: ltr;
+            text-align: left;
+        }
+        [dir="rtl"] .btn {
+            flex-direction: row-reverse;
+        }
+        [dir="rtl"] body {
+            font-family: 'Manrope', 'Tahoma', 'Arial', sans-serif;
+        }
+        /* Forcer LTR sur les éléments avec contenu mixé (codes, numéros) */
+        [dir="rtl"] [data-keep-ltr],
+        [dir="rtl"] .number,
+        [dir="rtl"] .code-display {
+            direction: ltr;
+            text-align: left;
+            unicode-bidi: embed;
+        }
+
         /* === REPORT TABS === */
         .report-tab {
             background: transparent;
@@ -2773,68 +2852,68 @@
         </div>
 
         <div class="nav-section">
-            <div class="nav-label">Principal</div>
+            <div class="nav-label" data-i18n="nav.section.main">Principal</div>
             <button class="nav-item active" data-page="dashboard" onclick="navTo('dashboard')">
-                <span class="nav-icon">📊</span> Tableau de bord
+                <span class="nav-icon">📊</span> <span data-i18n="nav.dashboard">Tableau de bord</span>
             </button>
             <button class="nav-item" data-page="invoices" onclick="navTo('invoices')">
-                <span class="nav-icon">📄</span> Factures
+                <span class="nav-icon">📄</span> <span data-i18n="nav.invoices">Factures</span>
                 <span class="nav-badge" id="badgeInvoices">0</span>
             </button>
             <button class="nav-item" data-page="quotes" onclick="navTo('quotes')">
-                <span class="nav-icon">📋</span> Devis
+                <span class="nav-icon">📋</span> <span data-i18n="nav.quotes">Devis</span>
                 <span class="nav-badge" id="badgeQuotes">0</span>
             </button>
         </div>
 
         <div class="nav-section">
-            <div class="nav-label">Données</div>
+            <div class="nav-label" data-i18n="nav.section.data">Données</div>
             <button class="nav-item" data-page="clients" onclick="navTo('clients')">
-                <span class="nav-icon">👥</span> Clients
+                <span class="nav-icon">👥</span> <span data-i18n="nav.clients">Clients</span>
             </button>
             <button class="nav-item" data-page="products" onclick="navTo('products')">
-                <span class="nav-icon">📦</span> Produits & Services
+                <span class="nav-icon">📦</span> <span data-i18n="nav.products">Produits & Services</span>
             </button>
         </div>
 
         <div class="nav-section">
-            <div class="nav-label">Suivi</div>
+            <div class="nav-label" data-i18n="nav.section.tracking">Suivi</div>
             <button class="nav-item" data-page="payments" onclick="navTo('payments')">
-                <span class="nav-icon">💳</span> Paiements
+                <span class="nav-icon">💳</span> <span data-i18n="nav.payments">Paiements</span>
                 <span class="nav-badge" id="badgePayments" style="background: var(--danger); color: white;">0</span>
             </button>
             <button class="nav-item" data-page="reminders" onclick="navTo('reminders')">
-                <span class="nav-icon">🔔</span> Relances
+                <span class="nav-icon">🔔</span> <span data-i18n="nav.reminders">Relances</span>
             </button>
         </div>
 
         <div class="nav-section">
-            <div class="nav-label">Analyse</div>
+            <div class="nav-label" data-i18n="nav.section.analysis">Analyse</div>
             <button class="nav-item" data-page="reports" onclick="navTo('reports')">
-                <span class="nav-icon">📊</span> Rapports
+                <span class="nav-icon">📊</span> <span data-i18n="nav.reports">Rapports</span>
             </button>
         </div>
 
         <div class="nav-section">
-            <div class="nav-label">Fiscalité</div>
+            <div class="nav-label" data-i18n="nav.section.tax">Fiscalité</div>
             <button class="nav-item" data-page="cnss" onclick="navTo('cnss')">
-                <span class="nav-icon">🏥</span> CNSS
+                <span class="nav-icon">🏥</span> <span data-i18n="nav.cnss">CNSS</span>
             </button>
             <button class="nav-item" data-page="taxes" onclick="navTo('taxes')">
-                <span class="nav-icon">💰</span> Impôts & TVA
+                <span class="nav-icon">💰</span> <span data-i18n="nav.taxes">Impôts & TVA</span>
             </button>
         </div>
 
         <div class="nav-section">
-            <div class="nav-label">Réglages</div>
+            <div class="nav-label" data-i18n="nav.section.settings">Réglages</div>
             <button class="nav-item" data-page="company" onclick="navTo('company')">
-                <span class="nav-icon">🏢</span> Mon entreprise
+                <span class="nav-icon">🏢</span> <span data-i18n="nav.company">Mon entreprise</span>
             </button>
             <button class="nav-item" data-page="team" onclick="navTo('team')" id="navTeam">
-                <span class="nav-icon">👥</span> Mon équipe
+                <span class="nav-icon">👥</span> <span data-i18n="nav.team">Mon équipe</span>
             </button>
             <button class="nav-item" data-page="license" onclick="navTo('license')">
-                <span class="nav-icon">💎</span> Licence
+                <span class="nav-icon">💎</span> <span data-i18n="nav.license">Licence</span>
             </button>
         </div>
 
@@ -2899,22 +2978,34 @@
                     <div class="user-menu-dropdown" id="userMenuDropdown">
                         <div class="user-info">
                             <div class="name" id="userMenuEmail">user@email.com</div>
-                            <div class="role">Compte personnel</div>
+                            <div class="role" data-i18n="user.personalAccount">Compte personnel</div>
                         </div>
                         <a onclick="closeUserMenu(); navTo('company');">
-                            🏢 Mon entreprise
+                            🏢 <span data-i18n="user.company">Mon entreprise</span>
                         </a>
                         <a onclick="closeUserMenu(); navTo('license');">
-                            🔑 Ma licence
+                            🔑 <span data-i18n="user.license">Ma licence</span>
                         </a>
                         <a onclick="closeUserMenu(); openChangePasswordModal();">
-                            🔐 Changer mot de passe
+                            🔐 <span data-i18n="user.changePassword">Changer mot de passe</span>
                         </a>
                         <a onclick="closeUserMenu(); installPWA();">
-                            📱 Installer l'app
+                            📱 <span data-i18n="user.installApp">Installer l'app</span>
                         </a>
+                        <!-- Sélecteur de langue retiré temporairement.
+                             Sera ré-activé en V2 quand l'i18n sera complet (FR + AR).
+                             Code de l'i18n conservé en place pour réactivation rapide.
+                        <div class="user-menu-separator" style="border-top: 1px solid var(--border); margin: 4px 0;"></div>
+                        <a onclick="setLanguage('fr'); closeUserMenu();" id="langMenuFr">
+                            🇫🇷 <span>Français</span> <span id="langCheckFr" style="margin-left: auto;">✓</span>
+                        </a>
+                        <a onclick="setLanguage('ar'); closeUserMenu();" id="langMenuAr">
+                            🇲🇦 <span>العربية</span> <span id="langCheckAr" style="margin-left: auto;"></span>
+                        </a>
+                        -->
+                        <div class="user-menu-separator" style="border-top: 1px solid var(--border); margin: 4px 0;"></div>
                         <a class="danger" onclick="closeUserMenu(); handleLogout();">
-                            🚪 Se déconnecter
+                            🚪 <span data-i18n="user.logout">Se déconnecter</span>
                         </a>
                     </div>
                 </div>
@@ -3523,7 +3614,7 @@
                             <div class="stat-trend" id="rpFsCNSSRate">Taux : —</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">💰 IR estimé</div>
+                            <div class="stat-label">💰 Part IR libératoire</div>
                             <div class="stat-value" id="rpFsIR">0 DH</div>
                             <div class="stat-trend" id="rpFsIRRate">Taux : —</div>
                         </div>
@@ -3986,35 +4077,13 @@
             <h3 id="licensePricingTitle" style="font-family: 'Crimson Pro', serif; font-size: 26px; font-weight: 700; margin-bottom: 16px;">Choisissez votre formule</h3>
 
             <div class="pricing-cards" id="pricingCards">
-                <!-- Lifetime -->
-                <div class="pricing-tier featured">
-                    <h3>🎁 Lifetime</h3>
-                    <div class="tier-tagline">Payez une fois, utilisez à vie</div>
-                    <div class="tier-price">
-                        <span class="tier-price-old" id="lifetimeOldPrice">1 499 DH</span>
-                        <span id="lifetimePrice">499</span>
-                        <span class="tier-price-period"> DH</span>
-                    </div>
-                    <div class="savings-badge">💰 Économisez <span id="lifetimeSavings">1 000</span> DH</div>
-                    <ul>
-                        <li>Tout illimité à vie</li>
-                        <li>Sync cloud multi-appareils</li>
-                        <li>Mises à jour incluses à vie</li>
-                        <li>Module CNSS + Impôts</li>
-                        <li>Module Paiements + Relances</li>
-                        <li>Support prioritaire</li>
-                    </ul>
-                    <button class="btn btn-primary" style="width: 100%;" onclick="purchaseLicense('lifetime')">
-                        💎 Acheter le Lifetime
-                    </button>
-                </div>
-
-                <!-- Pro Monthly -->
+                <!-- Mensuel -->
                 <div class="pricing-tier">
-                    <h3>⭐ Pro</h3>
-                    <div class="tier-tagline">Abonnement mensuel</div>
+                    <h3>⭐ Mensuel</h3>
+                    <div class="tier-tagline">Sans engagement</div>
                     <div class="tier-price">
-                        99 <span class="tier-price-period">DH/mois</span>
+                        <span id="monthlyPrice">99</span>
+                        <span class="tier-price-period"> DH/mois</span>
                     </div>
                     <div class="savings-badge" style="background: rgba(232, 163, 61, 0.1); color: #B5821F;">
                         Annulable à tout moment
@@ -4023,33 +4092,65 @@
                         <li>Tout illimité</li>
                         <li>Sync cloud multi-appareils</li>
                         <li>Module CNSS + Impôts</li>
-                        <li>Module Paiements + Relances</li>
+                        <li>Export comptable (Sage, EBP, FEC)</li>
                         <li>Support email</li>
                     </ul>
                     <button class="btn btn-secondary" style="width: 100%;" onclick="purchaseLicense('monthly')">
-                        Démarrer l'abonnement
+                        Démarrer maintenant
                     </button>
                 </div>
 
-                <!-- Business -->
-                <div class="pricing-tier">
-                    <h3>👔 Business</h3>
-                    <div class="tier-tagline">Pour PME et SARL</div>
+                <!-- Annuel (FEATURED) -->
+                <div class="pricing-tier featured">
+                    <div class="featured-badge">🏆 Plus populaire</div>
+                    <h3>🏆 Annuel</h3>
+                    <div class="tier-tagline">Le meilleur rapport qualité/prix</div>
                     <div class="tier-price">
-                        199 <span class="tier-price-period">DH/mois</span>
+                        <span class="tier-price-old" id="annualOldPrice">1 188 DH</span>
+                        <span id="annualPrice">799</span>
+                        <span class="tier-price-period"> DH/an</span>
                     </div>
-                    <div class="savings-badge" style="background: rgba(27, 58, 107, 0.08); color: var(--primary);">
-                        Tout PRO + extras
+                    <div class="savings-badge">💰 Économisez <span id="annualSavings">389</span> DH</div>
+                    <div style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">
+                        Soit <strong style="color: var(--primary);">~67 DH/mois</strong>
                     </div>
                     <ul>
-                        <li>Multi-utilisateurs (5)</li>
-                        <li>Multi-entreprises (3)</li>
-                        <li>Export comptable (Sage, EBP, FEC DGI)</li>
-                        <li>Templates personnalisés</li>
+                        <li>Tout illimité pendant 12 mois</li>
+                        <li>Sync cloud multi-appareils</li>
+                        <li>Module CNSS + Impôts</li>
+                        <li>Export comptable (Sage, EBP, FEC)</li>
                         <li>Support prioritaire WhatsApp</li>
+                        <li>Mises à jour incluses</li>
                     </ul>
-                    <button class="btn btn-secondary" style="width: 100%;" onclick="purchaseLicense('business')">
-                        Choisir Business
+                    <button class="btn btn-primary" style="width: 100%;" onclick="purchaseLicense('annual')">
+                        🚀 Choisir Annuel
+                    </button>
+                </div>
+
+                <!-- Semestriel -->
+                <div class="pricing-tier">
+                    <h3>🔥 Semestriel</h3>
+                    <div class="tier-tagline">Engagement moyen</div>
+                    <div class="tier-price">
+                        <span class="tier-price-old" id="semestrialOldPrice">594 DH</span>
+                        <span id="semestrialPrice">449</span>
+                        <span class="tier-price-period"> DH/6 mois</span>
+                    </div>
+                    <div class="savings-badge" style="background: rgba(232, 163, 61, 0.1); color: #B5821F;">
+                        💰 Économisez <span id="semestrialSavings">145</span> DH
+                    </div>
+                    <div style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">
+                        Soit <strong>~75 DH/mois</strong>
+                    </div>
+                    <ul>
+                        <li>Tout illimité pendant 6 mois</li>
+                        <li>Sync cloud multi-appareils</li>
+                        <li>Module CNSS + Impôts</li>
+                        <li>Export comptable (Sage, EBP, FEC)</li>
+                        <li>Support email</li>
+                    </ul>
+                    <button class="btn btn-secondary" style="width: 100%;" onclick="purchaseLicense('semestrial')">
+                        Choisir Semestriel
                     </button>
                 </div>
             </div>
@@ -4057,7 +4158,7 @@
             <!-- Promo code -->
             <div class="promo-section" id="sectionPromoCode">
                 <h4>🎁 Vous avez un code promo ?</h4>
-                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Codes de lancement disponibles : <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">LANCEMENT2026</code> · <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">FOUNDERS</code></p>
+                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Codes de lancement disponibles : <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">LANCEMENT2026</code> · <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">WELCOME10</code></p>
                 <div class="promo-input-group">
                     <input type="text" id="promoCode" placeholder="ENTREZ VOTRE CODE">
                     <button class="btn btn-primary" onclick="applyPromoCode()">Appliquer</button>
@@ -4822,6 +4923,226 @@
 // ============================================
 // SYNC MANAGER - Online/Offline + Queue
 // ============================================
+// ============================================
+// I18N — Internationalization (FR / AR)
+// ============================================
+const I18N_DICT = {
+    fr: {
+        // Navigation
+        'nav.section.main': 'Principal',
+        'nav.section.data': 'Données',
+        'nav.section.tracking': 'Suivi',
+        'nav.section.analysis': 'Analyse',
+        'nav.section.tax': 'Fiscalité',
+        'nav.section.settings': 'Réglages',
+        'nav.dashboard': 'Tableau de bord',
+        'nav.invoices': 'Factures',
+        'nav.quotes': 'Devis',
+        'nav.clients': 'Clients',
+        'nav.products': 'Produits & Services',
+        'nav.payments': 'Paiements',
+        'nav.reminders': 'Relances',
+        'nav.reports': 'Rapports',
+        'nav.cnss': 'CNSS',
+        'nav.taxes': 'Impôts & TVA',
+        'nav.company': 'Mon entreprise',
+        'nav.team': 'Mon équipe',
+        'nav.license': 'Licence',
+        
+        // User menu
+        'user.personalAccount': 'Compte personnel',
+        'user.company': 'Mon entreprise',
+        'user.license': 'Ma licence',
+        'user.changePassword': 'Changer mot de passe',
+        'user.installApp': "Installer l'app",
+        'user.logout': 'Se déconnecter',
+        'user.language': 'Langue',
+        
+        // Common
+        'common.save': 'Enregistrer',
+        'common.cancel': 'Annuler',
+        'common.delete': 'Supprimer',
+        'common.edit': 'Modifier',
+        'common.close': 'Fermer',
+        'common.confirm': 'Confirmer',
+        'common.search': 'Rechercher...',
+        'common.loading': 'Chargement...',
+        'common.success': 'Succès',
+        'common.error': 'Erreur',
+        'common.yes': 'Oui',
+        'common.no': 'Non',
+        
+        // Common page titles
+        'page.dashboard.title': 'Tableau de bord',
+        'page.invoices.title': 'Factures',
+        'page.quotes.title': 'Devis',
+        'page.clients.title': 'Clients',
+        'page.products.title': 'Produits & Services',
+        'page.payments.title': 'Paiements',
+        'page.reminders.title': 'Relances',
+        'page.reports.title': 'Rapports & Analyses',
+        'page.cnss.title': 'CNSS',
+        'page.taxes.title': 'Impôts & TVA',
+        'page.company.title': 'Mon entreprise',
+        'page.team.title': 'Mon équipe',
+        'page.license.title': 'Licence',
+    },
+    ar: {
+        // Navigation
+        'nav.section.main': 'الرئيسية',
+        'nav.section.data': 'البيانات',
+        'nav.section.tracking': 'المتابعة',
+        'nav.section.analysis': 'التحليل',
+        'nav.section.tax': 'الضرائب',
+        'nav.section.settings': 'الإعدادات',
+        'nav.dashboard': 'لوحة التحكم',
+        'nav.invoices': 'الفواتير',
+        'nav.quotes': 'العروض',
+        'nav.clients': 'العملاء',
+        'nav.products': 'المنتجات والخدمات',
+        'nav.payments': 'المدفوعات',
+        'nav.reminders': 'التذكيرات',
+        'nav.reports': 'التقارير',
+        'nav.cnss': 'الصندوق الوطني',
+        'nav.taxes': 'الضرائب والقيمة المضافة',
+        'nav.company': 'مؤسستي',
+        'nav.team': 'فريقي',
+        'nav.license': 'الترخيص',
+        
+        // User menu
+        'user.personalAccount': 'حساب شخصي',
+        'user.company': 'مؤسستي',
+        'user.license': 'ترخيصي',
+        'user.changePassword': 'تغيير كلمة المرور',
+        'user.installApp': 'تثبيت التطبيق',
+        'user.logout': 'تسجيل الخروج',
+        'user.language': 'اللغة',
+        
+        // Common
+        'common.save': 'حفظ',
+        'common.cancel': 'إلغاء',
+        'common.delete': 'حذف',
+        'common.edit': 'تعديل',
+        'common.close': 'إغلاق',
+        'common.confirm': 'تأكيد',
+        'common.search': 'بحث...',
+        'common.loading': 'جاري التحميل...',
+        'common.success': 'نجح',
+        'common.error': 'خطأ',
+        'common.yes': 'نعم',
+        'common.no': 'لا',
+        
+        // Common page titles
+        'page.dashboard.title': 'لوحة التحكم',
+        'page.invoices.title': 'الفواتير',
+        'page.quotes.title': 'العروض',
+        'page.clients.title': 'العملاء',
+        'page.products.title': 'المنتجات والخدمات',
+        'page.payments.title': 'المدفوعات',
+        'page.reminders.title': 'التذكيرات',
+        'page.reports.title': 'التقارير والتحليلات',
+        'page.cnss.title': 'الصندوق الوطني للضمان الاجتماعي',
+        'page.taxes.title': 'الضرائب والقيمة المضافة',
+        'page.company.title': 'مؤسستي',
+        'page.team.title': 'فريقي',
+        'page.license.title': 'الترخيص',
+    }
+};
+
+const I18n = {
+    currentLang: 'fr',
+    
+    init() {
+        // TEMPORAIRE : i18n incomplet, on force le français.
+        // À ré-activer quand l'arabe sera traduit à 80%+.
+        this.currentLang = 'fr';
+        // Effacer toute préférence AR sauvegardée par les bêta-testeurs internes
+        try {
+            const saved = localStorage.getItem('fp_lang');
+            if (saved === 'ar') localStorage.removeItem('fp_lang');
+        } catch (e) {}
+        
+        this.apply();
+    },
+    
+    t(key) {
+        const dict = I18N_DICT[this.currentLang] || I18N_DICT.fr;
+        return dict[key] || I18N_DICT.fr[key] || key;
+    },
+    
+    setLang(lang) {
+        if (!I18N_DICT[lang]) return;
+        this.currentLang = lang;
+        try {
+            localStorage.setItem('fp_lang', lang);
+        } catch (e) {}
+        this.apply();
+    },
+    
+    apply() {
+        const lang = this.currentLang;
+        const isRTL = lang === 'ar';
+        
+        // Direction du document
+        document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+        document.documentElement.lang = lang;
+        
+        // Traduction de tous les éléments avec data-i18n
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            const translated = this.t(key);
+            // Si l'élément contient seulement du texte, le remplacer
+            // Sinon, chercher un span enfant pour préserver les icônes
+            if (el.children.length === 0) {
+                el.textContent = translated;
+            } else {
+                // Remplacer uniquement le premier nœud texte
+                for (let node of el.childNodes) {
+                    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                        node.textContent = translated;
+                        break;
+                    }
+                }
+                // Si pas de noeud texte trouvé, mettre en attribut title
+                if (![...el.childNodes].some(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())) {
+                    el.textContent = translated;
+                }
+            }
+        });
+        
+        // Traduction des placeholders
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            el.placeholder = this.t(key);
+        });
+        
+        // Traduction des titres
+        document.querySelectorAll('[data-i18n-title]').forEach(el => {
+            const key = el.getAttribute('data-i18n-title');
+            el.title = this.t(key);
+        });
+        
+        // Update language menu checkmarks
+        const fr = document.getElementById('langCheckFr');
+        const ar = document.getElementById('langCheckAr');
+        if (fr) fr.textContent = lang === 'fr' ? '✓' : '';
+        if (ar) ar.textContent = lang === 'ar' ? '✓' : '';
+    }
+};
+
+// Global helpers
+function setLanguage(lang) {
+    I18n.setLang(lang);
+    try { showToast(lang === 'ar' ? '🇲🇦 تم تغيير اللغة' : '🇫🇷 Langue changée', 'success'); } catch(e) {}
+}
+
+// Init au chargement
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => I18n.init());
+} else {
+    I18n.init();
+}
+
 const SyncManager = {
     isOnline: navigator.onLine,
     pendingChanges: [],
@@ -7150,19 +7471,26 @@ function deleteProduct(id) {
 function renderCNSS() {
     calculateCNSS();
     
-    // YTD CA
+    // YTD CA (HT, pas TTC - CNSS se calcule sur HT au Maroc)
+    const company = Storage.get('company', {});
+    const activity = company.activity || 'services';
+    const cnssRate = activity === 'commerce' ? 0.005 : 0.01;
+    
     const invoices = Storage.get('invoices', []);
     const currentYear = new Date().getFullYear();
     const paidThisYear = invoices.filter(i => 
-        i.status === 'paid' && new Date(i.date).getFullYear() === currentYear
+        i.status === 'paid' && i.type !== 'credit' && new Date(i.date).getFullYear() === currentYear
     );
-    const caYTD = paidThisYear.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    
+    // Pour AE : CA = HT (pas de TVA)
+    // Pour autres : CA HT
+    const caYTD = paidThisYear.reduce((s, i) => s + (i.totalHT || i.totalTTC || 0), 0);
     const monthsElapsed = new Date().getMonth() + 1;
     const projected = (caYTD / monthsElapsed) * 12;
     
     document.getElementById('cnssCAYTD').textContent = formatCurrency(caYTD);
     document.getElementById('cnssCAProjected').textContent = formatCurrency(projected);
-    document.getElementById('cnssProjected').textContent = formatCurrency(projected * 0.01);
+    document.getElementById('cnssProjected').textContent = formatCurrency(projected * cnssRate);
     
     // Schedule
     renderCNSSSchedule();
@@ -7942,31 +8270,42 @@ function renderReportFiscal() {
         return d >= yearStart && d <= today;
     });
     
-    const caYear = yearInvoices.reduce((s, i) => s + (i.totalHT || 0), 0);
+    const caYear = yearInvoices.reduce((s, i) => s + (i.totalHT || i.totalTTC || 0), 0);
     
     // Activité (par défaut services)
     const activity = company.activity || 'services';
-    const cnssRate = activity === 'commerce' ? 0.005 : 0.01;
-    const cnssRateLabel = activity === 'commerce' ? '0,5% (commerce)' : '1% (services)';
     
-    // Plafond AE
-    const plafond = activity === 'commerce' ? 500000 : 200000;
+    // ====================================================
+    // STATUT AE MAROC - Régime fiscal simplifié
+    // Source : CGI Maroc (Code Général des Impôts)
+    // ====================================================
+    // Pour les Auto-Entrepreneurs au Maroc :
+    // - Services : 1% libératoire sur CA HT (couvre CNSS + IR)
+    // - Commerce : 0,5% libératoire sur CA HT
+    // 
+    // Pas d'IR progressif séparé pour les AE.
+    // Le taux libératoire couvre tout.
+    
+    const cnssRate = activity === 'commerce' ? 0.005 : 0.01;
+    const cnssRateLabel = activity === 'commerce' ? '0,5% (Commerce/Industrie)' : '1% (Services/Professions libérales)';
+    
+    // Plafond AE (loi de finances 2024)
+    const plafond = activity === 'commerce' ? 2000000 : 500000;
     const pctPlafond = Math.min(100, Math.round((caYear / plafond) * 100));
     
-    // CNSS
+    // Cotisation libératoire (CNSS + IR cumulés)
     const cnssAmount = caYear * cnssRate;
     
-    // IR estimé (barème simplifié)
-    let irRate = 0;
-    let irLabel = '';
-    if (caYear <= 30000) { irRate = 0; irLabel = '0% (exonéré)'; }
-    else if (caYear <= 50000) { irRate = 0.10; irLabel = '10%'; }
-    else if (caYear <= 60000) { irRate = 0.20; irLabel = '20%'; }
-    else if (caYear <= 80000) { irRate = 0.30; irLabel = '30%'; }
-    else if (caYear <= 180000) { irRate = 0.34; irLabel = '34%'; }
-    else { irRate = 0.38; irLabel = '38%'; }
+    // Pour AE, l'IR est compris dans le taux libératoire
+    // Mais on peut le décomposer pour info :
+    // - 65% du taux = part IR libératoire
+    // - 35% du taux = part CNSS  
+    const irPart = cnssAmount * 0.65;
+    const cnssPart = cnssAmount * 0.35;
     
-    const irAmount = caYear * irRate;
+    // Variables maintenues pour compatibilité affichage
+    const irAmount = irPart;
+    const irLabel = activity === 'commerce' ? '0,325% du CA' : '0,65% du CA';
     
     // Render KPIs
     document.getElementById('rpFsCAYear').textContent = formatCurrency(caYear);
@@ -8009,22 +8348,31 @@ function renderReportFiscal() {
     document.getElementById('rpFsCNSSRateText').textContent = cnssRateLabel;
     document.getElementById('rpFsCNSSTotal').textContent = formatCurrency(cnssAmount);
     
-    // Conseils
+    // Conseils fiscaux conformes Maroc
     const tips = [];
+    
+    tips.push(`📋 <strong>Régime AE Maroc</strong> : ${cnssRateLabel} = paiement libératoire couvrant CNSS et IR.`);
+    
     if (caYear < plafond * 0.3) {
         tips.push('💪 Vous êtes loin du plafond, continuez à développer votre activité !');
     }
-    if (irRate === 0) {
-        tips.push('✅ Vous êtes exonéré d\'IR cette année (CA < 30 000 DH)');
+    
+    if (caYear === 0) {
+        tips.push('🆕 Pas encore de CA cette année. Le minimum CNSS reste dû.');
     } else {
-        tips.push(`📊 Pensez à provisionner ${formatCurrency(irAmount)} pour votre IR annuel`);
+        tips.push(`🏥 Provisionnez environ <strong>${formatCurrency(cnssAmount / 12)}</strong> par mois pour vos cotisations.`);
     }
-    tips.push(`🏥 Provisionnez environ ${formatCurrency(cnssAmount / 12)} par mois pour la CNSS`);
-    tips.push('📅 La déclaration CNSS se fait mensuellement sur damancom.ma avant le 30 du mois suivant');
-    tips.push('💡 La déclaration IR AE se fait annuellement avant le 31 mars de l\'année suivante');
-    if (pctPlafond >= 80) {
-        tips.push('⚠️ <strong>Anticipez le changement de statut</strong> si vous dépassez le plafond');
+    
+    tips.push('📅 La <strong>déclaration mensuelle</strong> se fait sur <strong>cnss.ma</strong> ou via votre comptable, avant le 30 du mois suivant.');
+    tips.push('💡 Le paiement libératoire AE couvre <strong>CNSS + IR</strong>. Pas de déclaration IR séparée.');
+    
+    if (pctPlafond >= 90) {
+        tips.push('🚨 <strong>URGENT</strong> : Vous dépassez bientôt le plafond AE. Consultez un expert-comptable pour passer en SARL ou Profession libérale.');
+    } else if (pctPlafond >= 70) {
+        tips.push('⚠️ Vous approchez du plafond. Anticipez un éventuel changement de statut.');
     }
+    
+    tips.push('💼 Conservez tous vos justificatifs (factures) pendant 10 ans (obligation DGI).');
     
     document.getElementById('rpFsTips').innerHTML = tips.map(t => `<li>${t}</li>`).join('');
 }
@@ -8404,11 +8752,21 @@ function removeTeamMember(email) {
 // ============================================
 // LOGO MANAGEMENT (Premium feature)
 // ============================================
+// Liste centrale des tiers payants (utilisée partout)
+const PAID_TIER_TYPES = ['lifetime', 'monthly', 'semestrial', 'annual', 'business'];
+
 function isUserLicensed() {
     const info = License.get();
-    return (info.type === 'lifetime') || 
-           ((info.type === 'monthly' || info.type === 'business') && 
-            info.status === 'active' && !License.isExpired());
+    
+    // Lifetime = toujours licencié
+    if (info.type === 'lifetime') return true;
+    
+    // Autres tiers payants = actifs ET non expirés
+    if (PAID_TIER_TYPES.includes(info.type)) {
+        return info.status === 'active' && !License.isExpired();
+    }
+    
+    return false;
 }
 
 function updateLogoSection() {
@@ -8714,7 +9072,7 @@ function exportAccounting(format = 'csv') {
             const client = (Storage.get('clients', []).find(c => c.id === inv.clientId)) || {};
             const ecrNum = String(idx + 1).padStart(5, '0');
             const dateFormatted = (inv.date || '').replace(/-/g, '');
-            const totalHT = (inv.subtotal || 0).toFixed(2);
+            const totalHT = (inv.totalHT || 0).toFixed(2);
             const totalTVA = (inv.totalTVA || 0).toFixed(2);
             const totalTTC = (inv.totalTTC || 0).toFixed(2);
             
@@ -8775,11 +9133,13 @@ async function resetApp() {
 const TRIAL_DURATION_DAYS = 14;
 
 // Codes promos disponibles
+// Note : tier 'lifetime' réservé aux Founders bêta. Promos publiques sur tiers payants.
 const PROMO_CODES = {
-    'LANCEMENT2026': { discount: 50, label: 'Promo lancement -50%', validFor: ['lifetime'] },
-    'FOUNDERS': { discount: 60, label: 'Promo Founders -60%', validFor: ['lifetime'] },
-    'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['lifetime', 'monthly', 'business'] },
-    'WELCOME10': { discount: 10, label: 'Bienvenue -10%', validFor: ['lifetime', 'monthly'] }
+    'LANCEMENT2026': { discount: 30, label: 'Promo lancement -30%', validFor: ['annual', 'semestrial'] },
+    'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['annual', 'semestrial', 'monthly'] },
+    'WELCOME10': { discount: 10, label: 'Bienvenue -10%', validFor: ['annual', 'semestrial', 'monthly'] }
+    // FOUNDERS retiré : était lié à Lifetime, n'a plus de sens.
+    // Programme Founders géré directement par l'admin (10 codes gratuits manuels).
 };
 
 const License = {
@@ -8809,26 +9169,32 @@ const License = {
     getDaysRemaining() {
         const info = this.get();
         if (info.type !== 'trial' && info.status !== 'active') return 0;
-        if (info.type === 'lifetime' || info.type === 'monthly' || info.type === 'business') {
-            return -1; // Infinite (active subscription)
+        
+        // Lifetime = infini
+        if (info.type === 'lifetime') return -1;
+        
+        // Subscriptions = jours réels jusqu'à expiration
+        const PAID_TIERS = ['monthly', 'semestrial', 'annual', 'business'];
+        if (PAID_TIERS.includes(info.type) || info.type === 'trial') {
+            const now = new Date();
+            const expires = new Date(info.expiresAt);
+            const diff = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
+            return Math.max(0, diff);
         }
         
-        const now = new Date();
-        const expires = new Date(info.expiresAt);
-        const diff = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
-        return Math.max(0, diff);
+        return 0;
     },
     
     // Check if trial is expired
     isExpired() {
         const info = this.get();
         if (info.type === 'lifetime') return false;
-        if ((info.type === 'monthly' || info.type === 'business') && info.status === 'active') {
+        
+        const TIERS_WITH_EXPIRY = ['trial', 'monthly', 'semestrial', 'annual', 'business'];
+        if (TIERS_WITH_EXPIRY.includes(info.type) && info.status === 'active') {
             return new Date(info.expiresAt) < new Date();
         }
-        if (info.type === 'trial') {
-            return new Date(info.expiresAt) < new Date();
-        }
+        
         return false;
     },
     
@@ -8851,13 +9217,22 @@ const License = {
             licenseCode: options.code || null
         };
         
-        if (type === 'lifetime') {
-            // Lifetime never expires
+        // Durées par tier (en jours)
+        const durations = {
+            monthly: 30,
+            semestrial: 183,    // 6 mois
+            annual: 365,
+            business: 30,       // legacy
+            lifetime: null      // jamais expire
+        };
+        
+        const days = durations[type];
+        if (days === null || days === undefined) {
+            // Lifetime ou tier inconnu = pas d'expiration
             info.expiresAt = null;
-        } else if (type === 'monthly' || type === 'business') {
-            // 30 days subscription
+        } else {
             const expires = new Date();
-            expires.setDate(expires.getDate() + 30);
+            expires.setDate(expires.getDate() + days);
             info.expiresAt = expires.toISOString();
         }
         
@@ -8870,9 +9245,11 @@ const License = {
         const info = this.get();
         const labels = {
             trial: 'Période d\'essai',
-            lifetime: '🎁 Lifetime — Accès à vie',
-            monthly: '⭐ Pro Mensuel',
-            business: '👔 Business'
+            lifetime: '🎁 Founder — Accès à vie',
+            monthly: '⭐ Mensuel',
+            semestrial: '🔥 Semestriel',
+            annual: '🏆 Annuel',
+            business: '👔 Business (legacy)'
         };
         return labels[info.type] || info.type;
     }
@@ -8887,19 +9264,28 @@ function updateTrialUI() {
     const badge = document.getElementById('trialBadge');
     const overlay = document.getElementById('expiredOverlay');
     
+    // Mapping centralisé des tiers
+    const TIER_INFO = {
+        lifetime:   { icon: '🎁', name: 'Founder à vie',  badge: 'Founder' },
+        annual:     { icon: '🏆', name: 'Annuel',         badge: 'Annuel' },
+        semestrial: { icon: '🔥', name: 'Semestriel',     badge: 'Semestriel' },
+        monthly:    { icon: '⭐', name: 'Mensuel',        badge: 'Mensuel' },
+        business:   { icon: '👔', name: 'Business',       badge: 'Business' }
+    };
+    
     // Active paid license
-    if (info.type === 'lifetime' || (info.type === 'monthly' || info.type === 'business') && info.status === 'active' && !License.isExpired()) {
+    if (PAID_TIER_TYPES.includes(info.type) && info.status === 'active' && (!License.isExpired() || info.type === 'lifetime')) {
+        const tierData = TIER_INFO[info.type] || { icon: '✓', name: info.type, badge: info.type };
+        
         // 🎁 Lifetime : pas de banner du tout (juste le badge sidebar)
         if (info.type === 'lifetime') {
             banner.style.display = 'none';
         } else {
-            // Pro/Business : banner discret (pour rappel renouvellement)
+            // Autres tiers payants : banner discret (pour rappel renouvellement)
             banner.style.display = 'flex';
             banner.className = 'trial-banner licensed';
-            const tierIcon = info.type === 'business' ? '👔' : '⭐';
-            const tierName = info.type === 'business' ? 'Business' : 'Pro Mensuel';
             const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '';
-            document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierIcon}</span> ${tierName} active${expDate ? ` · Renouvellement le ${expDate}` : ''}`;
+            document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierData.icon}</span> ${tierData.name} actif${expDate ? ` · Renouvellement le ${expDate}` : ''}`;
             document.getElementById('trialBannerCountdown').style.display = 'none';
             const banBtn = banner.querySelector('button');
             if (banBtn) banBtn.style.display = 'none';
@@ -8908,14 +9294,11 @@ function updateTrialUI() {
         // Update sidebar badge
         badge.style.display = 'block';
         badge.className = 'trial-badge licensed';
-        const tierIcon2 = info.type === 'lifetime' ? '🎁' : info.type === 'business' ? '👔' : '⭐';
-        const tierName2 = info.type === 'lifetime' ? 'Lifetime — Accès à vie' : 
-                         info.type === 'business' ? 'Business' : 'Pro Mensuel';
         const labelEl = badge.querySelector('.trial-badge-label');
         const valueEl = badge.querySelector('.trial-badge-value');
         const ctaEl = badge.querySelector('.trial-badge-cta');
         if (labelEl) labelEl.textContent = 'Licence active';
-        if (valueEl) valueEl.textContent = info.type === 'lifetime' ? 'À vie 🎁' : tierName2;
+        if (valueEl) valueEl.textContent = info.type === 'lifetime' ? 'À vie 🎁' : `${tierData.icon} ${tierData.badge}`;
         if (ctaEl) ctaEl.textContent = '→ Voir détails';
         
         overlay.classList.remove('active');
@@ -8986,8 +9369,7 @@ function updateTrialUI() {
 
 function renderLicensePage() {
     const info = License.get();
-    const isLicensed = (info.type === 'lifetime') || 
-                       ((info.type === 'monthly' || info.type === 'business') && info.status === 'active' && !License.isExpired());
+    const isLicensed = isUserLicensed();
     const daysLeft = License.getDaysRemaining();
     const expired = License.isExpired();
     
@@ -9049,56 +9431,65 @@ function renderLicensePage() {
                 💚 <strong>Merci pour votre confiance !</strong> Toutes les futures mises à jour de FacturaPro sont incluses gratuitement dans votre licence Lifetime.
             </div>
         `;
-    } else if (info.type === 'monthly' || info.type === 'business') {
+    } else if (PAID_TIER_TYPES.includes(info.type) && info.type !== 'lifetime') {
         // ═══════════════════════════════════════════
-        // ABONNEMENT MENSUEL ACTIF : option upgrade Lifetime uniquement
+        // ABONNEMENT ACTIF (Mensuel/Semestriel/Annuel/Business) :
+        // proposer upgrade ou changement de palier
         // ═══════════════════════════════════════════
         badge.classList.add('licensed');
         document.getElementById('licenseStatusIcon').textContent = '✓';
-        document.getElementById('licenseStatusLabel').textContent = info.type === 'business' ? 'Business actif' : 'Pro actif';
         
-        const tierLabel = info.type === 'business' ? '👔 Business' : '⭐ Pro Mensuel';
-        heroTitle.textContent = `${tierLabel} active`;
+        const TIER_DISPLAY = {
+            monthly:    { label: '⭐ Mensuel',    upgradeMsg: '💡 Économisez en passant à l\'Annuel (~67 DH/mois)' },
+            semestrial: { label: '🔥 Semestriel', upgradeMsg: '💡 Économisez encore plus avec l\'Annuel' },
+            annual:     { label: '🏆 Annuel',     upgradeMsg: '🎉 Vous bénéficiez de notre meilleur tarif' },
+            business:   { label: '👔 Business (legacy)', upgradeMsg: '' }
+        };
+        const t = TIER_DISPLAY[info.type] || { label: info.type, upgradeMsg: '' };
+        
+        document.getElementById('licenseStatusLabel').textContent = `${t.label} actif`;
+        heroTitle.textContent = `${t.label} actif`;
         const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-        heroSubtitle.textContent = `Votre abonnement est actif jusqu'au ${expDate}. Vous pouvez upgrader vers Lifetime pour économiser à long terme.`;
+        heroSubtitle.textContent = `Votre abonnement est actif jusqu'au ${expDate}.`;
         
-        // Pricing : afficher SEULEMENT le Lifetime (upgrade)
-        if (pricingTitle) pricingTitle.textContent = '⬆️ Upgrader vers Lifetime';
-        show(pricingTitle);
-        show(pricingCards);
+        // Pricing : permettre de switcher de palier (sauf si déjà au top)
+        if (info.type === 'annual') {
+            // Annual = top tier, masquer les options "downgrade"
+            if (pricingTitle) pricingTitle.textContent = '✨ Vous êtes au meilleur tarif';
+            hide(pricingCards);
+        } else {
+            if (pricingTitle) pricingTitle.textContent = '⬆️ Changer de formule';
+            show(pricingTitle);
+            show(pricingCards);
+        }
         show(sectionPromo);
         show(sectionPayment);
-        hide(sectionActivate); // Pas besoin d'activer un autre code
-        
-        // Cacher les cartes Pro/Business car déjà actifs
-        document.querySelectorAll('.pricing-tier').forEach(card => {
-            const isLifetimeCard = card.classList.contains('featured');
-            card.style.display = isLifetimeCard ? '' : 'none';
-        });
+        hide(sectionActivate);
         
         // Détails licence
         currentInfoEl.innerHTML = `
             <div class="calc-card" style="border-left: 4px solid var(--accent);">
                 <h3>📋 Votre abonnement actuel</h3>
                 <div class="calc-line">
-                    <span>Type</span>
-                    <strong>${tierLabel}</strong>
+                    <span>Formule</span>
+                    <strong>${t.label}</strong>
                 </div>
                 <div class="calc-line">
                     <span>Statut</span>
-                    <strong style="color: var(--success);">✓ Active</strong>
+                    <strong style="color: var(--success);">✓ Actif</strong>
                 </div>
                 <div class="calc-line">
                     <span>Activé le</span>
                     <strong>${formatDate(info.activatedAt)}</strong>
                 </div>
                 ${info.expiresAt ? `<div class="calc-line"><span>Prochain renouvellement</span><strong>${formatDate(info.expiresAt)}</strong></div>` : ''}
+                ${daysLeft > 0 ? `<div class="calc-line"><span>Jours restants</span><strong>${daysLeft} jours</strong></div>` : ''}
                 ${info.licenseCode ? `<div class="calc-line"><span>Code de licence</span><strong style="font-family: monospace;">${info.licenseCode}</strong></div>` : ''}
             </div>
-            
+            ${t.upgradeMsg ? `
             <div class="notice" style="margin-top: 16px; background: rgba(201, 169, 91, 0.05); border-left-color: var(--accent);">
-                💡 <strong>Économisez avec le Lifetime !</strong> Au lieu de 99 DH/mois, payez 499 DH une seule fois et profitez de FacturaPro à vie. Économies dès la 6ème mois !
-            </div>
+                ${t.upgradeMsg}
+            </div>` : ''}
         `;
     } else if (expired) {
         // ═══════════════════════════════════════════
@@ -10240,14 +10631,26 @@ function generatePDF(id, type) {
     pdf.text(formatCurrencyForPDF(doc_data.totalTTC), 193, yPos + 1, { align: 'right' });
     yPos += 18;
     
-    // === LEGAL MENTIONS (AE) ===
-    if (company.status === 'ae') {
+    // === LEGAL MENTIONS (TVA selon statut) ===
+    const hasTva = (doc_data.totalTVA || 0) > 0;
+    
+    if (company.status === 'ae' && !hasTva) {
+        // AE sans TVA = mention exonération
         pdf.setFillColor(255, 248, 230);
         pdf.roundedRect(15, yPos, 180, 12, 1, 1, 'F');
         pdf.setTextColor(...grayDark);
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'italic');
-        pdf.text('TVA non applicable - Article 91-I-1° du CGI (Statut Auto-Entrepreneur)', 19, yPos + 7);
+        pdf.text('TVA non applicable - Article 6 du CGI (Statut Auto-Entrepreneur)', 19, yPos + 7);
+        yPos += 16;
+    } else if (company.status === 'ae' && hasTva) {
+        // AE avec TVA = avertissement (cas anormal)
+        pdf.setFillColor(255, 245, 230);
+        pdf.roundedRect(15, yPos, 180, 12, 1, 1, 'F');
+        pdf.setTextColor(180, 100, 20);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'italic');
+        pdf.text('⚠ Attention : TVA appliquée. Vérifiez votre statut fiscal.', 19, yPos + 7);
         yPos += 16;
     }
     
