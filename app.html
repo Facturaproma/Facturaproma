@@ -8799,12 +8799,12 @@ function updateLogoSection() {
     const noteEl = document.getElementById('accountingExportNote');
     if (noteEl) {
         const info = License.get();
-        if (info.type === 'business' && info.status === 'active' && !License.isExpired()) {
-            noteEl.innerHTML = '✅ <strong style="color: var(--success);">Activé</strong> avec votre plan Business';
+        if (isUserLicensed()) {
+            noteEl.innerHTML = '✅ <strong style="color: var(--success);">Disponible</strong> avec votre abonnement actif';
         } else if (info.type === 'trial' && !License.isExpired()) {
-            noteEl.innerHTML = '🆓 Disponible pendant votre essai. Passez en <strong>Business</strong> pour conserver l\'accès.';
+            noteEl.innerHTML = '🆓 Disponible pendant votre essai. Abonnez-vous pour conserver l\'accès.';
         } else {
-            noteEl.innerHTML = '🔒 Réservé au plan <strong>Business (199 DH/mois)</strong>';
+            noteEl.innerHTML = '🔒 Réservé aux abonnés (à partir de 99 DH/mois)';
         }
     }
 }
@@ -8953,21 +8953,21 @@ function exportData() {
 }
 
 // ============================================
-// EXPORT COMPTABLE (Business uniquement)
+// EXPORT COMPTABLE (Tous tiers payants)
 // ============================================
 function isBusinessTier() {
-    const info = License.get();
-    return info.type === 'business' && info.status === 'active' && !License.isExpired();
+    // Renommée mais conservée pour compat. Retourne true pour tout tier payant actif.
+    return isUserLicensed();
 }
 
 function exportAccounting(format = 'csv') {
-    // Vérification tier Business
+    // Vérification accès
     const info = License.get();
     
     // Pendant période d'essai active : permettre l'export pour tester
     const isTrialActive = info.type === 'trial' && !License.isExpired();
     
-    if (!isBusinessTier() && !isTrialActive) {
+    if (!isUserLicensed() && !isTrialActive) {
         showToast('🔒 L\'export comptable est réservé aux comptes Business', 'error');
         if (confirm('Cette fonctionnalité est disponible avec le plan Business (199 DH/mois).\n\nVoulez-vous voir les options d\'abonnement ?')) {
             navTo('license');
@@ -9618,45 +9618,63 @@ async function purchaseLicense(tier) {
     }
     
     // ═════════════════════════════════════════════════
+    // CONFIGURATION CENTRALE DES TIERS
+    // ═════════════════════════════════════════════════
+    const TIER_CONFIG = {
+        monthly:    { price: 99,  label: '⭐ Mensuel',    period: 'mois' },
+        semestrial: { price: 449, label: '🔥 Semestriel', period: '6 mois' },
+        annual:     { price: 799, label: '🏆 Annuel',     period: 'an' },
+        // Legacy : non vendus mais gérés pour upgrades anciens comptes
+        lifetime:   { price: 0,   label: '🎁 Founder à vie', period: 'à vie' },
+        business:   { price: 199, label: '👔 Business',  period: 'mois' }
+    };
+    
+    const config = TIER_CONFIG[tier];
+    if (!config) {
+        showToast('Type d\'abonnement inconnu', 'error');
+        console.error('purchaseLicense: tier inconnu', tier);
+        return;
+    }
+    
+    // ═════════════════════════════════════════════════
     // PROTECTION : Empêcher achat si déjà licencié
     // ═════════════════════════════════════════════════
     const currentLicense = License.get();
     
     if (currentLicense.type === 'lifetime') {
-        showToast('Vous avez déjà une licence Lifetime à vie ! ✨', 'success');
+        showToast('Vous avez déjà un accès à vie Founder ✨', 'success');
         return;
     }
     
-    if ((currentLicense.type === 'monthly' || currentLicense.type === 'business') && 
+    const PAID_TIERS = ['monthly', 'semestrial', 'annual', 'business'];
+    if (PAID_TIERS.includes(currentLicense.type) && 
         currentLicense.status === 'active' && !License.isExpired()) {
-        // Abonnement actif → autoriser SEULEMENT l'upgrade vers Lifetime
-        if (tier !== 'lifetime') {
-            showToast(`Vous avez déjà un abonnement ${currentLicense.type === 'business' ? 'Business' : 'Pro'} actif`, 'info');
+        // Abonnement actif → autoriser uniquement upgrade vers tier supérieur
+        const tierOrder = { monthly: 1, semestrial: 2, annual: 3, business: 1 };
+        const currentRank = tierOrder[currentLicense.type] || 0;
+        const newRank = tierOrder[tier] || 0;
+        
+        if (newRank <= currentRank) {
+            showToast(`Vous avez déjà un abonnement actif (${TIER_CONFIG[currentLicense.type]?.label || currentLicense.type})`, 'info');
             return;
         }
-        // Sinon (tier === 'lifetime'), c'est un upgrade, on continue
+        // Sinon, c'est un upgrade légitime, on continue
     }
     // ═════════════════════════════════════════════════
     
-    let basePrice = { lifetime: 499, monthly: 99, business: 199 }[tier];
+    const basePrice = config.price;
     let finalPrice = basePrice;
     let promoLabel = '';
     
-    if (promo && promo.validFor.includes(tier)) {
+    if (promo && promo.validFor && promo.validFor.includes(tier)) {
         finalPrice = Math.round(basePrice * (1 - promo.discount / 100));
         promoLabel = ` (${promo.code} -${promo.discount}%)`;
     }
     
-    const tierLabels = {
-        lifetime: '🎁 Lifetime — Accès à vie',
-        monthly: '⭐ Pro Mensuel',
-        business: '👔 Business Mensuel'
-    };
-    
     // Confirmer la demande
     const confirmMsg = `📋 Confirmer votre demande d'abonnement\n\n` +
-        `Plan : ${tierLabels[tier]}${promoLabel}\n` +
-        `Prix : ${finalPrice} DH\n` +
+        `Plan : ${config.label}${promoLabel}\n` +
+        `Prix : ${finalPrice} DH / ${config.period}\n` +
         `Email : ${session.email}\n\n` +
         `En confirmant, vous envoyez une demande à FacturaPro. Notre équipe vous contactera dans les 24h pour finaliser le paiement et vous envoyer votre code d'activation.\n\n` +
         `Continuer ?`;
@@ -9694,8 +9712,8 @@ async function purchaseLicense(tier) {
     // Afficher les instructions de paiement
     const paymentMsg = requestSent ? 
         `✅ Demande envoyée avec succès !\n\n` +
-        `📋 Plan : ${tierLabels[tier]}\n` +
-        `💰 Montant : ${finalPrice} DH\n\n` +
+        `📋 Plan : ${config.label}\n` +
+        `💰 Montant : ${finalPrice} DH / ${config.period}\n\n` +
         `🚀 PROCHAINES ÉTAPES :\n\n` +
         `1️⃣ Effectuez votre paiement par :\n` +
         `   • Virement bancaire\n` +
@@ -9714,7 +9732,7 @@ async function purchaseLicense(tier) {
         `📱 WhatsApp : +212 6XX XX XX XX\n` +
         `📧 Email : contact@facturapro.ma\n\n` +
         `Précisez :\n` +
-        `• Plan : ${tierLabels[tier]}\n` +
+        `• Plan : ${config.label}\n` +
         `• Email : ${session.email}\n` +
         `• Montant : ${finalPrice} DH`;
     
@@ -10431,10 +10449,7 @@ function generatePDF(id, type) {
     pdf.rect(0, 38, 210, 1.5, 'F');
     
     // Logo (only for licensed users with logo uploaded)
-    const logoCheckLicense = License.get();
-    const isLicensedForLogo = (logoCheckLicense.type === 'lifetime') || 
-                              ((logoCheckLicense.type === 'monthly' || logoCheckLicense.type === 'business') && 
-                               logoCheckLicense.status === 'active' && !License.isExpired());
+    const isLicensedForLogo = isUserLicensed();
     let companyTextX = 15; // Position du texte (déplacé si logo)
     
     if (company.logo && isLicensedForLogo) {
@@ -10689,16 +10704,16 @@ function generatePDF(id, type) {
         if (company.swift) bankInfo.push(`SWIFT : ${company.swift}`);
         pdf.text(bankInfo.join('   ·   '), 15, footerY + 11);
         
-        pdf.setTextColor(...grayDark);
-        pdf.setFontSize(7);
-        pdf.text('Document généré par FacturaPro · facturapro.ma', 105, footerY + 17, { align: 'center' });
+        // "Document généré par FacturaPro" UNIQUEMENT pour trial (pas pour payants)
+        if (!isUserLicensed()) {
+            pdf.setTextColor(...grayDark);
+            pdf.setFontSize(7);
+            pdf.text('Document généré par FacturaPro · facturapro.ma', 105, footerY + 17, { align: 'center' });
+        }
     }
     
     // Add watermark for non-licensed users (trial, expired, etc.)
-    const licenseInfo = License.get();
-    const isLicensed = (licenseInfo.type === 'lifetime') || 
-                       ((licenseInfo.type === 'monthly' || licenseInfo.type === 'business') && 
-                        licenseInfo.status === 'active' && !License.isExpired());
+    const isLicensed = isUserLicensed();
     
     if (!isLicensed) {
         // Diagonal watermark across page (plus discret)
