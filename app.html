@@ -906,6 +906,26 @@
             .form-row { grid-template-columns: 1fr; }
         }
 
+
+        /* Barre de navigation mobile (bas d'écran) */
+        .bottom-nav { display: none; }
+        @media (max-width: 900px) {
+            .bottom-nav {
+                display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 150;
+                background: var(--surface, #fff); border-top: 1px solid var(--border, #e5e2da);
+                padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+                box-shadow: 0 -4px 16px rgba(27, 58, 107, 0.08);
+            }
+            .bottom-nav button {
+                flex: 1; background: none; border: none; display: flex; flex-direction: column;
+                align-items: center; gap: 2px; padding: 6px 2px; font-size: 11px; font-weight: 600;
+                color: var(--ink-mute, #777); cursor: pointer; font-family: inherit;
+            }
+            .bottom-nav button .bn-icon { font-size: 20px; line-height: 1; }
+            .bottom-nav button.active { color: var(--primary, #1b3a6b); }
+            .main { padding-bottom: 84px; }
+        }
+
         .mobile-menu-btn {
             display: none;
             background: var(--primary);
@@ -2951,6 +2971,15 @@
     </aside>
 
     <!-- MAIN -->
+    <!-- Navigation mobile -->
+    <nav class="bottom-nav" id="bottomNav" aria-label="Navigation principale">
+        <button data-bn="dashboard" onclick="navTo('dashboard')"><span class="bn-icon">📊</span>Accueil</button>
+        <button data-bn="invoices" onclick="navTo('invoices')"><span class="bn-icon">📄</span>Factures</button>
+        <button data-bn="clients" onclick="navTo('clients')"><span class="bn-icon">👥</span>Clients</button>
+        <button data-bn="reminders" onclick="navTo('reminders')"><span class="bn-icon">🔔</span>Relances</button>
+        <button data-bn="more" onclick="toggleSidebar()"><span class="bn-icon">☰</span>Plus</button>
+    </nav>
+
     <main class="main">
         <!-- Trial Banner -->
         <div id="trialBanner" class="trial-banner calm" style="display: none;">
@@ -6367,6 +6396,7 @@ function navTo(page) {
     
     // Close mobile sidebar
     document.getElementById('sidebar').classList.remove('open');
+    document.querySelectorAll('#bottomNav button').forEach(b => b.classList.toggle('active', b.dataset.bn === page));
     window.scrollTo(0, 0);
 }
 
