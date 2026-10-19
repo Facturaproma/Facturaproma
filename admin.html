@@ -853,7 +853,7 @@
                             <label>Type de licence</label>
                             <select id="codeType">
                                 <option value="lifetime">🎁 Lifetime (paiement unique 499 DH)</option>
-                                <option value="monthly">📅 Pro mensuel (99 DH/mois)</option>
+                                <option value="monthly">📅 Mensuel (49 DH/mois)</option>
                                 <option value="business">🏢 Business (199 DH/mois)</option>
                                 <option value="discount">💰 Code promo (-X%)</option>
                             </select>
@@ -1161,7 +1161,7 @@
                                 <th style="min-width: 220px;">Fonctionnalité</th>
                                 <th style="text-align: center;">🆓 Essai<br><small style="font-weight: 400; color: var(--ink-mute);">14 jours</small></th>
                                 <th style="text-align: center;">🎁 Lifetime<br><small style="font-weight: 400; color: var(--accent);">499 DH</small></th>
-                                <th style="text-align: center;">⭐ Pro<br><small style="font-weight: 400; color: var(--ink-mute);">99 DH/mois</small></th>
+                                <th style="text-align: center;">⭐ Pro<br><small style="font-weight: 400; color: var(--ink-mute);">49 DH/mois</small></th>
                                 <th style="text-align: center;">👔 Business<br><small style="font-weight: 400; color: var(--ink-mute);">199 DH/mois</small></th>
                             </tr>
                         </thead>
@@ -1275,7 +1275,7 @@
                             </p>
                         </div>
                         <div style="background: var(--surface-soft); padding: 16px; border-radius: 10px; border-left: 4px solid var(--primary);">
-                            <h4 style="font-family: 'Crimson Pro', serif; margin-bottom: 8px;">⭐ Pro (99 DH/mois)</h4>
+                            <h4 style="font-family: 'Crimson Pro', serif; margin-bottom: 8px;">⭐ Mensuel (49 DH/mois)</h4>
                             <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.6;">
                                 Revenus récurrents stables. Cible : AE actifs avec gros volume. <strong>Rentable dès la 6ème mois</strong> vs Lifetime.
                             </p>
@@ -2008,7 +2008,7 @@
             <label>Type de licence</label>
             <select id="activateType">
                 <option value="lifetime">Lifetime (499 DH)</option>
-                <option value="monthly">Pro mensuel (99 DH/mois)</option>
+                <option value="monthly">Mensuel (49 DH/mois)</option>
                 <option value="business">Business (199 DH/mois)</option>
             </select>
         </div>
@@ -2722,7 +2722,7 @@ async function reopenRequest(requestId) {
 function contactByWhatsApp(email, tier, price) {
     const tierLabels = {
         lifetime: 'Lifetime (499 DH)',
-        monthly: 'Pro Mensuel (99 DH/mois)',
+        monthly: 'Mensuel (49 DH/mois)',
         business: 'Business Mensuel (199 DH/mois)'
     };
     

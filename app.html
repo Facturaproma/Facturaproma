@@ -2591,40 +2591,26 @@
         </div>
 
         <div class="license-pricing-grid">
-            <div class="license-tier" onclick="selectPlan('starter')">
-                <h3>Starter</h3>
+            <div class="license-tier" onclick="selectPlan('monthly')">
+                <h3>Mensuel</h3>
                 <div class="tier-price">49<small> DH/mois</small></div>
                 <ul class="tier-features">
-                    <li>Factures illimitées</li>
-                    <li>Devis illimités</li>
-                    <li>50 clients max</li>
-                    <li>Cloud sync</li>
+                    <li>Factures et devis illimités</li>
+                    <li>Cloud sync multi-appareils</li>
+                    <li>Sans engagement</li>
                 </ul>
                 <button class="btn btn-secondary" style="width: 100%;">Choisir</button>
             </div>
 
-            <div class="license-tier featured" onclick="selectPlan('lifetime')">
-                <h3>Lifetime ⭐</h3>
-                <div class="tier-price">499<small> DH une fois</small></div>
+            <div class="license-tier featured" onclick="selectPlan('annual')">
+                <h3>Annuel ⭐</h3>
+                <div class="tier-price">449<small> DH/an</small></div>
                 <ul class="tier-features">
-                    <li>Tout illimité À VIE</li>
-                    <li>Toutes les mises à jour</li>
-                    <li>Support prioritaire</li>
-                    <li>Aucun abonnement</li>
+                    <li>Tout illimité 12 mois</li>
+                    <li>~37 DH/mois</li>
+                    <li>Mises à jour incluses</li>
                 </ul>
-                <button class="btn btn-primary" style="width: 100%;">Acheter</button>
-            </div>
-
-            <div class="license-tier" onclick="selectPlan('pro')">
-                <h3>Pro</h3>
-                <div class="tier-price">99<small> DH/mois</small></div>
-                <ul class="tier-features">
-                    <li>Tout illimité</li>
-                    <li>Multi-utilisateurs (2)</li>
-                    <li>Modules avancés</li>
-                    <li>Support prioritaire</li>
-                </ul>
-                <button class="btn btn-secondary" style="width: 100%;">Choisir</button>
+                <button class="btn btn-primary" style="width: 100%;">Choisir</button>
             </div>
         </div>
 
@@ -4114,7 +4100,7 @@
                     <h3>⭐ Mensuel</h3>
                     <div class="tier-tagline">Sans engagement</div>
                     <div class="tier-price">
-                        <span id="monthlyPrice">99</span>
+                        <span id="monthlyPrice">49</span>
                         <span class="tier-price-period"> DH/mois</span>
                     </div>
                     <div class="savings-badge" style="background: rgba(232, 163, 61, 0.1); color: #B5821F;">
@@ -4138,13 +4124,13 @@
                     <h3>🏆 Annuel</h3>
                     <div class="tier-tagline">Le meilleur rapport qualité/prix</div>
                     <div class="tier-price">
-                        <span class="tier-price-old" id="annualOldPrice">1 188 DH</span>
-                        <span id="annualPrice">799</span>
+                        <span class="tier-price-old" id="annualOldPrice">588 DH</span>
+                        <span id="annualPrice">449</span>
                         <span class="tier-price-period"> DH/an</span>
                     </div>
-                    <div class="savings-badge">💰 Économisez <span id="annualSavings">389</span> DH</div>
+                    <div class="savings-badge">💰 Économisez <span id="annualSavings">139</span> DH</div>
                     <div style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">
-                        Soit <strong style="color: var(--primary);">~67 DH/mois</strong>
+                        Soit <strong style="color: var(--primary);">~37 DH/mois</strong>
                     </div>
                     <ul>
                         <li>Tout illimité pendant 12 mois</li>
@@ -4159,8 +4145,8 @@
                     </button>
                 </div>
 
-                <!-- Semestriel -->
-                <div class="pricing-tier">
+                <!-- Semestriel (non vendu, masqué) -->
+                <div class="pricing-tier" style="display:none;">
                     <h3>🔥 Semestriel</h3>
                     <div class="tier-tagline">Engagement moyen</div>
                     <div class="tier-price">
@@ -4190,7 +4176,7 @@
             <!-- Promo code -->
             <div class="promo-section" id="sectionPromoCode">
                 <h4>🎁 Vous avez un code promo ?</h4>
-                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Codes de lancement disponibles : <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">LANCEMENT2026</code> · <code style="background: var(--surface-soft); padding: 2px 6px; border-radius: 4px; font-size: 11px;">WELCOME10</code></p>
+                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Saisissez votre code (offre fondateurs, partenaire comptable…)</p>
                 <div class="promo-input-group">
                     <input type="text" id="promoCode" placeholder="ENTREZ VOTRE CODE">
                     <button class="btn btn-primary" onclick="applyPromoCode()">Appliquer</button>
@@ -8935,7 +8921,7 @@ function updateLogoSection() {
         } else if (info.type === 'trial' && !License.isExpired()) {
             noteEl.innerHTML = '🆓 Disponible pendant votre essai. Abonnez-vous pour conserver l\'accès.';
         } else {
-            noteEl.innerHTML = '🔒 Réservé aux abonnés (à partir de 99 DH/mois)';
+            noteEl.innerHTML = '🔒 Réservé aux abonnés (à partir de 49 DH/mois)';
         }
     }
 }
@@ -9266,11 +9252,9 @@ const TRIAL_DURATION_DAYS = 14;
 // Codes promos disponibles
 // Note : tier 'lifetime' réservé aux Founders bêta. Promos publiques sur tiers payants.
 const PROMO_CODES = {
-    'LANCEMENT2026': { discount: 30, label: 'Promo lancement -30%', validFor: ['annual', 'semestrial'] },
-    'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['annual', 'semestrial', 'monthly'] },
-    'WELCOME10': { discount: 10, label: 'Bienvenue -10%', validFor: ['annual', 'semestrial', 'monthly'] }
-    // FOUNDERS retiré : était lié à Lifetime, n'a plus de sens.
-    // Programme Founders géré directement par l'admin (10 codes gratuits manuels).
+    // Offre fondateurs : 449 DH -> 299 DH (annuel uniquement), limitée à 20 clients (suivi manuel par l'admin)
+    'FONDATEUR': { discount: 33.4, label: 'Offre fondateurs 299 DH/an', validFor: ['annual'] },
+    'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['annual', 'monthly'] }
 };
 
 const License = {
@@ -9671,6 +9655,8 @@ function renderLicensePage() {
     }
 }
 
+const TIER_CONFIG_PUBLIC = { monthly: 49, annual: 449 };
+
 function applyPromoCode() {
     const code = document.getElementById('promoCode').value.trim().toUpperCase();
     const result = document.getElementById('promoResult');
@@ -9690,16 +9676,18 @@ function applyPromoCode() {
     
     // Apply discount visually
     result.style.color = 'var(--success)';
-    result.textContent = `✓ ${promo.label} appliqué ! Réduction de ${promo.discount}% sur le prix.`;
+    result.textContent = `✓ ${promo.label} appliqué !`;
     
-    // Update displayed prices
-    if (promo.validFor.includes('lifetime')) {
-        const originalPrice = 499;
-        const discountedPrice = Math.round(originalPrice * (1 - promo.discount / 100));
-        document.getElementById('lifetimePrice').textContent = discountedPrice;
-        document.getElementById('lifetimeOldPrice').textContent = originalPrice + ' DH';
-        document.getElementById('lifetimeSavings').textContent = (1499 - discountedPrice).toLocaleString('fr-FR');
-    }
+    // Mise à jour des prix affichés (annuel / mensuel selon le code)
+    const applyTo = (tier, priceId, oldId) => {
+        if (!promo.validFor.includes(tier)) return;
+        const original = TIER_CONFIG_PUBLIC[tier];
+        const discounted = Math.round(original * (1 - promo.discount / 100));
+        const p = document.getElementById(priceId); if (p) p.textContent = discounted;
+        const o = document.getElementById(oldId); if (o) o.textContent = original + ' DH';
+    };
+    applyTo('annual', 'annualPrice', 'annualOldPrice');
+    applyTo('monthly', 'monthlyPrice', null);
     
     // Save active promo
     Storage.set('activePromo', { code, ...promo });
@@ -9750,9 +9738,9 @@ async function purchaseLicense(tier) {
     // CONFIGURATION CENTRALE DES TIERS
     // ═════════════════════════════════════════════════
     const TIER_CONFIG = {
-        monthly:    { price: 99,  label: '⭐ Mensuel',    period: 'mois' },
-        semestrial: { price: 449, label: '🔥 Semestriel', period: '6 mois' },
-        annual:     { price: 799, label: '🏆 Annuel',     period: 'an' },
+        monthly:    { price: 49,  label: '⭐ Mensuel',    period: 'mois' },
+        semestrial: { price: 249, label: '🔥 Semestriel', period: '6 mois' },
+        annual:     { price: 449, label: '🏆 Annuel',     period: 'an' },
         // Legacy : non vendus mais gérés pour upgrades anciens comptes
         lifetime:   { price: 0,   label: '🎁 Founder à vie', period: 'à vie' },
         business:   { price: 199, label: '👔 Business',  period: 'mois' }
