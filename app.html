@@ -4581,7 +4581,7 @@
         <div class="alert" style="font-size: 13px;">
             <strong>📱 Instructions à donner</strong> :
             <ol style="margin: 8px 0 0 20px;">
-                <li>Allez sur <strong>facturapro.ma/app</strong></li>
+                <li>Allez sur <strong>facturaproma.github.io/Facturaproma/app.html</strong></li>
                 <li>Inscription avec votre email</li>
                 <li>Saisissez le code d'invitation lors de l'inscription</li>
             </ol>
@@ -8681,7 +8681,7 @@ function copyInvitationDetails() {
         `• Email : ${pendingInviteData.email}\n` +
         `• Code d'invitation : ${pendingInviteData.code}\n\n` +
         `🚀 Comment vous inscrire :\n` +
-        `1. Allez sur facturapro.ma/app\n` +
+        `1. Allez sur facturaproma.github.io/Facturaproma/app.html\n` +
         `2. Créez un compte avec votre email\n` +
         `3. Saisissez le code d'invitation lors de l'inscription\n\n` +
         `Bienvenue ! 👋`;
@@ -8704,7 +8704,7 @@ function sendInvitationByWhatsApp() {
         `• Email : ${pendingInviteData.email}\n` +
         `• Code d'invitation : ${pendingInviteData.code}\n\n` +
         `🚀 Comment vous inscrire :\n` +
-        `1. Allez sur facturapro.ma/app\n` +
+        `1. Allez sur facturaproma.github.io/Facturaproma/app.html\n` +
         `2. Créez un compte avec votre email\n` +
         `3. Saisissez le code d'invitation lors de l'inscription\n\n` +
         `Bienvenue ! 👋`;
@@ -10663,12 +10663,7 @@ function generatePDF(id, type) {
         if (company.swift) bankInfo.push(`SWIFT : ${company.swift}`);
         pdf.text(bankInfo.join('   ·   '), 15, footerY + 11);
         
-        // "Document généré par FacturaPro" UNIQUEMENT pour trial (pas pour payants)
-        if (!isUserLicensed()) {
-            pdf.setTextColor(...grayDark);
-            pdf.setFontSize(7);
-            pdf.text('Document généré par FacturaPro · facturapro.ma', 105, footerY + 17, { align: 'center' });
-        }
+        // Mention « généré par FacturaPro » : voir le pied de page filigrane (essai uniquement)
     }
     
     // Add watermark for non-licensed users (trial, expired, etc.)
@@ -10691,7 +10686,7 @@ function generatePDF(id, type) {
         pdf.setFontSize(8);
         pdf.setTextColor(180, 180, 180);
         pdf.setFont('helvetica', 'italic');
-        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturapro.ma', 105, 290, {
+        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 290, {
             align: 'center'
         });
     }
