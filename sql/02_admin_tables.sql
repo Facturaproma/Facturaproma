@@ -33,9 +33,9 @@ CREATE INDEX IF NOT EXISTS idx_admin_codes_status ON admin_codes(status);
 CREATE INDEX IF NOT EXISTS idx_admin_payments_email ON admin_payments(client_email);
 CREATE INDEX IF NOT EXISTS idx_admin_payments_date ON admin_payments(payment_date);
 
--- ⚠️ RLS désactivé pour ces tables admin
+-- RLS activé : policies dans sql/06_securite_rls.sql
 -- (accessibles uniquement via la page admin protégée par mot de passe)
-ALTER TABLE admin_codes DISABLE ROW LEVEL SECURITY;
-ALTER TABLE admin_payments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_payments ENABLE ROW LEVEL SECURITY;
 
 SELECT '✓ admin_codes & admin_payments créées' AS message;

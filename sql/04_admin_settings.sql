@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
 );
 
 -- RLS désactivé (accès via mot de passe admin)
-ALTER TABLE admin_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_settings ENABLE ROW LEVEL SECURITY;
 
 SELECT '✓ admin_settings créée' AS message;
 

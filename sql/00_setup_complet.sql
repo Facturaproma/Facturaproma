@@ -68,8 +68,8 @@ CREATE INDEX IF NOT EXISTS idx_admin_codes_status ON admin_codes(status);
 CREATE INDEX IF NOT EXISTS idx_admin_payments_email ON admin_payments(client_email);
 CREATE INDEX IF NOT EXISTS idx_admin_payments_date ON admin_payments(payment_date);
 
-ALTER TABLE admin_codes DISABLE ROW LEVEL SECURITY;
-ALTER TABLE admin_payments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_payments ENABLE ROW LEVEL SECURITY;
 
 -- ═══════════════════════════════════════════
 -- 3. DEMANDES D'ABONNEMENT
@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_subscription_requests_status ON subscription_requ
 CREATE INDEX IF NOT EXISTS idx_subscription_requests_email ON subscription_requests(client_email);
 CREATE INDEX IF NOT EXISTS idx_subscription_requests_created ON subscription_requests(created_at DESC);
 
-ALTER TABLE subscription_requests DISABLE ROW LEVEL SECURITY;
+ALTER TABLE subscription_requests ENABLE ROW LEVEL SECURITY;
 
 -- ═══════════════════════════════════════════
 -- 4. PARAMÈTRES ADMIN (mot de passe)
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE admin_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_settings ENABLE ROW LEVEL SECURITY;
 
 -- ═══════════════════════════════════════════
 -- ✅ VÉRIFICATION FINALE
@@ -115,7 +115,7 @@ SELECT
     rowsecurity,
     CASE 
         WHEN tablename = 'user_data' AND rowsecurity = true THEN '✅ OK (sécurisé)'
-        WHEN tablename != 'user_data' AND rowsecurity = false THEN '✅ OK (admin)'
+        WHEN tablename != 'user_data' AND rowsecurity = true THEN '✅ OK (admin, voir 06)'
         ELSE '⚠️ À vérifier'
     END AS status
 FROM pg_tables 

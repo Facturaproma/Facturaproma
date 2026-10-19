@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_subscription_requests_status ON subscription_requ
 CREATE INDEX IF NOT EXISTS idx_subscription_requests_email ON subscription_requests(client_email);
 CREATE INDEX IF NOT EXISTS idx_subscription_requests_created ON subscription_requests(created_at DESC);
 
--- ⚠️ RLS désactivé (admin accède via mot de passe, clients via INSERT public)
-ALTER TABLE subscription_requests DISABLE ROW LEVEL SECURITY;
+-- RLS activé : policies dans sql/06_securite_rls.sql
+ALTER TABLE subscription_requests ENABLE ROW LEVEL SECURITY;
 
 SELECT '✓ subscription_requests créée' AS message;

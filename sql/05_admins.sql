@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS admins (
 CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
 CREATE INDEX IF NOT EXISTS idx_admins_is_master ON admins(is_master);
 
--- RLS désactivé (accès via mot de passe admin)
-ALTER TABLE admins DISABLE ROW LEVEL SECURITY;
+-- RLS activé (les policies sont dans sql/06_securite_rls.sql)
+ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
 
 -- Trigger pour updated_at
 CREATE OR REPLACE FUNCTION update_admin_updated_at()
@@ -39,10 +39,8 @@ SELECT '✓ Table admins créée avec succès' AS message;
 
 -- ============================================
 -- IMPORTANT :
--- Le compte Master sera créé automatiquement à la 
--- première connexion avec :
---   Email : webnour@gmail.com
---   Password : Saadnawal79@@££ (mot de passe par défaut)
---
--- Changez-le immédiatement après votre première connexion !
+-- L'authentification admin passe désormais par Supabase Auth
+-- (voir sql/06_securite_rls.sql). Aucun mot de passe n'est stocké
+-- ici. Le Master est webnour@gmail.com : utilise le mot de passe
+-- de ton compte FacturaPro (réinitialisable par e-mail).
 -- ============================================
