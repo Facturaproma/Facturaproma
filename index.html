@@ -23,7 +23,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600&family=Manrope:wght@400;500;600;700;800&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1176,7 +1176,21 @@
             .nav-links .btn-ghost { display: none; }
             .nav-links .btn-accent { padding: 10px 14px; font-size: 13px; white-space: nowrap; }
             .nav-name { font-size: 18px; }
+            .nav-links .btn-accent { font-size: 12px; padding: 8px 10px; }
+            .lang-btn { padding: 6px 10px; font-size: 13px; margin: 0 6px 0 0; }
+            [dir="rtl"] .lang-btn { margin: 0 0 0 6px; }
+            .nav-inner { gap: 8px; }
         }
+
+        /* Bascule de langue + arabe (RTL) */
+        .lang-btn { background: none; border: 1px solid var(--border, #ddd); border-radius: 100px; padding: 8px 14px; font-weight: 700; cursor: pointer; margin-right: 8px; color: var(--ink, #222); font-family: inherit; }
+        [dir="rtl"] .lang-btn { margin-right: 0; margin-left: 8px; }
+        [dir="rtl"] body, [dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3, [dir="rtl"] h4, [dir="rtl"] .nav-name,
+        [dir="rtl"] .btn, [dir="rtl"] p, [dir="rtl"] li, [dir="rtl"] a, [dir="rtl"] span, [dir="rtl"] .alt-price, [dir="rtl"] .stat-number { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; }
+        [dir="rtl"] h1 em, [dir="rtl"] h2 em { font-style: normal; }
+        [dir="rtl"] .hero-grid, [dir="rtl"] .faq-question { text-align: right; }
+        [dir="rtl"] .alt-tier li::before { margin-left: 8px; margin-right: 0; }
+        [dir="rtl"] .hero-visual { direction: ltr; }
     </style>
 </head>
 <body>
@@ -1190,6 +1204,7 @@
                 <div class="nav-name">FacturaPro</div>
             </a>
             <div class="nav-links">
+                <button id="langBtn" class="lang-btn" onclick="toggleLang()" aria-label="Changer de langue">العربية</button>
                 <a href="#fonctionnalites">Fonctionnalités</a>
                 <a href="#tarifs">Tarifs</a>
                 <a href="#faq">FAQ</a>
@@ -1207,7 +1222,7 @@
             <div>
                 <div class="hero-eyebrow">
                     <span style="width: 8px; height: 8px; background: var(--accent); border-radius: 50%;"></span>
-                    🇲🇦 Pensé pour la facturation au Maroc
+                    <span>🇲🇦 Pensé pour la facturation au Maroc</span>
                 </div>
                 <h1>La facturation<br>marocaine, <em>enfin simple</em>.</h1>
                 <p class="hero-tagline">
@@ -1231,7 +1246,7 @@
                 </div>
             </div>
             
-            <div class="hero-visual">
+            <div class="hero-visual" dir="ltr">
                 <div class="floating-chip floating-chip-1">
                     <span style="font-size: 18px;">✓</span>
                     <span>ICE · IF · RC</span>
@@ -1385,7 +1400,7 @@
                 <h4>🏆 Annuel</h4>
                 <div class="alt-price">
                     <span style="text-decoration: line-through; color: var(--ink-mute); font-size: 16px; font-weight: 400;">588 DH</span><br>
-                    449 DH<small>/an</small>
+                    <span>449 DH<small>/an</small></span>
                 </div>
                 <p style="font-size: 13px; color: var(--primary); font-weight: 700; margin-bottom: 4px;">💰 Économisez 139 DH</p>
                 <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit <strong>~37 DH/mois</strong></p>
@@ -1469,7 +1484,7 @@
                 </div>
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
-                        FacturaPro a été conçu <strong>spécifiquement</strong> pour le statut AE marocain. Vous trouverez : exonération TVA automatique, calcul de votre cotisation libératoire (1% services / 0,5% commerce — couvre CNSS et IR), suivi du plafond annuel (plafonds à vérifier sur le portail officiel de l'auto-entrepreneur), et alertes automatiques.
+                        FacturaPro a été conçu <strong>spécifiquement</strong> pour le statut AE marocain. Vous trouverez : exonération TVA automatique, calcul de votre cotisation (1% services / 0,5% commerce, taux à vérifier), suivi du plafond annuel (plafonds à vérifier sur le portail officiel de l'auto-entrepreneur), et alertes automatiques.
                     </div>
                 </div>
             </div>
@@ -1497,7 +1512,7 @@
                 </div>
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
-                        <strong>Oui, 14 jours d'essai gratuit</strong>, sans carte bancaire. Vous testez toutes les fonctionnalités. Si ça vous plaît, vous prenez un abonnement. Sinon, votre compte reste accessible en mode lecture seule.
+                        <strong>Oui, 14 jours d'essai gratuit</strong>, sans carte bancaire. Vous testez toutes les fonctionnalités. Si ça vous plaît, vous prenez un abonnement. Sinon, vos données restent en sécurité.
                     </div>
                 </div>
             </div>
@@ -1531,48 +1546,22 @@
         <div class="footer-grid">
             <div>
                 <div class="footer-brand-name">FacturaPro</div>
-                <p class="footer-tagline">
-                    Le logiciel de facturation 100% marocain pour entrepreneurs, freelances et petites entreprises.
-                </p>
-                <div style="display: flex; gap: 12px; margin-top: 16px;">
-                    <a href="#" style="color: rgba(255,255,255,0.6); font-size: 18px;">𝕏</a>
-                    <a href="#" style="color: rgba(255,255,255,0.6); font-size: 18px;">in</a>
-                    <a href="#" style="color: rgba(255,255,255,0.6); font-size: 18px;">f</a>
-                </div>
+                <p class="footer-tagline">Le logiciel de facturation pensé pour les entrepreneurs, freelances et petites entreprises du Maroc.</p>
             </div>
-            
             <div class="footer-col">
                 <h4>Produit</h4>
                 <a href="#fonctionnalites">Fonctionnalités</a>
                 <a href="#tarifs">Tarifs</a>
-                <a href="app.html">Démo</a>
                 <a href="#faq">FAQ</a>
             </div>
-            
-            <div class="footer-col">
-                <h4>Ressources</h4>
-                <a href="#">Guide AE Maroc</a>
-                <a href="#">Calcul CNSS</a>
-                <a href="#">Modèles factures</a>
-                <a href="#">Blog</a>
-            </div>
-            
             <div class="footer-col">
                 <h4>Contact</h4>
                 <a href="mailto:hello@facturapro.ma">hello@facturapro.ma</a>
                 <a href="https://wa.me/212600000000">WhatsApp</a>
-                <a href="#">Programme partenaire</a>
-                <a href="#">Support</a>
             </div>
         </div>
-        
         <div class="footer-bottom">
             <div>© 2026 FacturaPro. Made with ❤️ in 🇲🇦</div>
-            <div>
-                <a href="#" style="color: inherit; margin-right: 16px;">Mentions légales</a>
-                <a href="#" style="color: inherit; margin-right: 16px;">CGU</a>
-                <a href="#" style="color: inherit;">Confidentialité</a>
-            </div>
         </div>
     </div>
 </footer>
@@ -1599,5 +1588,125 @@
     });
 </script>
 
+
+<script>
+/* ===== Bascule français / arabe (traduction par texte exact) ===== */
+const AR_DICT = {
+"Fonctionnalités": "المميزات",
+"Tarifs": "الأسعار",
+"FAQ": "أسئلة شائعة",
+"Se connecter": "تسجيل الدخول",
+"🚀 Essai Gratuit 14 jours": "🚀 جرّب مجاناً",
+"🇲🇦 Pensé pour la facturation au Maroc": "🇲🇦 مصمّم للفوترة في المغرب",
+"La facturation<br>marocaine, <em>enfin simple</em>.": "الفوترة المغربية،<br><em>أخيراً بكل بساطة</em>.",
+"Le logiciel pensé par et pour les <strong>auto-entrepreneurs</strong>, <strong>freelances</strong> et <strong>SARL</strong> du Maroc. ICE, IF, RC, CNSS, TVA — tout est déjà intégré.": "برنامج مصمّم من أجل <strong>المقاولين الذاتيين</strong> و<strong>المستقلين</strong> و<strong>الشركات (SARL)</strong> في المغرب. ICE وIF وRC وCNSS والضريبة على القيمة المضافة — كل شيء مدمج.",
+"Essayer gratuitement →": "جرّب مجاناً ←",
+"Voir les tarifs": "شاهد الأسعار",
+"✓ 14 jours d'essai gratuit · sans carte bancaire": "✓ 14 يوماً تجريبياً مجاناً · بدون بطاقة بنكية",
+"✓ Nouveau produit : vos retours façonnent la suite": "✓ منتج جديد: ملاحظاتكم هي التي تحدد ما سيأتي",
+"PDF en 1 clic": "PDF بنقرة واحدة",
+"Ce que vous obtenez dès le premier jour": "ما ستحصل عليه منذ اليوم الأول",
+"d'essai gratuit": "تجربة مجانية",
+"factures et devis pros": "فواتير وعروض أسعار احترافية",
+"mentions légales intégrées": "البيانات القانونية مدمجة",
+"envoi par WhatsApp": "إرسال عبر واتساب",
+"FONCTIONNALITÉS": "المميزات",
+"Tout ce qu'il faut, <em>rien de superflu</em>": "كل ما تحتاجه، <em>بدون زيادة</em>",
+"Conçu pour les auto-entrepreneurs, freelances et SARL du Maroc.": "مصمّم للمقاولين الذاتيين والمستقلين والشركات في المغرب.",
+"Mentions légales": "البيانات القانونية",
+"ICE, IF, RC et numérotation séquentielle intégrés, avec un contrôle avant envoi.": "ICE وIF وRC وترقيم متسلسل مدمجة، مع مراجعة قبل الإرسال.",
+"Envoi WhatsApp": "إرسال عبر واتساب",
+"Facture ou devis envoyé au client en un clic, message prêt à partir.": "أرسل الفاتورة أو عرض السعر للزبون بنقرة واحدة، والرسالة جاهزة.",
+"Devis en facture": "من عرض السعر إلى فاتورة",
+"Convertissez un devis accepté en facture en 1 clic.": "حوّل عرض السعر المقبول إلى فاتورة بنقرة واحدة.",
+"CNSS et TVA": "CNSS والضريبة",
+"Calcul de la cotisation et de tous les taux de TVA marocains.": "حساب الاشتراك وجميع نسب الضريبة على القيمة المضافة في المغرب.",
+"Relances": "التذكيرات",
+"Les factures en retard remontent seules, avec un message de relance prêt.": "الفواتير المتأخرة تظهر تلقائياً، مع رسالة تذكير جاهزة.",
+"PDF professionnel": "PDF احترافي",
+"Prêt à envoyer ou imprimer, avec vos coordonnées bancaires.": "جاهز للإرسال أو الطباعة، مع بياناتك البنكية.",
+"TARIFS": "الأسعار",
+"Choisissez votre <em>formule</em>": "اختر <em>عرضك</em>",
+"Un seul produit, tout inclus. Deux durées au choix, plus une offre fondateurs.": "منتج واحد وكل شيء مشمول. مدتان للاختيار، إضافة إلى عرض المؤسسين.",
+"⭐ Mensuel": "⭐ شهري",
+"49 DH<small>/mois</small>": "49 درهم<small>/شهر</small>",
+"Sans engagement · Annulable": "بدون التزام · يمكن الإلغاء",
+"Tout illimité": "كل شيء بلا حدود",
+"Sync multi-appareils": "مزامنة بين الأجهزة",
+"Support email": "دعم عبر البريد الإلكتروني",
+"Démarrer": "ابدأ",
+"🏆 Best Value": "🏆 أفضل قيمة",
+"🏆 Annuel": "🏆 سنوي",
+"449 DH<small>/an</small>": "449 درهم<small>/سنة</small>",
+"💰 Économisez 139 DH": "💰 وفّر 139 درهماً",
+"Soit <strong>~37 DH/mois</strong>": "أي <strong>~37 درهم/شهر</strong>",
+"Tout illimité 12 mois": "كل شيء بلا حدود لمدة 12 شهراً",
+"Support prioritaire WhatsApp": "دعم ذو أولوية عبر واتساب",
+"🚀 Choisir Annuel": "🚀 اختر السنوي",
+"🎁 Fondateurs": "🎁 المؤسسون",
+"299 DH<small>/an</small>": "299 درهم<small>/سنة</small>",
+"20 places seulement": "20 مكاناً فقط",
+"Tarif bloqué tant que vous restez abonné": "السعر ثابت ما دمت مشتركاً",
+"Tout ce qu'inclut l'Annuel": "كل ما يشمله العرض السنوي",
+"Contact direct avec le créateur": "تواصل مباشر مع صاحب المشروع",
+"Je veux l'offre fondateurs": "أريد عرض المؤسسين",
+"Essayez 14 jours gratuitement": "جرّب 14 يوماً مجاناً",
+"Sans carte bancaire. Sans engagement. Annulable à tout moment.": "بدون بطاقة بنكية. بدون التزام. يمكنك الإلغاء في أي وقت.",
+"Commencer l'essai gratuit →": "ابدأ التجربة المجانية ←",
+"QUESTIONS": "أسئلة",
+"Vous vous demandez...": "عندك أسئلة؟",
+"Les réponses aux questions les plus fréquentes.": "أجوبة عن الأسئلة الأكثر تكراراً.",
+"Mes factures sont-elles vraiment conformes aux normes marocaines ?": "هل فواتيري مطابقة فعلاً للمعايير المغربية؟",
+"<strong>FacturaPro intègre les mentions habituelles selon votre statut</strong> : ICE, IF, RC, CNSS, Patente. Pour les Auto-Entrepreneurs, la mention \"TVA non applicable - Article 6 du CGI\" est ajoutée automatiquement. La numérotation est séquentielle et chronologique, pensée pour respecter le Code Général des Impôts. Les règles évoluent : vérifiez vos obligations auprès de la DGI ou de votre comptable.": "<strong>يضم FacturaPro البيانات المعتادة حسب وضعك</strong> : ICE وIF وRC وCNSS والباتانتا. بالنسبة للمقاول الذاتي، تُضاف تلقائياً عبارة «الضريبة على القيمة المضافة غير مطبقة - المادة 6 من المدونة العامة للضرائب». الترقيم متسلسل وزمني، ومصمّم لاحترام المدونة العامة للضرائب. القواعد تتغير: تحقق من التزاماتك لدى المديرية العامة للضرائب أو محاسبك.",
+"Mes données sont-elles en sécurité ?": "هل بياناتي في أمان؟",
+"Vos données sont stockées sur un cloud professionnel (Supabase), avec connexion HTTPS et authentification sécurisée. Nous vous conseillons d'exporter régulièrement vos données. Aucun tracker, aucune publicité, aucune revente. Vous pouvez exporter toutes vos données à tout moment au format CSV.": "بياناتك مخزّنة على سحابة احترافية (Supabase)، باتصال HTTPS ومصادقة آمنة. ننصحك بتصدير بياناتك بانتظام. لا تتبّع ولا إعلانات ولا بيع للبيانات. يمكنك تصدير كل بياناتك في أي وقت بصيغة CSV.",
+"Je suis Auto-Entrepreneur, est-ce adapté ?": "أنا مقاول ذاتي، هل هو مناسب لي؟",
+"FacturaPro a été conçu <strong>spécifiquement</strong> pour le statut AE marocain. Vous trouverez : exonération TVA automatique, calcul de votre cotisation (1% services / 0,5% commerce, taux à vérifier), suivi du plafond annuel (plafonds à vérifier sur le portail officiel de l'auto-entrepreneur), et alertes automatiques.": "تم تصميم FacturaPro <strong>خصيصاً</strong> لوضع المقاول الذاتي المغربي. ستجد: الإعفاء التلقائي من الضريبة على القيمة المضافة، حساب اشتراكك (1% للخدمات / 0,5% للتجارة، النسب تحتاج إلى تحقق)، تتبّع السقف السنوي (تحقق من السقوف في البوابة الرسمية للمقاول الذاتي)، وتنبيهات تلقائية.",
+"Comment effectuer le paiement ?": "كيف أؤدي الدفع؟",
+"Plusieurs options : <strong>virement bancaire</strong> (le plus simple au Maroc), la <strong>carte bancaire</strong> arrivera prochainement, et les <strong>espèces</strong> sont possibles sur rendez-vous. Une fois le paiement reçu, votre abonnement est activé sous 24h.": "عدة خيارات: <strong>التحويل البنكي</strong> (الأبسط في المغرب)، و<strong>البطاقة البنكية</strong> قريباً، و<strong>الدفع نقداً</strong> ممكن بموعد مسبق. بعد استلام الدفع، يُفعَّل اشتراكك خلال 24 ساعة.",
+"Puis-je essayer avant de payer ?": "هل يمكنني التجربة قبل الدفع؟",
+"<strong>Oui, 14 jours d'essai gratuit</strong>, sans carte bancaire. Vous testez toutes les fonctionnalités. Si ça vous plaît, vous prenez un abonnement. Sinon, vos données restent en sécurité.": "<strong>نعم، 14 يوماً تجريبياً مجانياً</strong> بدون بطاقة بنكية. تجرّب جميع المميزات. إذا أعجبك، تشترك. وإلا فبياناتك تبقى في أمان.",
+"Prêt à dire <em>au revoir à Excel</em> ?": "مستعد لتقول <em>وداعاً لإكسل</em>؟",
+"Créez votre première facture en quelques minutes. 14 jours d'essai gratuit, sans carte bancaire.": "أنشئ أول فاتورة لك في دقائق. 14 يوماً تجريبياً مجاناً، بدون بطاقة بنكية.",
+"Commencer maintenant — Gratuit →": "ابدأ الآن — مجاناً ←",
+"Pas de carte bancaire requise · Aucune installation": "لا حاجة لبطاقة بنكية · بدون تثبيت",
+"Le logiciel de facturation pensé pour les entrepreneurs, freelances et petites entreprises du Maroc.": "برنامج فوترة مصمّم للمقاولين والمستقلين والشركات الصغيرة في المغرب.",
+"Produit": "المنتج",
+"Contact": "اتصل بنا"
+};
+const LANG_KEY = 'fp_lang';
+function normHtml(h) { return h.replace(/\s+/g, ' ').trim(); }
+function applyLang(lang) {
+    const isAr = lang === 'ar';
+    document.documentElement.lang = isAr ? 'ar' : 'fr';
+    document.documentElement.dir = isAr ? 'rtl' : 'ltr';
+    document.querySelectorAll('body *').forEach(el => {
+        if (el.closest('.invoice-mockup') || ['SCRIPT', 'STYLE'].includes(el.tagName)) return;
+        if (!el.isConnected) return;
+        if (isAr) {
+            if (el.__fr !== undefined) return;
+            const key = normHtml(el.innerHTML);
+            if (Object.prototype.hasOwnProperty.call(AR_DICT, key)) {
+                el.__fr = el.innerHTML;
+                el.innerHTML = AR_DICT[key];
+            }
+        } else if (el.__fr !== undefined) {
+            el.innerHTML = el.__fr;
+            el.__fr = undefined;
+        }
+    });
+    const btn = document.getElementById('langBtn');
+    if (btn) btn.textContent = isAr ? 'Français' : 'العربية';
+    try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+}
+function toggleLang() {
+    applyLang(document.documentElement.dir === 'rtl' ? 'fr' : 'ar');
+}
+(function () {
+    let saved = null;
+    try { saved = localStorage.getItem(LANG_KEY); } catch (e) {}
+    if (saved === 'ar') applyLang('ar');
+})();
+</script>
 </body>
 </html>
