@@ -883,7 +883,7 @@
         /* Toast */
         .toast {
             position: fixed;
-            bottom: 24px;
+            bottom: 72px;
             right: 24px;
             background: var(--ink);
             color: white;
@@ -934,6 +934,13 @@
             .bottom-nav button .bn-icon { font-size: 20px; line-height: 1; }
             .bottom-nav button.active { color: var(--primary, #1b3a6b); }
             .main { padding-bottom: 84px; }
+        }
+
+        /* Éléments flottants : ne pas recouvrir la barre de navigation mobile */
+        @media (max-width: 900px) {
+            .sync-indicator { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); left: 12px; right: auto; padding: 5px 10px; font-size: 11px; z-index: 140; }
+            .toast { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; left: 12px; right: 12px; text-align: center; }
+            .pwa-install-banner { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); z-index: 140; }
         }
 
         .mobile-menu-btn {
