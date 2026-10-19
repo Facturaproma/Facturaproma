@@ -1164,6 +1164,19 @@
         @media (max-width: 800px) {
             .mobile-only { display: inline-flex; }
         }
+
+        /* Version mobile compacte */
+        @media (max-width: 700px) {
+            section { padding-top: 40px !important; padding-bottom: 40px !important; }
+            .features-grid { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+            .feature { padding: 14px !important; }
+            .feature p { font-size: 13px; }
+            .alt-pricing { gap: 14px !important; }
+            .social-proof { display: none; }
+            .nav-links .btn-ghost { display: none; }
+            .nav-links .btn-accent { padding: 10px 14px; font-size: 13px; white-space: nowrap; }
+            .nav-name { font-size: 18px; }
+        }
     </style>
 </head>
 <body>
@@ -1178,9 +1191,7 @@
             </a>
             <div class="nav-links">
                 <a href="#fonctionnalites">Fonctionnalités</a>
-                <a href="#comparaison">Comparaison</a>
                 <a href="#tarifs">Tarifs</a>
-                <a href="#temoignages">Nouveau</a>
                 <a href="#faq">FAQ</a>
                 <a href="app.html?mode=login" class="btn btn-ghost" style="margin-right: 8px;">Se connecter</a>
                 <a href="app.html?mode=signup" class="btn btn-accent" style="font-weight: 700; box-shadow: 0 4px 12px rgba(201, 169, 91, 0.4); animation: pulse-cta 2s ease-in-out infinite;">🚀 Essai Gratuit 14 jours</a>
@@ -1306,191 +1317,39 @@
     <div class="container">
         <div class="section-eyebrow">FONCTIONNALITÉS</div>
         <h2 class="section-title">Tout ce qu'il faut, <em>rien de superflu</em></h2>
-        <p class="section-subtitle">
-            Conçu pour les réalités marocaines : statuts, fiscalité, langues. 
-            Chaque détail compte.
-        </p>
+        <p class="section-subtitle">Conçu pour les auto-entrepreneurs, freelances et SARL du Maroc.</p>
         
         <div class="features-grid">
             <div class="feature">
                 <div class="feature-icon">📄</div>
-                <h3>Factures conformes</h3>
-                <p>ICE, IF, RC, CNSS, mention Article 6 du CGI pour AE, numérotation séquentielle. Tout y est, sans rien à apprendre.</p>
+                <h3>Mentions légales</h3>
+                <p>ICE, IF, RC et numérotation séquentielle intégrés, avec un contrôle avant envoi.</p>
             </div>
-            
+            <div class="feature">
+                <div class="feature-icon">💬</div>
+                <h3>Envoi WhatsApp</h3>
+                <p>Facture ou devis envoyé au client en un clic, message prêt à partir.</p>
+            </div>
             <div class="feature">
                 <div class="feature-icon">📋</div>
-                <h3>Devis convertibles</h3>
-                <p>Créez un devis professionnel, et convertissez-le en facture en 1 clic dès qu'il est accepté.</p>
+                <h3>Devis en facture</h3>
+                <p>Convertissez un devis accepté en facture en 1 clic.</p>
             </div>
-            
             <div class="feature">
                 <div class="feature-icon">🏥</div>
-                <h3>Cotisation CNSS auto</h3>
-                <p>1% services, 0,5% commerce. Calculé en temps réel selon votre CA. Échéancier mensuel inclus.</p>
+                <h3>CNSS et TVA</h3>
+                <p>Calcul de la cotisation et de tous les taux de TVA marocains.</p>
             </div>
-            
             <div class="feature">
-                <div class="feature-icon">💰</div>
-                <h3>Calcul TVA & IR</h3>
-                <p>0%, 7%, 10%, 14%, 20% — tous les taux marocains. IR libératoire AE et barème classique.</p>
+                <div class="feature-icon">🔔</div>
+                <h3>Relances</h3>
+                <p>Les factures en retard remontent seules, avec un message de relance prêt.</p>
             </div>
-            
-            <div class="feature">
-                <div class="feature-icon">👥</div>
-                <h3>Base clients complète</h3>
-                <p>ICE, IF, historique CA, recherche instantanée. Vos clients toujours à portée de main.</p>
-            </div>
-            
-            <div class="feature">
-                <div class="feature-icon">📦</div>
-                <h3>Catalogue produits</h3>
-                <p>Vos produits/services réutilisables avec prix HT, TVA et unité. Facturation 3x plus rapide.</p>
-            </div>
-            
-            <div class="feature">
-                <div class="feature-icon">📊</div>
-                <h3>Tableau de bord clair</h3>
-                <p>CA encaissé, en attente, projeté. Graphique 12 mois. Toutes vos métriques en un coup d'œil.</p>
-            </div>
-            
             <div class="feature">
                 <div class="feature-icon">📥</div>
-                <h3>Export PDF pro</h3>
-                <p>PDF haute qualité, prêts à envoyer ou imprimer. Coordonnées bancaires intégrées.</p>
+                <h3>PDF professionnel</h3>
+                <p>Prêt à envoyer ou imprimer, avec vos coordonnées bancaires.</p>
             </div>
-            
-            <div class="feature">
-                <div class="feature-icon">🔒</div>
-                <h3>Données privées</h3>
-                <p>Aucun tracker publicitaire, aucune revente de vos données.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ============ ROADMAP - Coming Soon ============ -->
-<section style="background: linear-gradient(135deg, var(--surface), var(--surface-soft)); padding: 80px 0;">
-    <div class="container">
-        <div class="section-eyebrow" style="color: var(--accent);">PROCHAINEMENT</div>
-        <h2 class="section-title">Encore plus de <em>fonctionnalités</em> à venir</h2>
-        <p class="section-subtitle">
-            Notre vision : devenir LA plateforme de gestion complète pour entreprises marocaines. 
-            Voici ce qui arrive dans les prochaines mises à jour (incluses dans votre abonnement 🎁).
-        </p>
-        
-        <div class="features" style="margin-top: 48px;">
-            <div class="feature" style="opacity: 0.85; border: 2px dashed var(--border);">
-                <div class="feature-icon">👥</div>
-                <h3>Gestion du personnel <span style="display: inline-block; background: var(--accent); color: var(--ink); font-size: 10px; padding: 2px 8px; border-radius: 100px; font-weight: 700; vertical-align: middle; margin-left: 4px;">À venir</span></h3>
-                <p>Gérez vos employés : contrats, statuts, départements, hiérarchie. Adapté au droit du travail marocain.</p>
-            </div>
-            
-            <div class="feature" style="opacity: 0.85; border: 2px dashed var(--border);">
-                <div class="feature-icon">💰</div>
-                <h3>Bulletins de paie <span style="display: inline-block; background: var(--accent); color: var(--ink); font-size: 10px; padding: 2px 8px; border-radius: 100px; font-weight: 700; vertical-align: middle; margin-left: 4px;">À venir</span></h3>
-                <p>Calcul automatique brut/net : IR, CNSS, AMO, charges patronales. Bulletins de paie à vérifier avec votre comptable.</p>
-            </div>
-            
-            <div class="feature" style="opacity: 0.85; border: 2px dashed var(--border);">
-                <div class="feature-icon">🤖</div>
-                <h3>IA Assistant <span style="display: inline-block; background: var(--accent); color: var(--ink); font-size: 10px; padding: 2px 8px; border-radius: 100px; font-weight: 700; vertical-align: middle; margin-left: 4px;">À venir</span></h3>
-                <p>Création de factures par photo (scan OCR), suggestions intelligentes, automatisations.</p>
-            </div>
-            
-            <div class="feature" style="opacity: 0.85; border: 2px dashed var(--border);">
-                <div class="feature-icon">🏦</div>
-                <h3>Connexion bancaire <span style="display: inline-block; background: var(--accent); color: var(--ink); font-size: 10px; padding: 2px 8px; border-radius: 100px; font-weight: 700; vertical-align: middle; margin-left: 4px;">À venir</span></h3>
-                <p>Synchronisation automatique avec votre banque. Rapprochement bancaire automatisé.</p>
-            </div>
-            
-            <div class="feature" style="opacity: 0.85; border: 2px dashed var(--border);">
-                <div class="feature-icon">📱</div>
-                <h3>Application mobile <span style="display: inline-block; background: var(--accent); color: var(--ink); font-size: 10px; padding: 2px 8px; border-radius: 100px; font-weight: 700; vertical-align: middle; margin-left: 4px;">À venir</span></h3>
-                <p>Apps natives iOS et Android. Création de factures où que vous soyez. Notifications en temps réel.</p>
-            </div>
-            
-            <div class="feature" style="opacity: 0.85; border: 2px dashed var(--border);">
-                <div class="feature-icon">🌐</div>
-                <h3>Multi-langues <span style="display: inline-block; background: var(--accent); color: var(--ink); font-size: 10px; padding: 2px 8px; border-radius: 100px; font-weight: 700; vertical-align: middle; margin-left: 4px;">À venir</span></h3>
-                <p>Interface en arabe (RTL), anglais, français. Factures en arabe pour clients arabophones.</p>
-            </div>
-        </div>
-        
-        <div style="text-align: center; margin-top: 48px; padding: 24px; background: rgba(201, 169, 91, 0.1); border-radius: 12px; max-width: 700px; margin-left: auto; margin-right: auto;">
-            <strong style="color: var(--ink); font-size: 16px;">🎁 Avec votre abonnement FacturaPro :</strong>
-            <p style="margin-top: 8px; color: var(--ink-soft);">
-                Toutes ces futures fonctionnalités seront <strong>incluses gratuitement</strong> dans votre abonnement actif. 
-                Pas de surcoût, jamais.
-            </p>
-        </div>
-    </div>
-</section>
-
-<!-- ============ COMPARISON ============ -->
-<section id="comparaison" style="background: var(--surface);">
-    <div class="container">
-        <div class="section-eyebrow">COMPARAISON</div>
-        <h2 class="section-title">Pourquoi <em>FacturaPro</em> ?</h2>
-        <p class="section-subtitle">
-            On a comparé pour vous. Voici ce que les autres ne disent pas.
-        </p>
-        
-        <div class="comparison">
-            <table>
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th>Excel / Word</th>
-                        <th>Sage / EBP</th>
-                        <th class="highlight">FacturaPro</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Conforme normes Maroc</strong></td>
-                        <td><span class="cross">✗</span> Manuel</td>
-                        <td>~ Partiel</td>
-                        <td class="highlight"><span class="check">✓</span> Auto</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Calcul CNSS auto</strong></td>
-                        <td><span class="cross">✗</span></td>
-                        <td><span class="cross">✗</span></td>
-                        <td class="highlight"><span class="check">✓</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Statut Auto-Entrepreneur</strong></td>
-                        <td><span class="cross">✗</span></td>
-                        <td>~ Inadapté</td>
-                        <td class="highlight"><span class="check">✓</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Numérotation séquentielle</strong></td>
-                        <td><span class="cross">✗</span> Erreurs</td>
-                        <td><span class="check">✓</span></td>
-                        <td class="highlight"><span class="check">✓</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Mention Article 6 CGI (AE)</strong></td>
-                        <td><span class="cross">✗</span></td>
-                        <td><span class="cross">✗</span></td>
-                        <td class="highlight"><span class="check">✓</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Prix</strong></td>
-                        <td>Gratuit mais limité</td>
-                        <td>Variable selon l'éditeur</td>
-                        <td class="highlight"><strong>449 MAD/an</strong></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Apprentissage</strong></td>
-                        <td>2-5h</td>
-                        <td>2-3 semaines</td>
-                        <td class="highlight"><strong>2 minutes</strong></td>
-                    </tr>
-                </tbody>
-            </table>
         </div>
     </div>
 </section>
@@ -1513,8 +1372,6 @@
                 <ul>
                     <li>Tout illimité</li>
                     <li>Sync multi-appareils</li>
-                    <li>Module CNSS + Impôts</li>
-                    <li>Export comptable (Sage, EBP, FEC)</li>
                     <li>Support email</li>
                 </ul>
                 <a href="app.html?mode=signup&plan=monthly" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px;">
@@ -1533,12 +1390,9 @@
                 <p style="font-size: 13px; color: var(--primary); font-weight: 700; margin-bottom: 4px;">💰 Économisez 139 DH</p>
                 <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit <strong>~37 DH/mois</strong></p>
                 <ul>
-                    <li>Tout illimité pendant 12 mois</li>
+                    <li>Tout illimité 12 mois</li>
                     <li>Sync multi-appareils</li>
-                    <li>Module CNSS + Impôts</li>
-                    <li>Export comptable (Sage, EBP, FEC)</li>
                     <li>Support prioritaire WhatsApp</li>
-                    <li>Mises à jour incluses</li>
                 </ul>
                 <a href="app.html?mode=signup&plan=annual" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 16px;">
                     🚀 Choisir Annuel
@@ -1553,7 +1407,6 @@
                 <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Tarif bloqué tant que vous restez abonné</p>
                 <ul>
                     <li>Tout ce qu'inclut l'Annuel</li>
-                    <li>Vous influencez les prochaines fonctions</li>
                     <li>Contact direct avec le créateur</li>
                 </ul>
                 <a href="app.html?mode=signup" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px;">
@@ -1569,21 +1422,6 @@
             <a href="app.html?mode=signup" class="btn btn-accent" style="margin-top: 4px;">
                 Commencer l'essai gratuit →
             </a>
-        </div>
-    </div>
-</section>
-
-<!-- ============ TESTIMONIALS ============ -->
-<section id="temoignages" class="testimonials">
-    <div class="container">
-        <div class="section-eyebrow">NOUVEAU</div>
-        <h2 class="section-title">Nous démarrons, <em>votre avis compte</em></h2>
-        <p class="section-subtitle">
-            FacturaPro vient d'ouvrir. Pas de faux avis ici : testez 14 jours gratuitement
-            et dites-nous ce qu'il faut améliorer. Vos retours décident des prochaines fonctionnalités.
-        </p>
-        <div style="text-align:center; margin-top: 24px;">
-            <a href="app.html?mode=signup" class="btn btn-primary btn-large">Essayer gratuitement →</a>
         </div>
     </div>
 </section>
@@ -1610,17 +1448,7 @@
                 </div>
             </div>
             
-            <div class="faq-item">
-                <div class="faq-question" onclick="toggleFAQ(this)">
-                    <span>Quel forfait choisir ?</span>
-                    <span class="faq-toggle">+</span>
-                </div>
-                <div class="faq-answer">
-                    <div class="faq-answer-inner">
-                        <strong>Annuel à 449 DH/an</strong> (~37 DH/mois) est le meilleur rapport qualité/prix. Le <strong>mensuel à 49 DH/mois</strong> permet de tester sans engagement long. Les <strong>20 premiers clients</strong> peuvent profiter de l'offre <strong>fondateurs à 299 DH/an</strong>. Toutes les formules incluent les mêmes fonctionnalités.
-                    </div>
-                </div>
-            </div>
+            
             
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFAQ(this)">
@@ -1646,29 +1474,9 @@
                 </div>
             </div>
             
-            <div class="faq-item">
-                <div class="faq-question" onclick="toggleFAQ(this)">
-                    <span>Puis-je l'utiliser hors ligne ?</span>
-                    <span class="faq-toggle">+</span>
-                </div>
-                <div class="faq-answer">
-                    <div class="faq-answer-inner">
-                        <strong>Oui !</strong> FacturaPro fonctionne 100% dans votre navigateur, même sans connexion internet. Vous pouvez créer des factures, gérer vos clients, et générer des PDF même en mode avion.
-                    </div>
-                </div>
-            </div>
             
-            <div class="faq-item">
-                <div class="faq-question" onclick="toggleFAQ(this)">
-                    <span>Que se passe-t-il si je change de statut (AE → SARL) ?</span>
-                    <span class="faq-toggle">+</span>
-                </div>
-                <div class="faq-answer">
-                    <div class="faq-answer-inner">
-                        Vous pouvez changer de statut à tout moment dans les réglages. FacturaPro adaptera automatiquement les mentions légales sur vos factures, le calcul de TVA, et tous les paramètres fiscaux selon votre nouveau statut.
-                    </div>
-                </div>
-            </div>
+            
+            
             
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFAQ(this)">
@@ -1694,29 +1502,9 @@
                 </div>
             </div>
             
-            <div class="faq-item">
-                <div class="faq-question" onclick="toggleFAQ(this)">
-                    <span>Vais-je recevoir les futures mises à jour ?</span>
-                    <span class="faq-toggle">+</span>
-                </div>
-                <div class="faq-answer">
-                    <div class="faq-answer-inner">
-                        <strong>Toutes les mises à jour sont incluses</strong> dans votre abonnement actif. On prévoit plein de nouveautés : module comptabilité, app mobile, intégration CMI, multi-langues (arabe), templates personnalisables. Tout sera inclus sans surcoût.
-                    </div>
-                </div>
-            </div>
             
-            <div class="faq-item">
-                <div class="faq-question" onclick="toggleFAQ(this)">
-                    <span>Vous avez un programme partenaire pour les comptables ?</span>
-                    <span class="faq-toggle">+</span>
-                </div>
-                <div class="faq-answer">
-                    <div class="faq-answer-inner">
-                        <strong>Oui !</strong> Programme partenaire disponible pour les cabinets comptables : <strong>30% de commission à vie</strong> sur chaque client référé, vos clients ont -20% sur leur abonnement. Contactez-nous via WhatsApp pour vous inscrire.
-                    </div>
-                </div>
-            </div>
+            
+            
         </div>
     </div>
 </section>
