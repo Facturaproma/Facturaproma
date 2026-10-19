@@ -2844,7 +2844,7 @@
     <div class="expired-card">
         <div class="expired-icon">🔒</div>
         <h2>Période d'essai terminée</h2>
-        <p>Vos données sont sauvegardées en sécurité. Activez votre licence FacturaPro pour continuer à créer des factures et gérer vos clients.</p>
+        <p>Vos données sont conservées en sécurité. Votre accès est en lecture seule : activez votre licence FacturaPro pour créer des factures et gérer vos clients.</p>
         <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
             <button class="btn btn-primary btn-large" onclick="navTo('license'); document.getElementById('expiredOverlay').classList.remove('active');">
                 💎 Activer ma licence
@@ -5737,8 +5737,28 @@ const Storage = {
         return def;
     },
     
+    // Clés toujours modifiables même licence expirée (réglages d'interface)
+    _READONLY_EXEMPT: ['licenseInfo', 'onboarded', 'checklistDismissed', 'activePromo', 'myRequests'],
+
+    _blockedByLicense(baseKey) {
+        if (this._READONLY_EXEMPT.includes(baseKey)) return false;
+        try { return License.isExpired(); } catch { return false; }
+    },
+
     set(key, val) {
         const baseKey = this.keys[key] || key;
+        // Licence expirée => lecture seule (aucune écriture locale ni cloud)
+        if (this._blockedByLicense(baseKey)) {
+            const t = Date.now();
+            if (!this._roToast || t - this._roToast > 5000) {
+                this._roToast = t;
+                if (typeof showToast === 'function') showToast('🔒 Licence expirée : lecture seule. Activez votre licence pour enregistrer.', 'error');
+                if (typeof updateTrialUI === 'function') { try { updateTrialUI(); } catch {} }
+            }
+            return;
+        }
+        // En mode cloud, la licence n'est jamais écrite par le navigateur
+        if (USE_SUPABASE && baseKey === 'licenseInfo') return;
         this._cache[baseKey] = val;
         
         // Save locally always (offline-first)
@@ -5747,7 +5767,10 @@ const Storage = {
         }
         
         // Sync to Supabase if configured (async, non-blocking)
-        if (USE_SUPABASE && this._currentUserId) {
+        // Licence expirée : la base refuse l'écriture, inutile d'essayer (copie locale seulement)
+        let expiredNow = false;
+        try { expiredNow = License.isExpired(); } catch {}
+        if (USE_SUPABASE && this._currentUserId && !expiredNow) {
             this._syncToCloud(baseKey, val);
         }
     },
@@ -5767,7 +5790,15 @@ const Storage = {
                 updated_at: new Date().toISOString()
             }, { onConflict: 'user_id,key' });
             
-            if (error) throw error;
+            if (error) {
+                // 42501 = refus RLS : licence expirée côté serveur
+                if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
+                    console.warn('Écriture refusée par le serveur (licence).');
+                    License.refresh();
+                    return;
+                }
+                throw error;
+            }
             
             // Mise à jour timestamp last sync
             if (typeof SyncManager !== 'undefined') {
@@ -5991,6 +6022,8 @@ async function checkOnboarding() {
     } catch (err) {
         console.error('[FacturaPro] Storage setCurrentUser error:', err);
     }
+    // Licence : état officiel depuis le serveur
+    try { await License.refresh(); } catch {}
     
     // Update sidebar with user info
     updateSidebarUser(session);
@@ -9425,8 +9458,59 @@ const PROMO_CODES = {
 };
 
 const License = {
+    // ── Mode cloud : la licence vient du SERVEUR (table licenses, RPC my_license).
+    //    Le navigateur n'en garde qu'une copie de confort ; la base refuse de toute
+    //    façon les écritures d'un compte expiré (voir sql/07_licence_serveur.sql).
+    _srv: null,
+    _offset: 0,   // décalage horloge serveur - horloge locale (anti-triche de date)
+
+    now() { return new Date(Date.now() + this._offset); },
+
+    _cacheKey() { return 'fp_lic_' + (Storage._currentUserId || ''); },
+
+    _fromServer(r) {
+        let expires = r.expires_at || null;
+        // Licence suspendue ou refusée par le serveur => traitée comme expirée
+        if (r.active === false && (!expires || new Date(expires) > this.now())) {
+            expires = new Date(this.now().getTime() - 1000).toISOString();
+        }
+        return {
+            type: r.type, status: 'active', tier: r.type,
+            startedAt: r.started_at, expiresAt: expires,
+            promoCodeUsed: null
+        };
+    },
+
+    async refresh() {
+        if (!USE_SUPABASE || !Storage._currentUserId) return;
+        try {
+            const { data, error } = await supaClient.rpc('my_license');
+            if (error || !data || !data.ok) throw (error || new Error('my_license'));
+            this._offset = Date.parse(data.server_now) - Date.now();
+            this._srv = this._fromServer(data);
+            try { localStorage.setItem(this._cacheKey(), JSON.stringify({ srv: this._srv, offset: this._offset })); } catch {}
+        } catch (e) {
+            console.warn('License refresh failed:', e);
+            if (!this._srv) {
+                try {
+                    const c = JSON.parse(localStorage.getItem(this._cacheKey()) || 'null');
+                    if (c && c.srv) { this._srv = c.srv; this._offset = c.offset || 0; }
+                } catch {}
+            }
+        }
+        if (typeof updateTrialUI === 'function') { try { updateTrialUI(); } catch {} }
+    },
+
     // Get current license info
     get() {
+        if (USE_SUPABASE) {
+            if (this._srv) return this._srv;
+            // Pas encore de réponse serveur : essai provisoire (non persisté).
+            // Les écritures restent contrôlées par la base.
+            const t = new Date(); t.setDate(t.getDate() + TRIAL_DURATION_DAYS);
+            return { type: 'trial', status: 'active', startedAt: new Date().toISOString(),
+                     expiresAt: t.toISOString(), tier: null, promoCodeUsed: null };
+        }
         const info = Storage.get('licenseInfo', null);
         if (info) return info;
         
@@ -9458,7 +9542,7 @@ const License = {
         // Subscriptions = jours réels jusqu'à expiration
         const PAID_TIERS = ['monthly', 'semestrial', 'annual', 'business'];
         if (PAID_TIERS.includes(info.type) || info.type === 'trial') {
-            const now = new Date();
+            const now = this.now();
             const expires = new Date(info.expiresAt);
             const diff = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
             return Math.max(0, diff);
@@ -9474,7 +9558,7 @@ const License = {
         
         const TIERS_WITH_EXPIRY = ['trial', 'monthly', 'semestrial', 'annual', 'business'];
         if (TIERS_WITH_EXPIRY.includes(info.type) && info.status === 'active') {
-            return new Date(info.expiresAt) < new Date();
+            return new Date(info.expiresAt) < this.now();
         }
         
         return false;
@@ -10135,7 +10219,7 @@ async function activateLicense() {
         const codeData = { type: result.type };
 
         // 8. Activer la licence localement
-        License.activate(codeData.type, { code: code });
+        await License.refresh();   // la licence est écrite par le serveur
         
         showToast('🎉 Licence activée avec succès !', 'success');
         updateTrialUI();
@@ -10156,6 +10240,7 @@ async function activateLicense() {
 // TEST FUNCTIONS (Dev Mode)
 // ============================================
 function resetTrial() {
+    if (USE_SUPABASE) { showToast('Outil de test disponible en mode local uniquement', 'warning'); return; }
     if (!confirm('Réinitialiser la période d\'essai à 14 jours ?')) return;
     const trialStart = new Date().toISOString();
     const trialEnd = new Date();
@@ -10173,6 +10258,7 @@ function resetTrial() {
 }
 
 function expireTrial() {
+    if (USE_SUPABASE) { showToast('Outil de test disponible en mode local uniquement', 'warning'); return; }
     if (!confirm('Forcer l\'expiration de l\'essai (test) ?')) return;
     const expired = new Date();
     expired.setDate(expired.getDate() - 1);
@@ -10189,6 +10275,7 @@ function expireTrial() {
 }
 
 function setTrialDaysLeft(days) {
+    if (USE_SUPABASE) { showToast('Outil de test disponible en mode local uniquement', 'warning'); return; }
     const expires = new Date();
     expires.setDate(expires.getDate() + days);
     Storage.set('licenseInfo', {
@@ -11010,6 +11097,10 @@ function renderAll() {
     // Auto-update trial UI every minute (in case of expiration)
     if (!window._trialInterval) {
         window._trialInterval = setInterval(updateTrialUI, 60000);
+    }
+    if (USE_SUPABASE && !window._licInterval) {
+        window._licInterval = setInterval(() => License.refresh(), 5 * 60000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) License.refresh(); });
     }
 }
 
