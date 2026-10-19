@@ -90,10 +90,20 @@
             padding: 20px 16px;
             position: fixed;
             height: 100vh;
+            height: 100dvh;
             overflow-y: auto;
+            padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
             display: flex;
             flex-direction: column;
         }
+
+        /* Déconnexion toujours visible, en haut du menu */
+        .brand-logout {
+            margin-left: auto; background: var(--surface-soft); border: 1px solid var(--border);
+            border-radius: 10px; width: 38px; height: 38px; cursor: pointer; font-size: 18px;
+            flex-shrink: 0;
+        }
+        .brand-logout:hover { background: rgba(200, 74, 74, 0.1); }
 
         .brand {
             display: flex;
@@ -2855,6 +2865,7 @@
                 <div class="brand-text">FacturaPro</div>
                 <em>Maroc</em>
             </div>
+            <button class="brand-logout" onclick="handleLogout()" title="Se déconnecter" aria-label="Se déconnecter">🚪</button>
         </div>
 
         <div class="nav-section">
