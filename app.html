@@ -3235,14 +3235,18 @@
                                 <option value="30" selected>30 jours</option>
                                 <option value="45">45 jours</option>
                                 <option value="60">60 jours</option>
+                                <option value="90">90 jours</option>
+                                <option value="120">120 jours</option>
                             </select>
+                            <small style="color: var(--ink-mute);">Loi 69-21 : délai par défaut 60 jours, maximum conventionnel 120 jours (entreprises concernées).</small>
                         </div>
                     </div>
 
                     <div class="aside-card">
-                        <h3>🇲🇦 Conformité</h3>
-                        <div class="notice">
-                            <strong>Mentions de votre entreprise</strong> — ICE, IF et mentions selon votre statut sont ajoutés automatiquement. Vérifiez-les avant d'envoyer la facture.
+                        <h3>🇲🇦 Contrôle des mentions</h3>
+                        <div id="complianceBox"></div>
+                        <div class="notice" style="margin-top: 10px;">
+                            <strong>Facture électronique DGI</strong> (format structuré UBL, signature électronique, transmission à la plateforme de la DGI) : <strong>non prise en charge pour le moment</strong>. Vérifiez le calendrier qui s'applique à votre entreprise auprès de la DGI ou de votre comptable.
                         </div>
                     </div>
                 </aside>
@@ -4176,7 +4180,7 @@
             <!-- Promo code -->
             <div class="promo-section" id="sectionPromoCode">
                 <h4>🎁 Vous avez un code promo ?</h4>
-                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Saisissez votre code (offre fondateurs, partenaire comptable…)</p>
+                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Saisissez votre code promo (partenaire comptable…)</p>
                 <div class="promo-input-group">
                     <input type="text" id="promoCode" placeholder="ENTREZ VOTRE CODE">
                     <button class="btn btn-primary" onclick="applyPromoCode()">Appliquer</button>
@@ -6379,6 +6383,7 @@ function navTo(page) {
     if (page === 'team') navTo_team_render();
     if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
+    if (page === 'invoice-editor') renderComplianceBox();
     
     // Close mobile sidebar
     document.getElementById('sidebar').classList.remove('open');
@@ -6999,6 +7004,84 @@ function selectProductForItem(productId) {
     showToast(`Produit "${product.name}" ajouté ✓`, 'success');
 }
 
+// ============================================
+// CONTRÔLE DES MENTIONS (aide, pas un avis juridique)
+// ============================================
+function getInvoiceCompliance() {
+    const company = Storage.get('company', {}) || {};
+    const clients = Storage.get('clients', []) || [];
+    const clientId = document.getElementById('editorClient')?.value;
+    const client = clients.find(c => c.id === clientId);
+    const isAE = company.status === 'ae';
+    const checks = []; // { level: 'ok'|'warn'|'error', text }
+    const add = (level, text) => checks.push({ level, text });
+
+    // Émetteur
+    add(company.name ? 'ok' : 'error', company.name ? 'Raison sociale / nom renseigné' : 'Nom ou raison sociale manquant (Mon entreprise)');
+    const ice = (company.ice || '').trim();
+    add(/^\d{15}$/.test(ice) ? 'ok' : 'error', /^\d{15}$/.test(ice) ? 'Votre ICE (15 chiffres)' : 'Votre ICE est absent ou invalide (15 chiffres)');
+    if (!isAE) {
+        add(company.if ? 'ok' : 'warn', company.if ? 'Identifiant fiscal (IF)' : 'Identifiant fiscal (IF) manquant');
+        if (company.status === 'sarl') add(company.rc ? 'ok' : 'warn', company.rc ? 'Registre du commerce (RC)' : 'N° de RC manquant');
+    }
+    add(company.address ? 'ok' : 'warn', company.address ? 'Adresse de votre entreprise' : 'Adresse de votre entreprise manquante');
+
+    // Client
+    if (!client) {
+        add('error', 'Aucun client sélectionné');
+    } else {
+        add('ok', 'Client : ' + client.name);
+        const cice = (client.ice || '').trim();
+        add(/^\d{15}$/.test(cice) ? 'ok' : 'warn', /^\d{15}$/.test(cice) ? 'ICE du client' : 'ICE du client manquant (à renseigner s\'il s\'agit d\'un professionnel)');
+        add(client.address ? 'ok' : 'warn', client.address ? 'Adresse du client' : 'Adresse du client manquante');
+    }
+
+    // Lignes
+    const items = getCurrentItems();
+    add(items.length ? 'ok' : 'error', items.length ? `${items.length} ligne(s) avec désignation, quantité et prix` : 'Aucune ligne complète (désignation + quantité)');
+    if (items.some(i => !(i.price > 0))) add('warn', 'Une ligne a un prix à 0');
+    if (isAE && items.some(i => i.tva > 0)) add('warn', 'Statut auto-entrepreneur : TVA appliquée, vérifiez que c\'est voulu');
+
+    // Dates et délai de paiement
+    const d = document.getElementById('editorDate')?.value;
+    const due = document.getElementById('editorDueDate')?.value;
+    add(d ? 'ok' : 'error', d ? 'Date d\'émission' : 'Date d\'émission manquante');
+    if (d && due && due < d) add('error', 'L\'échéance est antérieure à la date de facture');
+    const terms = document.getElementById('editorPaymentTerms')?.value;
+    const days = terms === 'immediate' ? 0 : parseInt(terms, 10);
+    if (!isNaN(days)) {
+        if (days > 120) add('error', 'Délai supérieur à 120 jours (maximum conventionnel, loi 69-21)');
+        else if (days > 60) add('warn', 'Délai supérieur au défaut de 60 jours : doit être convenu avec le client (loi 69-21)');
+        else add('ok', 'Délai de paiement : ' + (days === 0 ? 'immédiat' : days + ' jours'));
+    }
+    return checks;
+}
+
+function renderComplianceBox() {
+    const box = document.getElementById('complianceBox');
+    if (!box) return;
+    const checks = getInvoiceCompliance();
+    const errors = checks.filter(c => c.level === 'error').length;
+    const warns = checks.filter(c => c.level === 'warn').length;
+    const icon = { ok: '✅', warn: '⚠️', error: '❌' };
+    const order = { error: 0, warn: 1, ok: 2 };
+    const sorted = [...checks].sort((a, b) => order[a.level] - order[b.level]);
+    const summary = errors ? `<strong style="color: var(--danger);">${errors} point(s) à corriger</strong>`
+        : warns ? `<strong style="color: var(--warning);">${warns} point(s) à vérifier</strong>`
+        : '<strong style="color: var(--success);">Mentions principales présentes</strong>';
+    box.innerHTML = `<div style="margin-bottom: 8px;">${summary}</div>` +
+        sorted.map(c => `<div style="font-size: 12px; padding: 3px 0;">${icon[c.level]} ${escapeHtml(c.text)}</div>`).join('') +
+        '<div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">Aide au contrôle, pas un avis juridique : confirmez auprès de la DGI ou de votre comptable.</div>';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const ed = document.getElementById('page-invoice-editor');
+    if (ed) {
+        ed.addEventListener('input', renderComplianceBox);
+        ed.addEventListener('change', renderComplianceBox);
+    }
+});
+
 function updateTotals() {
     let totalHT = 0;
     let totalTVA = 0;
@@ -7022,6 +7105,7 @@ function updateTotals() {
     document.getElementById('totalHT').textContent = formatCurrency(totalHT);
     document.getElementById('totalTVA').textContent = formatCurrency(totalTVA);
     document.getElementById('totalTTC').textContent = formatCurrency(totalTTC);
+    renderComplianceBox();
 }
 
 function getCurrentItems() {
@@ -9252,8 +9336,7 @@ const TRIAL_DURATION_DAYS = 14;
 // Codes promos disponibles
 // Note : tier 'lifetime' réservé aux Founders bêta. Promos publiques sur tiers payants.
 const PROMO_CODES = {
-    // Offre fondateurs : 449 DH -> 299 DH (annuel uniquement), limitée à 20 clients (suivi manuel par l'admin)
-    'FONDATEUR': { discount: 33.4, label: 'Offre fondateurs 299 DH/an', validFor: ['annual'] },
+    // Offre fondateurs : gérée côté admin par codes de licence à usage unique (pas de code promo public)
     'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['annual', 'monthly'] }
 };
 
