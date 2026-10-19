@@ -4176,7 +4176,7 @@
             <!-- Promo code -->
             <div class="promo-section" id="sectionPromoCode">
                 <h4>🎁 Vous avez un code promo ?</h4>
-                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Saisissez votre code (offre fondateurs, partenaire comptable…)</p>
+                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Saisissez votre code promo (partenaire comptable…)</p>
                 <div class="promo-input-group">
                     <input type="text" id="promoCode" placeholder="ENTREZ VOTRE CODE">
                     <button class="btn btn-primary" onclick="applyPromoCode()">Appliquer</button>
@@ -9252,8 +9252,7 @@ const TRIAL_DURATION_DAYS = 14;
 // Codes promos disponibles
 // Note : tier 'lifetime' réservé aux Founders bêta. Promos publiques sur tiers payants.
 const PROMO_CODES = {
-    // Offre fondateurs : 449 DH -> 299 DH (annuel uniquement), limitée à 20 clients (suivi manuel par l'admin)
-    'FONDATEUR': { discount: 33.4, label: 'Offre fondateurs 299 DH/an', validFor: ['annual'] },
+    // Offre fondateurs : gérée côté admin par codes de licence à usage unique (pas de code promo public)
     'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['annual', 'monthly'] }
 };
 
