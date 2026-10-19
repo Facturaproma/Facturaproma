@@ -4185,7 +4185,7 @@
                 </div>
 
                 <div class="notice" style="margin-top: 20px;">
-                    <strong>📞 Besoin d'aide ?</strong> Contactez-nous via WhatsApp au <strong>+212 6XX XX XX XX</strong> ou par email à <strong>hello@facturapro.ma</strong> pour finaliser votre achat.
+                    <strong>📞 Besoin d'aide ?</strong> Contactez-nous via WhatsApp au <strong class="contact-wa">+212 6XX XX XX XX</strong> ou par email à <strong class="contact-email">hello@facturapro.ma</strong> pour finaliser votre achat.
                 </div>
             </div>
 
@@ -5385,6 +5385,19 @@ if (document.readyState === 'loading') {
 const SUPABASE_URL = 'https://mdozjptoecygmpkjlohr.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q';
 
+// ============================================
+// CONTACT COMMERCIAL : un seul endroit à modifier
+// Remplacer par le vrai numéro / e-mail de la SARL.
+// ============================================
+const CONTACT = {
+    whatsapp: '+212 6XX XX XX XX',
+    email: 'hello@facturapro.ma'
+};
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.contact-wa').forEach(e => e.textContent = CONTACT.whatsapp);
+    document.querySelectorAll('.contact-email').forEach(e => e.textContent = CONTACT.email);
+});
+
 // Détection auto : Supabase ou Local
 const USE_SUPABASE = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
 let supaClient = null;
@@ -6578,6 +6591,7 @@ function renderInvoices() {
                             <td onclick="editInvoice('${i.id}')"><span class="status-pill status-${i.status}">${statusLabel(i.status)}</span></td>
                             <td>
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥</button>
+                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${i.id}', 'invoice')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); duplicateInvoice('${i.id}')" title="Dupliquer">📋</button>
                                 ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); createCreditFromInvoice('${i.id}')" title="Créer un avoir (remboursement)" style="color: var(--warning);">↩️</button>` : ''}
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
@@ -7075,6 +7089,7 @@ function renderQuotes() {
                         <td>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); convertQuoteToInvoice('${q.id}')" title="Convertir en facture" style="color: var(--success);">→📄</button>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${q.id}', 'quote')" title="Télécharger PDF">📥</button>
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${q.id}', 'quote')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteQuote('${q.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
                         </td>
                     </tr>
@@ -7768,6 +7783,29 @@ function renderReportInvoices() {
             `;
         }).join('');
     }
+}
+
+function sendDocWhatsApp(id, type) {
+    const isQuote = type === 'quote';
+    const doc = Storage.get(isQuote ? 'quotes' : 'invoices', []).find(d => d.id === id);
+    if (!doc) return;
+    const client = Storage.get('clients', []).find(c => c.id === doc.clientId);
+    const company = Storage.get('company', {});
+    const label = isQuote ? 'le devis' : 'la facture';
+    const dueLine = (!isQuote && doc.dueDate) ? `• Échéance : ${formatDate(doc.dueDate)}\n` : '';
+    const msg = `Bonjour,\n\nVeuillez trouver ci-joint ${label} ${doc.number}.\n\n` +
+        `• Montant TTC : ${formatCurrency(doc.totalTTC)}\n` +
+        `• Date : ${formatDate(doc.date)}\n` + dueLine + '\n' +
+        `${(!isQuote && company.rib) ? `Règlement par virement :\nRIB : ${company.rib}\n\n` : ''}` +
+        `Cordialement,\n${company.name || ''}`;
+    // 1) PDF téléchargé, à joindre dans WhatsApp  2) conversation ouverte avec le message prêt
+    generatePDF(id, type);
+    const phone = (client?.phone || '').replace(/\D/g, '');
+    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    setTimeout(() => {
+        window.open(url, '_blank');
+        showToast('PDF téléchargé : joignez-le dans la conversation WhatsApp 📎', 'success');
+    }, 600);
 }
 
 function quickRelance(invoiceId) {
@@ -9590,8 +9628,8 @@ function showHowToBuy() {
         `   Envoyez-nous le justificatif par WhatsApp\n\n` +
         `2️⃣ ESPÈCES (Casa/Rabat)\n` +
         `   Sur rendez-vous uniquement\n\n` +
-        `📱 Contact : WhatsApp +212 6XX XX XX XX\n` +
-        `📧 Email : contact@facturapro.ma\n\n` +
+        `📱 Contact : WhatsApp ${CONTACT.whatsapp}\n` +
+        `📧 Email : ${CONTACT.email}\n\n` +
         `Une fois le paiement reçu, vous recevrez votre code de licence par WhatsApp/email sous 24h.`);
 }
 
@@ -9716,7 +9754,7 @@ async function purchaseLicense(tier) {
         `   • Virement bancaire\n` +
         `   • Espèces (Casa/Rabat sur RDV)\n\n` +
         `2️⃣ Envoyez le justificatif sur WhatsApp :\n` +
-        `   📱 +212 6XX XX XX XX\n\n` +
+        `   📱 ${CONTACT.whatsapp}\n\n` +
         `3️⃣ Vous recevrez votre code d'activation\n` +
         `   sous 24h par WhatsApp/email\n\n` +
         `📧 Référence : ${session.email}\n` +
@@ -9725,8 +9763,8 @@ async function purchaseLicense(tier) {
         :
         `⚠️ La demande n'a pas pu être envoyée automatiquement.\n\n` +
         `Pour acheter votre abonnement, contactez-nous :\n\n` +
-        `📱 WhatsApp : +212 6XX XX XX XX\n` +
-        `📧 Email : contact@facturapro.ma\n\n` +
+        `📱 WhatsApp : ${CONTACT.whatsapp}\n` +
+        `📧 Email : ${CONTACT.email}\n\n` +
         `Précisez :\n` +
         `• Plan : ${config.label}\n` +
         `• Email : ${session.email}\n` +
