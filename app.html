@@ -3011,6 +3011,9 @@
                 </div>
             </div>
 
+            <!-- Centre d'actions : checklist de démarrage + relances -->
+            <div id="actionCenter"></div>
+
             <!-- Stats -->
             <div class="stats-grid">
                 <div class="stat-card success">
@@ -6406,6 +6409,66 @@ function updateUserMenu(session) {
 // ============================================
 // DASHBOARD
 // ============================================
+function renderActionCenter(invoices) {
+    const el = document.getElementById('actionCenter');
+    if (!el) return;
+    const clients = Storage.get('clients', []) || [];
+    const overdue = invoices.filter(i => i.status === 'overdue')
+        .sort((a, b) => (b.overdueDays || 0) - (a.overdueDays || 0));
+    const sentOrPaid = invoices.some(i => ['sent', 'paid', 'overdue'].includes(i.status));
+    const steps = [
+        { done: clients.length > 0, label: 'Ajoutez votre premier client', btn: 'Ajouter', act: "navTo('clients'); newClient();" },
+        { done: invoices.length > 0, label: 'Créez votre première facture', btn: 'Créer', act: "navTo('invoices'); newInvoice();" },
+        { done: sentOrPaid, label: 'Envoyez-la à votre client (WhatsApp ou PDF)', btn: 'Voir mes factures', act: "navTo('invoices');" }
+    ];
+    const doneCount = steps.filter(s => s.done).length;
+    const dismissed = Storage.get('checklistDismissed', false);
+    let html = '';
+
+    if (doneCount < steps.length && !dismissed) {
+        html += `
+        <div class="table-card" style="margin-bottom: 16px; padding: 16px 18px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin:0; font-size:15px;">🚀 Premiers pas <span style="color:var(--ink-mute); font-weight:500;">${doneCount}/${steps.length}</span></h3>
+                <button class="btn btn-ghost btn-sm" onclick="Storage.set('checklistDismissed', true); renderDashboard();" title="Masquer">✕</button>
+            </div>
+            ${steps.map(st => `
+                <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--border);">
+                    <span style="font-size:18px;">${st.done ? '✅' : '⬜'}</span>
+                    <span style="flex:1; ${st.done ? 'text-decoration:line-through; color:var(--ink-mute);' : ''}">${st.label}</span>
+                    ${st.done ? '' : `<button class="btn btn-primary btn-sm" onclick="${st.act}">${st.btn}</button>`}
+                </div>`).join('')}
+        </div>`;
+    }
+
+    if (overdue.length > 0) {
+        const total = overdue.reduce((s, i) => s + (i.totalTTC || 0), 0);
+        html += `
+        <div class="table-card" style="margin-bottom: 16px; padding: 16px 18px; border-left: 4px solid var(--danger);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin:0; font-size:15px;">🚨 À relancer aujourd'hui</h3>
+                <strong style="color:var(--danger);">${formatCurrency(total)}</strong>
+            </div>
+            ${overdue.slice(0, 5).map(i => `
+                <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--border);">
+                    <div style="flex:1; min-width:0;">
+                        <strong>${escapeHtml(i.clientName || '—')}</strong>
+                        <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(i.number)} · ${i.overdueDays || 0} j de retard</div>
+                    </div>
+                    <strong>${formatCurrency(i.totalTTC)}</strong>
+                    <button class="btn btn-secondary btn-sm" onclick="quickRelance('${i.id}')" title="Relancer par WhatsApp" style="color:#25D366;">💬 Relancer</button>
+                </div>`).join('')}
+            ${overdue.length > 5 ? `<div style="padding-top:8px;"><button class="btn btn-ghost btn-sm" onclick="navTo('reminders')">Voir les ${overdue.length} relances →</button></div>` : ''}
+        </div>`;
+    } else if (invoices.length > 0) {
+        html += `
+        <div class="table-card" style="margin-bottom: 16px; padding: 12px 18px;">
+            <span>✅ Aucune facture en retard. Bravo !</span>
+        </div>`;
+    }
+    el.innerHTML = html;
+}
+
 function renderDashboard() {
     const allInvoices = Storage.get('invoices', []) || [];
     // Apply auto-overdue detection
@@ -6450,6 +6513,7 @@ function renderDashboard() {
     
     // Chart
     renderCAChart();
+    renderActionCenter(invoices);
     
     // Recent invoices
     const recent = invoices.slice(-5).reverse();
