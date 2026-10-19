@@ -594,27 +594,17 @@
         <div id="forgotAdminSuccess" style="display:none; background: rgba(46, 125, 91, 0.08); border: 1px solid rgba(46, 125, 91, 0.2); color: var(--success); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
 
         <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">
-            <strong>2 cas possibles</strong> :
+            Saisissez l'e-mail de votre compte administrateur. Vous recevrez un lien pour choisir un nouveau mot de passe.
         </p>
-        
-        <div class="alert">
-            <strong>Cas 1 : Vous êtes admin secondaire</strong><br>
-            <small>Demandez à webnour@gmail.com (Master) de réinitialiser votre mot de passe depuis son espace admin.</small>
-        </div>
-        
-        <div class="alert alert-warning">
-            <strong>Cas 2 : Vous êtes le Master (webnour@gmail.com)</strong><br>
-            <small>Tapez votre email Master ci-dessous et la procédure d'urgence sera lancée.</small>
-        </div>
 
         <div class="form-group">
-            <label>Email Master</label>
+            <label>Email du compte admin</label>
             <input type="email" id="forgotAdminEmail" placeholder="webnour@gmail.com">
         </div>
 
         <div class="modal-actions">
             <button class="btn btn-secondary" onclick="closeModal('forgotAdminModal')">Annuler</button>
-            <button class="btn btn-primary" onclick="resetMasterPassword()">🚨 Procédure Master</button>
+            <button class="btn btn-primary" onclick="resetMasterPassword()">📧 Envoyer le lien</button>
         </div>
     </div>
 </div>
@@ -1980,7 +1970,7 @@
     <div class="modal">
         <h2>➕ Créer un admin secondaire</h2>
         <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;">
-            Le nouvel admin pourra se connecter avec son email et le mot de passe que vous définissez.
+            Le nouvel admin se connecte avec son compte FacturaPro (e-mail confirmé). Aucun mot de passe n'est partagé.
         </p>
 
         <div id="createAdminError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
@@ -1988,14 +1978,6 @@
         <div class="form-group">
             <label>Email du nouvel admin</label>
             <input type="email" id="newAdminEmail" placeholder="assistant@example.com">
-        </div>
-
-        <div class="form-group">
-            <label>Mot de passe initial</label>
-            <input type="text" id="newAdminPassword" placeholder="Au moins 8 caractères">
-            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">
-                💡 Communiquez ce mot de passe à l'admin de manière sécurisée. Il pourra le changer après sa première connexion.
-            </div>
         </div>
 
         <div class="alert alert-warning">
@@ -2101,7 +2083,7 @@
     <div class="modal">
         <h2>🔑 Changer le mot de passe admin</h2>
         <p style="color: var(--ink-mute); font-size: 13px; margin-bottom: 20px;">
-            Le nouveau mot de passe sera stocké de façon sécurisée (hash SHA-256) dans Supabase.
+            Le nouveau mot de passe est géré par Supabase Auth (jamais stocké dans le code).
         </p>
 
         <div id="apwError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
@@ -2147,7 +2129,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // 👑 Master account (irrévocable, accès permanent)
 const MASTER_EMAIL = 'webnour@gmail.com';
-const MASTER_PASSWORD_DEFAULT = 'Saadnawal79@@££';
 
 // ============================================
 // SETUP
@@ -2163,19 +2144,15 @@ let lastGeneratedCode = '';
 let currentAdmin = null; // {email, isMaster}
 
 // ============================================
-// PASSWORD HASHING (SHA-256)
+// AUTH ADMIN (Supabase Auth + table `admins` protégée par RLS)
+// Aucun mot de passe n'est stocké dans le code ni dans la base.
 // ============================================
-async function hashAdminPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password + 'facturapro_admin_salt_2026');
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+async function fetchAdminIdentity() {
+    const { data, error } = await supaClient.rpc('admin_whoami');
+    if (error) throw error;
+    return data; // { is_admin, is_master, email }
 }
 
-// ============================================
-// AUTH ADMIN (multi-admins avec Master)
-// ============================================
 async function getAdminByEmail(email) {
     try {
         const { data, error } = await supaClient
@@ -2183,7 +2160,6 @@ async function getAdminByEmail(email) {
             .select('*')
             .eq('email', email.toLowerCase())
             .maybeSingle();
-        
         if (error) {
             console.warn('Admin fetch error:', error);
             return null;
@@ -2195,16 +2171,14 @@ async function getAdminByEmail(email) {
     }
 }
 
-async function createOrUpdateAdmin(email, passwordHash, isMaster = false) {
+async function createOrUpdateAdmin(email, isMaster = false) {
     const { error } = await supaClient
         .from('admins')
         .upsert({
             email: email.toLowerCase(),
-            password_hash: passwordHash,
             is_master: isMaster,
             updated_at: new Date().toISOString()
         }, { onConflict: 'email' });
-    
     if (error) throw error;
 }
 
@@ -2238,53 +2212,27 @@ async function adminLogin() {
     }
     
     try {
-        const inputHash = await hashAdminPassword(pwd);
-        let adminRecord = await getAdminByEmail(email);
-        let isValid = false;
-        let isMaster = false;
-        
-        if (adminRecord) {
-            // Admin existe en base
-            isValid = (inputHash === adminRecord.password_hash);
-            isMaster = adminRecord.is_master;
-        } else if (email === MASTER_EMAIL && pwd === MASTER_PASSWORD_DEFAULT) {
-            // Première connexion du Master → créer le compte
-            try {
-                await createOrUpdateAdmin(MASTER_EMAIL, inputHash, true);
-                console.log('✓ Master account created in database');
-                isValid = true;
-                isMaster = true;
-                adminRecord = { email: MASTER_EMAIL, is_master: true };
-            } catch (err) {
-                console.error('Could not create master:', err);
-                // Fallback : on accepte quand même
-                isValid = true;
-                isMaster = true;
-            }
-        }
-        
-        if (!isValid) {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '🔓 Se connecter';
-            }
+        const { error: authErr } = await supaClient.auth.signInWithPassword({ email, password: pwd });
+        if (authErr) {
+            if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
             showAdminLoginError('Email ou mot de passe incorrect');
             return;
         }
-        
+
+        const who = await fetchAdminIdentity();
+        if (!who || !who.is_admin) {
+            await supaClient.auth.signOut();
+            if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
+            showAdminLoginError('Accès refusé : ce compte n\'est pas administrateur');
+            return;
+        }
+
         // ✅ Login OK
-        currentAdmin = { 
-            email: email, 
-            isMaster: isMaster 
-        };
-        sessionStorage.setItem('admin_session', JSON.stringify(currentAdmin));
-        
+        currentAdmin = { email: email, isMaster: !!who.is_master };
+
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('app').classList.add('active');
-        
-        // Update sidebar with admin info
         updateAdminSidebar();
-        
         loadAllData();
     } catch (err) {
         console.error('Admin login error:', err);
@@ -2296,8 +2244,8 @@ async function adminLogin() {
     }
 }
 
-function adminLogout() {
-    sessionStorage.removeItem('admin_session');
+async function adminLogout() {
+    try { await supaClient.auth.signOut(); } catch (e) { console.warn(e); }
     currentAdmin = null;
     location.reload();
 }
@@ -2342,34 +2290,23 @@ async function resetMasterPassword() {
     const email = document.getElementById('forgotAdminEmail').value.trim().toLowerCase();
     const errEl = document.getElementById('forgotAdminError');
     const okEl = document.getElementById('forgotAdminSuccess');
-    
-    if (email !== MASTER_EMAIL) {
-        errEl.textContent = `❌ Cette procédure est réservée au Master (${MASTER_EMAIL}). Contactez le Master pour réinitialiser votre mot de passe.`;
+
+    if (!email) {
+        errEl.textContent = '❌ Saisissez votre e-mail';
         errEl.style.display = 'block';
         okEl.style.display = 'none';
         return;
     }
-    
-    if (!confirm(`🚨 PROCÉDURE D'URGENCE\n\nLe mot de passe Master sera réinitialisé à la valeur par défaut :\n${MASTER_PASSWORD_DEFAULT}\n\n⚠️ Vous DEVEZ le changer immédiatement après reconnexion.\n\nContinuer ?`)) {
-        return;
-    }
-    
+
     try {
-        // Reset master password to default
-        const defaultHash = await hashAdminPassword(MASTER_PASSWORD_DEFAULT);
-        await createOrUpdateAdmin(MASTER_EMAIL, defaultHash, true);
-        
-        okEl.innerHTML = `✓ Mot de passe Master réinitialisé !<br><br>
-            Connectez-vous avec :<br>
-            <strong>Email :</strong> ${MASTER_EMAIL}<br>
-            <strong>Mot de passe :</strong> ${MASTER_PASSWORD_DEFAULT}<br><br>
-            ⚠️ <strong>Changez-le immédiatement</strong> après connexion !`;
+        const redirectTo = new URL('app.html', location.href).href;
+        const { error } = await supaClient.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+        // Message volontairement identique pour tout e-mail (pas d'énumération de comptes)
+        okEl.textContent = '✓ Si ce compte existe, un e-mail de réinitialisation vient d\'être envoyé.';
         okEl.style.display = 'block';
         errEl.style.display = 'none';
-        
-        setTimeout(() => {
-            closeModal('forgotAdminModal');
-        }, 8000);
+        setTimeout(() => closeModal('forgotAdminModal'), 6000);
     } catch (err) {
         errEl.textContent = '❌ Erreur : ' + err.message;
         errEl.style.display = 'block';
@@ -2440,28 +2377,18 @@ async function submitChangeAdminPassword() {
     btn.textContent = 'Changement...';
     
     try {
-        // Récupérer le record admin actuel
-        const adminRecord = await getAdminByEmail(currentAdmin.email);
-        if (!adminRecord) {
-            showErr('Compte admin introuvable');
-            btn.disabled = false;
-            btn.textContent = '🔑 Changer le mot de passe';
-            return;
-        }
-        
-        // Vérifier l'ancien mot de passe
-        const currentHash = await hashAdminPassword(current);
-        if (currentHash !== adminRecord.password_hash) {
+        // Ré-authentification avec le mot de passe actuel
+        const { error: reErr } = await supaClient.auth.signInWithPassword({ email: currentAdmin.email, password: current });
+        if (reErr) {
             showErr('Mot de passe actuel incorrect');
             btn.disabled = false;
             btn.textContent = '🔑 Changer le mot de passe';
             return;
         }
-        
-        // Sauvegarder le nouveau hash
-        const newHash = await hashAdminPassword(newPwd);
-        await createOrUpdateAdmin(currentAdmin.email, newHash, adminRecord.is_master);
-        
+
+        const { error: updErr } = await supaClient.auth.updateUser({ password: newPwd });
+        if (updErr) throw updErr;
+
         showOk('Mot de passe changé avec succès !');
         showToast('Mot de passe changé ✓', 'success');
         
@@ -5181,39 +5108,26 @@ async function renderAdmins() {
 
 function openCreateAdminModal() {
     document.getElementById('newAdminEmail').value = '';
-    document.getElementById('newAdminPassword').value = generateSecurePassword();
     document.getElementById('createAdminError').style.display = 'none';
     document.getElementById('createAdminModal').classList.add('active');
 }
 
-function generateSecurePassword() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    return Array.from({length: 12}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
 async function createAdmin() {
     const email = document.getElementById('newAdminEmail').value.trim().toLowerCase();
-    const pwd = document.getElementById('newAdminPassword').value;
     const errEl = document.getElementById('createAdminError');
-    
-    if (!email || !pwd) {
-        errEl.textContent = '❌ Email et mot de passe requis';
+
+    if (!email) {
+        errEl.textContent = '❌ Email requis';
         errEl.style.display = 'block';
         return;
     }
-    
-    if (pwd.length < 8) {
-        errEl.textContent = '❌ Mot de passe minimum 8 caractères';
-        errEl.style.display = 'block';
-        return;
-    }
-    
+
     if (email === MASTER_EMAIL) {
         errEl.textContent = '❌ Cet email est réservé au Master';
         errEl.style.display = 'block';
         return;
     }
-    
+
     try {
         const existing = await getAdminByEmail(email);
         if (existing) {
@@ -5221,15 +5135,11 @@ async function createAdmin() {
             errEl.style.display = 'block';
             return;
         }
-        
-        const hash = await hashAdminPassword(pwd);
-        await createOrUpdateAdmin(email, hash, false);
-        
+
+        await createOrUpdateAdmin(email, false);
         closeModal('createAdminModal');
-        
-        // Show credentials to share
-        alert(`✅ Admin créé avec succès !\n\n📧 Email : ${email}\n🔑 Mot de passe : ${pwd}\n\n⚠️ COMMUNIQUEZ CES IDENTIFIANTS DE MANIÈRE SÉCURISÉE.\n\nL'admin pourra changer son mot de passe après sa première connexion.`);
-        
+        alert(`✅ Admin ajouté : ${email}\n\nCette personne doit avoir un compte FacturaPro avec cet e-mail (confirmé). Elle se connecte ici avec son mot de passe habituel.`);
+
         await renderAdmins();
         showToast('Admin créé ✓', 'success');
     } catch (err) {
@@ -5239,18 +5149,14 @@ async function createAdmin() {
 }
 
 async function resetAdminPassword(email) {
-    const newPwd = generateSecurePassword();
-    
-    if (!confirm(`Réinitialiser le mot de passe de ${email} ?\n\nNouveau mot de passe : ${newPwd}\n\n⚠️ Communiquez-le à l'admin de manière sécurisée.\n\nContinuer ?`)) {
+    if (!confirm(`Envoyer un e-mail de réinitialisation de mot de passe à ${email} ?`)) {
         return;
     }
-    
     try {
-        const hash = await hashAdminPassword(newPwd);
-        await createOrUpdateAdmin(email, hash, false);
-        
-        alert(`✅ Mot de passe réinitialisé !\n\n📧 ${email}\n🔑 Nouveau mot de passe : ${newPwd}\n\n⚠️ Communiquez-le à l'admin.`);
-        showToast('Mot de passe réinitialisé ✓', 'success');
+        const redirectTo = new URL('app.html', location.href).href;
+        const { error } = await supaClient.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+        showToast('E-mail de réinitialisation envoyé ✓', 'success');
     } catch (err) {
         showToast('Erreur : ' + err.message, 'error');
     }
@@ -5369,18 +5275,21 @@ function showToast(msg, type = 'info') {
 // ============================================
 // INIT
 // ============================================
-const savedSession = sessionStorage.getItem('admin_session');
-if (savedSession) {
+(async function restoreAdminSession() {
     try {
-        currentAdmin = JSON.parse(savedSession);
+        const { data: { session } } = await supaClient.auth.getSession();
+        if (!session) return;
+        const who = await fetchAdminIdentity();
+        if (!who || !who.is_admin) return;
+        currentAdmin = { email: who.email, isMaster: !!who.is_master };
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('app').classList.add('active');
         updateAdminSidebar();
         loadAllData();
-    } catch {
-        sessionStorage.removeItem('admin_session');
+    } catch (err) {
+        console.warn('Admin session restore failed:', err);
     }
-}
+})();
 </script>
 
 </body>

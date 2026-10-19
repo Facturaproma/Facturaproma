@@ -109,9 +109,9 @@ Une fois déployé :
 
 ### Test 2 : Admin
 1. Va sur `/admin`
-2. Mot de passe par défaut : `Saadnawal79@@££` (à changer après !)
+2. Connecte-toi avec le compte FacturaPro du Master (e-mail confirmé, mot de passe de ton choix)
 3. Tu vois le dashboard admin
-4. **Change le mot de passe** dans la sidebar
+4. Exécute `sql/06_securite_rls.sql` (RLS + fonctions serveur) avant toute mise en production
 
 ### Test 3 : Workflow complet
 1. Client demande Lifetime depuis l'app

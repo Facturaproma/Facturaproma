@@ -3040,7 +3040,7 @@
                 <button class="quick-action" onclick="navTo('invoices'); newInvoice();">
                     <div class="quick-action-icon">📄</div>
                     <h4>Créer une facture</h4>
-                    <p>Conforme aux normes fiscales marocaines</p>
+                    <p>Avec les mentions légales marocaines (ICE, IF)</p>
                 </button>
                 <button class="quick-action" onclick="navTo('quotes'); newQuote();">
                     <div class="quick-action-icon">📋</div>
@@ -3224,7 +3224,7 @@
                     <div class="aside-card">
                         <h3>🇲🇦 Conformité</h3>
                         <div class="notice">
-                            <strong>✓ Conforme</strong> — Cette facture inclut toutes les mentions légales obligatoires (ICE, IF, mentions selon votre statut).
+                            <strong>Mentions de votre entreprise</strong> — ICE, IF et mentions selon votre statut sont ajoutés automatiquement. Vérifiez-les avant d'envoyer la facture.
                         </div>
                     </div>
                 </aside>
@@ -4178,14 +4178,9 @@
                         <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">RIB fourni au paiement</p>
                     </div>
                     <div style="padding: 14px; background: var(--surface-soft); border-radius: 10px; border: 1px solid var(--border);">
-                        <div style="font-size: 24px; margin-bottom: 6px;">💳</div>
-                        <strong style="font-size: 14px;">Carte bancaire</strong>
-                        <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">Via CMI sécurisé</p>
-                    </div>
-                    <div style="padding: 14px; background: var(--surface-soft); border-radius: 10px; border: 1px solid var(--border);">
-                        <div style="font-size: 24px; margin-bottom: 6px;">📱</div>
-                        <strong style="font-size: 14px;">WhatsApp Pay</strong>
-                        <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">Contactez-nous</p>
+                        <div style="font-size: 24px; margin-bottom: 6px;">💵</div>
+                        <strong style="font-size: 14px;">Espèces</strong>
+                        <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">Sur rendez-vous</p>
                     </div>
                 </div>
 
@@ -4677,11 +4672,11 @@
                     <div style="font-size: 32px;">🏛️</div>
                     <div style="flex: 1;">
                         <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">Format FEC (DGI Maroc)</div>
-                        <div style="font-size: 12px; color: var(--ink-mute); margin-bottom: 6px;">Fichier Écritures Comptables conforme DGI</div>
+                        <div style="font-size: 12px; color: var(--ink-mute); margin-bottom: 6px;">Fichier Écritures Comptables (export à faire valider par votre comptable)</div>
                         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">DGI</span>
-                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Conforme Maroc</span>
-                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Contrôle fiscal</span>
+                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Export comptable</span>
+                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Format FEC</span>
+                            <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">À valider</span>
                         </div>
                     </div>
                     <div style="color: var(--primary); font-size: 20px;">→</div>
@@ -6264,6 +6259,10 @@ function onboardingNext(currentStep) {
         }
         if (!ice || ice.length !== 15 || !/^\d+$/.test(ice)) {
             showToast('L\'ICE doit contenir 15 chiffres', 'error');
+            return;
+        }
+        if (ice === '002345678000012' || /^(\d)\1+$/.test(ice)) {
+            showToast('Saisissez votre vrai ICE (pas l\'exemple)', 'error');
             return;
         }
         document.getElementById('onbStep2').classList.remove('active');
@@ -9589,9 +9588,7 @@ function showHowToBuy() {
         `1️⃣ VIREMENT BANCAIRE\n` +
         `   Effectuez un virement vers le compte indiqué\n` +
         `   Envoyez-nous le justificatif par WhatsApp\n\n` +
-        `2️⃣ CMI (Carte bancaire)\n` +
-        `   Lien de paiement disponible sur demande\n\n` +
-        `3️⃣ ESPÈCES (Casa/Rabat)\n` +
+        `2️⃣ ESPÈCES (Casa/Rabat)\n` +
         `   Sur rendez-vous uniquement\n\n` +
         `📱 Contact : WhatsApp +212 6XX XX XX XX\n` +
         `📧 Email : contact@facturapro.ma\n\n` +
@@ -9717,7 +9714,6 @@ async function purchaseLicense(tier) {
         `🚀 PROCHAINES ÉTAPES :\n\n` +
         `1️⃣ Effectuez votre paiement par :\n` +
         `   • Virement bancaire\n` +
-        `   • CMI (carte bancaire)\n` +
         `   • Espèces (Casa/Rabat sur RDV)\n\n` +
         `2️⃣ Envoyez le justificatif sur WhatsApp :\n` +
         `   📱 +212 6XX XX XX XX\n\n` +
@@ -9823,71 +9819,34 @@ async function activateLicense() {
     showToast('Vérification du code...', 'info');
     
     try {
-        // 1. Récupérer le code depuis admin_codes
-        const { data: codeData, error: fetchError } = await supaClient
-            .from('admin_codes')
-            .select('*')
-            .eq('code', code)
-            .maybeSingle();
-        
-        if (fetchError) {
-            console.error('Code fetch error:', fetchError);
-            showToast('Erreur de vérification : ' + fetchError.message, 'error');
+        // Confirmation puis activation côté serveur (RPC activate_license) :
+        // le code n'est jamais lu depuis le navigateur.
+        if (!confirm(`Activer la licence avec le code ${code} ?\n\nContinuer ?`)) {
             return;
         }
-        
-        // 2. Code introuvable ?
-        if (!codeData) {
-            showToast('❌ Code invalide. Vérifiez et réessayez.', 'error');
+
+        const { data: result, error: rpcError } = await supaClient.rpc('activate_license', { p_code: code });
+
+        if (rpcError) {
+            console.error('Licence RPC error:', rpcError);
+            showToast('Erreur de vérification : ' + rpcError.message, 'error');
             return;
         }
-        
-        // 3. Code déjà utilisé ?
-        if (codeData.status === 'used') {
-            showToast('⚠️ Ce code a déjà été utilisé', 'error');
+
+        if (!result || !result.ok) {
+            const reasons = {
+                invalid: '❌ Code invalide. Vérifiez et réessayez.',
+                used: '⚠️ Ce code a déjà été utilisé',
+                revoked: '⚠️ Ce code a été révoqué. Contactez le support.',
+                wrong_email: '⚠️ Ce code est destiné à un autre compte',
+                not_authenticated: '⚠️ Connectez-vous pour activer un code'
+            };
+            showToast(reasons[result && result.reason] || 'Activation impossible', 'error');
             return;
         }
-        
-        // 4. Code révoqué ?
-        if (codeData.status === 'revoked') {
-            showToast('⚠️ Ce code a été révoqué. Contactez le support.', 'error');
-            return;
-        }
-        
-        // 5. Vérifier que le code est destiné à cet utilisateur (si client_email spécifié)
-        const session = await Auth.getCurrentUser();
-        if (codeData.client_email && session && codeData.client_email.toLowerCase() !== session.email.toLowerCase()) {
-            showToast(`⚠️ Ce code est destiné à un autre email (${codeData.client_email})`, 'error');
-            return;
-        }
-        
-        // 6. Tout est OK → confirmer activation
-        const tierLabels = {
-            lifetime: '🎁 Lifetime — Accès à vie',
-            monthly: '⭐ Pro Mensuel',
-            business: '👔 Business Mensuel'
-        };
-        const tierLabel = tierLabels[codeData.type] || codeData.type;
-        
-        if (!confirm(`✓ Code valide !\n\nActiver la licence : ${tierLabel}\n\nContinuer ?`)) {
-            return;
-        }
-        
-        // 7. Marquer le code comme utilisé en base
-        const { error: updateError } = await supaClient
-            .from('admin_codes')
-            .update({
-                status: 'used',
-                activated_at: new Date().toISOString()
-            })
-            .eq('id', codeData.id);
-        
-        if (updateError) {
-            console.error('Code update error:', updateError);
-            showToast('Erreur lors de l\'activation : ' + updateError.message, 'error');
-            return;
-        }
-        
+
+        const codeData = { type: result.type };
+
         // 8. Activer la licence localement
         License.activate(codeData.type, { code: code });
         

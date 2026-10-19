@@ -1,6 +1,6 @@
 // FacturaPro Service Worker
 // Version - changer ce numéro pour forcer mise à jour
-const CACHE_VERSION = 'facturapro-v1';
+const CACHE_VERSION = 'facturapro-v2-securite';
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fichiers à mettre en cache au moment de l'installation

@@ -38,7 +38,7 @@
 - 🎁 **Génération de codes de licence** en 1 clic
 - 💳 **Suivi des paiements reçus**
 - 📱 **Envoi WhatsApp/Email** automatique
-- 🔑 **Mot de passe modifiable** (stocké en base)
+- 🔑 **Connexion via Supabase Auth** (e-mail confirmé, aucun mot de passe stocké dans le code ni dans la base)
 
 ---
 
@@ -73,7 +73,8 @@ Crée un projet sur [supabase.com](https://supabase.com) et exécute les scripts
 sql/01_initial.sql           # Tables principales (user_data)
 sql/02_admin_tables.sql      # Tables admin (codes, payments)
 sql/03_subscriptions.sql     # Demandes d'abonnement
-sql/04_admin_settings.sql    # Paramètres admin (password)
+sql/04_admin_settings.sql    # Paramètres admin
+sql/06_securite_rls.sql      # SÉCURITÉ : RLS + fonctions (à exécuter en dernier)
 ```
 
 ### 2. Configurer les credentials
