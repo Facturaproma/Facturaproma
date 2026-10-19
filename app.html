@@ -4912,6 +4912,26 @@
     </div>
 </div>
 
+<!-- ============ NOUVEAU MOT DE PASSE (après lien de réinitialisation) ============ -->
+<div class="modal-overlay" id="recoveryModal" style="z-index: 10000;">
+    <div class="modal-content" style="max-width: 460px;">
+        <h2>🔑 Nouveau mot de passe</h2>
+        <p>Choisissez un nouveau mot de passe pour votre compte.</p>
+        <div id="rcpError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
+        <div class="form-group">
+            <label>Nouveau mot de passe (8 caractères minimum)</label>
+            <input type="password" id="rcpNew" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+            <label>Confirmer le mot de passe</label>
+            <input type="password" id="rcpConfirm" autocomplete="new-password" onkeydown="if(event.key==='Enter') submitRecovery()">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" id="rcpBtn" onclick="submitRecovery()">🔑 Enregistrer le mot de passe</button>
+        </div>
+    </div>
+</div>
+
 <!-- ============ SYNC INDICATOR ============ -->
 <div class="sync-indicator" id="syncIndicator" onclick="showSyncDetails()">
     <div class="sync-dot"></div>
@@ -5420,6 +5440,49 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.contact-email').forEach(e => e.textContent = CONTACT.email);
 });
 
+// ============================================
+// RÉINITIALISATION DE MOT DE PASSE (lien reçu par e-mail)
+// Supabase ouvre une session de récupération : on demande alors un nouveau mot de passe.
+// ============================================
+var recoveryListenerAttached = false;
+function attachRecoveryListener() {
+    if (!supaClient || recoveryListenerAttached) return;
+    recoveryListenerAttached = true;
+    supaClient.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') setTimeout(openRecoveryModal, 300);
+    });
+}
+function openRecoveryModal() {
+    const m = document.getElementById('recoveryModal');
+    if (!m) return;
+    document.getElementById('rcpError').style.display = 'none';
+    m.classList.add('active');
+}
+async function submitRecovery() {
+    const pwd = document.getElementById('rcpNew').value;
+    const conf = document.getElementById('rcpConfirm').value;
+    const err = document.getElementById('rcpError');
+    const btn = document.getElementById('rcpBtn');
+    const fail = (msg) => { err.textContent = msg; err.style.display = 'block'; };
+    if (pwd.length < 8) return fail('Le mot de passe doit faire au moins 8 caractères');
+    if (pwd !== conf) return fail('Les mots de passe ne correspondent pas');
+    btn.disabled = true;
+    btn.textContent = 'Enregistrement...';
+    try {
+        const { error } = await supaClient.auth.updateUser({ password: pwd });
+        if (error) throw new Error(error.message);
+        document.getElementById('rcpNew').value = '';
+        document.getElementById('rcpConfirm').value = '';
+        history.replaceState(null, '', location.pathname + location.search);
+        showToast('Mot de passe modifié ✓', 'success');
+        setTimeout(() => location.reload(), 900);
+    } catch (e) {
+        fail(e.message || 'Erreur, réessayez avec un nouveau lien');
+        btn.disabled = false;
+        btn.textContent = '🔑 Enregistrer le mot de passe';
+    }
+}
+
 // Détection auto : Supabase ou Local
 const USE_SUPABASE = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
 let supaClient = null;
@@ -5428,6 +5491,7 @@ if (USE_SUPABASE) {
     try {
         if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
             supaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            attachRecoveryListener();
             console.log('✓ FacturaPro running with Supabase (cloud sync)');
         } else {
             console.warn('⚠ Supabase SDK not loaded, will retry...');
@@ -5445,6 +5509,7 @@ function ensureSupabase() {
         try {
             if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
                 supaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                attachRecoveryListener();
                 console.log('✓ Supabase initialized (retry)');
                 return true;
             }
@@ -5521,7 +5586,8 @@ const Auth = {
             if (!ensureSupabase()) throw new Error('Service indisponible. Vérifiez votre connexion.');
             const { data, error } = await supaClient.auth.signUp({ 
                 email, 
-                password 
+                password,
+                options: { emailRedirectTo: new URL('app.html', window.location.href).href }
             });
             if (error) {
                 if (error.message.includes('already registered')) {
@@ -5590,7 +5656,7 @@ const Auth = {
         email = email.trim().toLowerCase();
         if (USE_SUPABASE) {
             const { error } = await supaClient.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin
+                redirectTo: new URL('app.html', window.location.href).href
             });
             if (error) throw new Error(error.message);
             return true;
