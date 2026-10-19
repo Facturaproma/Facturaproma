@@ -4168,7 +4168,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     if (cfg.ice) {
         pdf.text(`ICE : ${cfg.ice}   ·   IF : ${cfg.if}   ·   RC : ${cfg.rc || '—'}`, 105, 289, { align: 'center' });
     }
-    pdf.text('Document généré par FacturaPro - facturapro.ma', 105, 293, { align: 'center' });
+    pdf.text('Document généré par FacturaPro - facturaproma.github.io/Facturaproma', 105, 293, { align: 'center' });
     
     if (downloadDirectly) {
         pdf.save(`${doc.number}.pdf`);
