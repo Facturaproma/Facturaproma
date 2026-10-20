@@ -1,0 +1,73 @@
+name: Sauvegarde Supabase (chiffrée)
+
+# Sauvegarde hebdomadaire de la base, CHIFFRÉE avant d'être déposée comme
+# "artifact" GitHub (conservé 90 jours). Ce dépôt est public : sans chiffrement,
+# les données clients seraient lisibles par n'importe qui. Ne jamais retirer l'étape de chiffrement.
+#
+# Secrets à créer (Settings > Secrets and variables > Actions > New repository secret) :
+#   SUPABASE_DB_URL     chaîne "Session pooler" de Supabase (Connect > Session pooler)
+#   BACKUP_PASSPHRASE   phrase secrète longue, à noter dans un gestionnaire de mots de passe
+on:
+  schedule:
+    - cron: '23 3 * * 1'   # chaque lundi à 03:23 UTC
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier les secrets
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PP: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB" ] || [ -z "$PP" ]; then
+            echo "::error::Secrets SUPABASE_DB_URL et BACKUP_PASSPHRASE requis (voir l'en-tête du fichier)."
+            exit 1
+          fi
+          if [ ${#PP} -lt 16 ]; then echo "::error::BACKUP_PASSPHRASE trop courte (16 caractères minimum)."; exit 1; fi
+
+      - name: Installer pg_dump 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsS -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      - name: Exporter la base
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          D=$(date -u +%Y-%m-%d)
+          mkdir out
+          # Schéma public complet (tables, fonctions, règles RLS) + données
+          pg_dump "$DB" --no-owner --no-privileges -n public -f out/public-$D.sql
+          # Comptes (e-mails, hash) : utile pour une restauration complète
+          pg_dump "$DB" --no-owner --no-privileges --data-only -t auth.users -t auth.identities -f out/auth-$D.sql \
+            || echo "::warning::Export des comptes (auth) impossible, sauvegarde du schéma public seulement."
+          # Contrôle minimal : le fichier doit contenir la table principale
+          grep -q "user_data" out/public-$D.sql
+          test "$(wc -c < out/public-$D.sql)" -gt 5000
+          ls -l out
+          tar czf backup-$D.tar.gz -C out .
+          echo "BACKUP_FILE=backup-$D.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Chiffrer (AES-256)
+        env:
+          PP: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PP" \
+              --symmetric --cipher-algo AES256 -o "$BACKUP_FILE.gpg" "$BACKUP_FILE"
+          rm -rf out "$BACKUP_FILE"
+          ls -l
+
+      - name: Déposer la sauvegarde chiffrée
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauvegarde-supabase
+          path: "*.gpg"
+          retention-days: 90
+          if-no-files-found: error
