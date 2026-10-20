@@ -46,15 +46,15 @@ jobs:
           PGCONNECT_TIMEOUT: '15'
           RAW: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          echo "Longueur du secret : ${#RAW}"
-          echo "Espaces/retours (doit être 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[[:space:]]' || true)"
-          echo "Caractères non ASCII (doit être 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[^ -~]' || true)"
+          echo "::notice title=diag1::Longueur du secret : ${#RAW}"
+          echo "::notice title=diag2::Espaces/retours (doit etre 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[[:space:]]' || true)"
+          echo "::notice title=diag3::Non ASCII (doit etre 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[^ -~]' || true)"
           echo "Commence par [ ou postgres : $(printf %s "$RAW" | grep -Ec '^(\[|postgres)' || true)"
           P=$(printf %s "$RAW" | tr -d '[:space:]')
           for combo in "5432 postgres.mdozjptoecygmpkjlohr" "6543 postgres.mdozjptoecygmpkjlohr" "5432 postgres"; do
             set -- $combo
-            echo "--- port $1, utilisateur $2"
-            PGPASSWORD="$P" PGPORT=$1 PGUSER=$2 psql -tAc "select 'CONNEXION OK'" 2>&1 | head -3 || true
+            r=$(PGPASSWORD="$P" PGPORT=$1 PGUSER=$2 psql -tAc "select 'CONNEXION OK'" 2>&1 | head -2 | tr '\n' ' ' || true)
+            echo "::notice title=port $1 user $2::$r"
           done
 
       - name: Exporter la base
