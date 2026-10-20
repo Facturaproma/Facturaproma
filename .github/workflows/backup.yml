@@ -37,6 +37,26 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-17
           pg_dump --version
 
+      - name: Diagnostic de connexion (sans afficher le secret)
+        continue-on-error: true
+        env:
+          PGHOST: aws-1-eu-north-1.pooler.supabase.com
+          PGDATABASE: postgres
+          PGSSLMODE: require
+          PGCONNECT_TIMEOUT: '15'
+          RAW: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          echo "Longueur du secret : ${#RAW}"
+          echo "Espaces/retours (doit être 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[[:space:]]' || true)"
+          echo "Caractères non ASCII (doit être 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[^ -~]' || true)"
+          echo "Commence par [ ou postgres : $(printf %s "$RAW" | grep -Ec '^(\[|postgres)' || true)"
+          P=$(printf %s "$RAW" | tr -d '[:space:]')
+          for combo in "5432 postgres.mdozjptoecygmpkjlohr" "6543 postgres.mdozjptoecygmpkjlohr" "5432 postgres"; do
+            set -- $combo
+            echo "--- port $1, utilisateur $2"
+            PGPASSWORD="$P" PGPORT=$1 PGUSER=$2 psql -tAc "select 'CONNEXION OK'" 2>&1 | head -3 || true
+          done
+
       - name: Exporter la base
         env:
           # Session pooler (IPv4) du projet facturapro-prod ; seul le mot de passe est secret
@@ -48,6 +68,8 @@ jobs:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
+          # retire espaces / retours à la ligne ajoutés par un copier-coller
+          export PGPASSWORD="$(printf %s "$PGPASSWORD" | tr -d '[:space:]')"
           D=$(date -u +%Y-%m-%d)
           mkdir out
           # Schéma public complet (tables, fonctions, règles RLS) + données
