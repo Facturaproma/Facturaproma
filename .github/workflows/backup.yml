@@ -37,25 +37,25 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-17
           pg_dump --version
 
-      - name: Diagnostic de connexion (sans afficher le secret)
-        continue-on-error: true
+      - name: Préparer le mot de passe
         env:
-          PGHOST: aws-1-eu-north-1.pooler.supabase.com
-          PGDATABASE: postgres
-          PGSSLMODE: require
-          PGCONNECT_TIMEOUT: '15'
           RAW: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          echo "::notice title=diag1::Longueur du secret : ${#RAW}"
-          echo "::notice title=diag2::Espaces/retours (doit etre 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[[:space:]]' || true)"
-          echo "::notice title=diag3::Non ASCII (doit etre 0) : $(printf %s "$RAW" | LC_ALL=C grep -c '[^ -~]' || true)"
-          echo "Commence par [ ou postgres : $(printf %s "$RAW" | grep -Ec '^(\[|postgres)' || true)"
-          P=$(printf %s "$RAW" | tr -d '[:space:]')
-          for combo in "5432 postgres.mdozjptoecygmpkjlohr" "6543 postgres.mdozjptoecygmpkjlohr" "5432 postgres"; do
-            set -- $combo
-            r=$(PGPASSWORD="$P" PGPORT=$1 PGUSER=$2 psql -tAc "select 'CONNEXION OK'" 2>&1 | head -2 | tr '\n' ' ' || true)
-            echo "::notice title=port $1 user $2::$r"
-          done
+          # Accepte soit le mot de passe seul, soit (par erreur) l'URL complète postgresql://user:motdepasse@hote/base
+          P=$(python3 - <<'PY'
+          import os, re
+          raw = os.environ["RAW"].strip()
+          m = re.match(r"^postgres(?:ql)?://[^:/@]+:(.*)@[^@]*$", raw, re.I | re.S)
+          if m:
+              raw = m.group(1)
+              print("::notice title=info::Le secret contenait une URL complete : mot de passe extrait automatiquement. Remplace-le par le mot de passe seul quand tu peux.", file=__import__("sys").stderr)
+          raw = raw.strip().strip("[]")
+          print(re.sub(r"\s", "", raw))
+          PY
+          )
+          if [ -z "$P" ]; then echo "::error::Mot de passe vide après nettoyage."; exit 1; fi
+          echo "::add-mask::$P"
+          echo "PGPASSWORD=$P" >> "$GITHUB_ENV"
 
       - name: Exporter la base
         env:
@@ -65,11 +65,8 @@ jobs:
           PGUSER: postgres.mdozjptoecygmpkjlohr
           PGDATABASE: postgres
           PGSSLMODE: require
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
-          # retire espaces / retours à la ligne ajoutés par un copier-coller
-          export PGPASSWORD="$(printf %s "$PGPASSWORD" | tr -d '[:space:]')"
           D=$(date -u +%Y-%m-%d)
           mkdir out
           # Schéma public complet (tables, fonctions, règles RLS) + données
