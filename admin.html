@@ -2023,9 +2023,9 @@
         <div class="form-group">
             <label>Type de licence</label>
             <select id="activateType">
-                <option value="lifetime">Lifetime (499 DH)</option>
-                <option value="monthly">Mensuel (49 DH/mois)</option>
-                <option value="business">Business (199 DH/mois)</option>
+                <option value="monthly">📅 Mensuel (49 DH/mois)</option>
+                <option value="annual">🏆 Annuel (449 DH/an)</option>
+                <option value="lifetime">🎁 À vie (offert, hors vente)</option>
             </select>
         </div>
 
@@ -2058,7 +2058,7 @@
             </div>
             <div class="form-group">
                 <label>Montant (DH)</label>
-                <input type="number" id="paymentAmount" placeholder="499">
+                <input type="number" id="paymentAmount" placeholder="49">
             </div>
         </div>
 
@@ -2066,9 +2066,10 @@
             <div class="form-group">
                 <label>Type</label>
                 <select id="paymentType">
-                    <option value="lifetime">Lifetime</option>
-                    <option value="monthly">Mensuel</option>
-                    <option value="business">Business</option>
+                    <option value="monthly">Mensuel (49 DH)</option>
+                    <option value="annual">Annuel (449 DH)</option>
+                    <option value="founder">Fondateur (299 DH)</option>
+                    <option value="lifetime">À vie / autre</option>
                 </select>
             </div>
             <div class="form-group">
@@ -2595,8 +2596,10 @@ function renderRequests() {
     }
     
     const tierLabels = {
-        lifetime: '🎁 Lifetime',
-        monthly: '⭐ Pro',
+        lifetime: '🎁 À vie',
+        monthly: '⭐ Mensuel',
+        annual: '🏆 Annuel',
+        founder: '🎁 Fondateur',
         business: '👔 Business'
     };
     
@@ -2739,9 +2742,11 @@ async function reopenRequest(requestId) {
 
 function contactByWhatsApp(email, tier, price) {
     const tierLabels = {
-        lifetime: 'Lifetime (499 DH)',
+        lifetime: 'À vie (offert)',
         monthly: 'Mensuel (49 DH/mois)',
-        business: 'Business Mensuel (199 DH/mois)'
+        annual: 'Annuel (449 DH/an)',
+        founder: 'Fondateur (299 DH/an)',
+        business: 'Business Mensuel'
     };
     
     const msg = `Bonjour 🇲🇦,\n\nMerci pour votre demande d'abonnement à FacturaPro !\n\n📋 Plan choisi : ${tierLabels[tier]}\n💰 Montant : ${price} DH\n📧 Email : ${email}\n\n💳 Voici les modalités de paiement :\n\n1️⃣ VIREMENT BANCAIRE\n   Bénéficiaire : FacturaPro\n   RIB : [À COMPLÉTER]\n   Référence : ${email}\n\n2️⃣ Une fois le paiement effectué, envoyez-nous le justificatif par retour de message.\n\n3️⃣ Vous recevrez votre code d'activation sous 24h.\n\nDes questions ? Je suis là !\n\n— FacturaPro`;
@@ -3102,7 +3107,7 @@ async function activateLicense() {
 function openPaymentModal() {
     document.getElementById('paymentEmail').value = '';
     document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
-    document.getElementById('paymentAmount').value = '499';
+    document.getElementById('paymentAmount').value = '49';
     document.getElementById('paymentNote').value = '';
     document.getElementById('paymentModal').classList.add('active');
 }
@@ -3155,7 +3160,7 @@ function renderTreasury() {
     document.getElementById('trBilledCount').textContent = `${invoicesEmitted.length} facture${invoicesEmitted.length > 1 ? 's' : ''}`;
     
     // En attente = codes pending
-    const TIER_PRICES_TR = { lifetime: 499, monthly: 99, business: 199 };
+    const TIER_PRICES_TR = { lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
     const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
     const pendingAmount = pendingCodes.reduce((s, c) => s + (TIER_PRICES_TR[c.type] || 0), 0);
     document.getElementById('trPending').textContent = formatCurrency(pendingAmount);
@@ -3236,7 +3241,7 @@ function renderTreasuryReconciled() {
     const tbody = document.getElementById('trReconciledTable');
     if (!tbody) return;
     
-    const TIER_LABELS_TR = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+    const TIER_LABELS_TR = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
     
     // Grouper les docs par payment_db_id
     const reconciliations = {};
@@ -3296,8 +3301,8 @@ function renderTreasuryPending() {
     const tbody = document.getElementById('trPendingTable');
     if (!tbody) return;
     
-    const TIER_LABELS_TR = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
-    const TIER_PRICES_TR = { lifetime: 499, monthly: 99, business: 199 };
+    const TIER_LABELS_TR = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const TIER_PRICES_TR = { lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
     
     const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
     const sorted = pendingCodes.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -3341,7 +3346,7 @@ function renderTreasuryPending() {
 // ONGLET 3 : ANOMALIES
 // ============================================
 function renderTreasuryOrphan() {
-    const TIER_LABELS_TR = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+    const TIER_LABELS_TR = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
     
     // === Paiements orphelins ===
     const linkedPaymentIds = new Set();
@@ -3878,7 +3883,7 @@ function renderFpDocuments() {
             ? '<span class="badge" style="background: var(--primary); color: white;">📋 Facture</span>'
             : '<span class="badge" style="background: var(--accent); color: var(--ink);">📄 Reçu</span>';
         
-        const tierLabels = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+        const tierLabels = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
         const tierLabel = tierLabels[d.tier] || d.tier || '—';
         
         return `
@@ -4057,9 +4062,11 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     
     // === ITEMS TABLE ===
     const tierLabels = { 
-        lifetime: 'Licence Lifetime - Accès à vie', 
-        monthly: 'Licence Pro Mensuelle', 
-        business: 'Licence Business Mensuelle' 
+        lifetime: 'Licence FacturaPro - Accès à vie', 
+        monthly: 'Licence FacturaPro Mensuelle', 
+        annual: 'Licence FacturaPro Annuelle', 
+        founder: 'Licence FacturaPro Fondateur (annuelle)', 
+        business: 'Licence FacturaPro Business' 
     };
     
     const tvaRate = cfg.tvaRate ?? 20;
@@ -4228,7 +4235,7 @@ async function sendFpDoc(docId) {
     if (!doc) return showToast('Document introuvable', 'error');
     
     const docTypeLabel = doc.docType === 'invoice' ? 'facture' : 'reçu';
-    const tierLabels = { lifetime: 'Lifetime', monthly: 'Pro Mensuel', business: 'Business' };
+    const tierLabels = { lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
     
     const msg = `Bonjour ${doc.client_name || ''} 🇲🇦,\n\n` +
         `Merci pour votre confiance !\n\n` +
@@ -4395,7 +4402,7 @@ async function renderFpStats() {
         byType[t].ttc += d.totalTTC || 0;
     });
     
-    const tierLabels = { lifetime: '🎁 Lifetime', monthly: '⭐ Pro', business: '👔 Business' };
+    const tierLabels = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
     const sorted = Object.values(byType).sort((a, b) => b.ttc - a.ttc);
     const tbody = document.getElementById('fpStatsByType');
     if (sorted.length === 0) {
@@ -4454,7 +4461,7 @@ function exportFpDocuments() {
     }
     
     const headers = ['Type', 'Numéro', 'Date', 'Client Email', 'Client Nom', 'Type Licence', 'Total HT', 'TVA', 'Total TTC'];
-    const tierLabels = { lifetime: 'Lifetime', monthly: 'Pro Mensuel', business: 'Business' };
+    const tierLabels = { lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
     
     const rows = fpDocuments.map(d => [
         d.docType === 'invoice' ? 'Facture' : 'Reçu',
@@ -4573,14 +4580,18 @@ function renderTiers() {
 
 // Prix attendus selon le type de licence
 const TIER_PRICES = {
-    lifetime: 499,
-    monthly: 99,
+    lifetime: 0,
+    monthly: 49,
+    annual: 449,
+    founder: 299,
     business: 199
 };
 
 const TIER_LABELS = {
-    lifetime: '🎁 Lifetime',
-    monthly: '⭐ Pro Mensuel',
+    lifetime: '🎁 À vie',
+    monthly: '⭐ Mensuel',
+    annual: '🏆 Annuel',
+    founder: '🎁 Fondateur',
     business: '👔 Business'
 };
 
