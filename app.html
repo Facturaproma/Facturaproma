@@ -5749,6 +5749,8 @@ const Storage = {
         const baseKey = this.keys[key] || key;
         // Licence expirée => lecture seule (aucune écriture locale ni cloud)
         if (this._blockedByLicense(baseKey)) {
+            // Annule toute modification faite en mémoire sur la copie en cache
+            delete this._cache[baseKey];
             const t = Date.now();
             if (!this._roToast || t - this._roToast > 5000) {
                 this._roToast = t;
@@ -11103,6 +11105,30 @@ function renderAll() {
         document.addEventListener('visibilitychange', () => { if (!document.hidden) License.refresh(); });
     }
 }
+
+// ============================================
+// LECTURE SEULE : toute action d'écriture est bloquée si la licence est expirée
+// (la base de données refuse aussi les écritures : voir sql/07_licence_serveur.sql)
+// ============================================
+function blockedByLicense() {
+    showToast('🔒 Licence expirée : lecture seule. Activez votre licence pour créer ou modifier.', 'error');
+    try { updateTrialUI(); } catch {}
+}
+(function guardWriteActions() {
+    ['newInvoice','newQuote','newClient','newProduct','editInvoice','duplicateInvoice',
+     'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
+     'saveInvoice','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
+     'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo',
+     'generateInvitationCode','cancelInvitation','removeTeamMember'
+    ].forEach(function (name) {
+        const orig = window[name];
+        if (typeof orig !== 'function') return;
+        window[name] = function () {
+            try { if (License.isExpired()) { blockedByLicense(); return; } } catch (e) {}
+            return orig.apply(this, arguments);
+        };
+    });
+})();
 
 // Boot avec gestion d'erreur robuste
 window.addEventListener('error', function(e) {
