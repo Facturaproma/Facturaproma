@@ -5,7 +5,8 @@ name: Sauvegarde Supabase (chiffrée)
 # les données clients seraient lisibles par n'importe qui. Ne jamais retirer l'étape de chiffrement.
 #
 # Secrets à créer (Settings > Secrets and variables > Actions > New repository secret) :
-#   SUPABASE_DB_URL     chaîne "Session pooler" de Supabase (Connect > Session pooler)
+#   SUPABASE_DB_PASSWORD  mot de passe de la base (Supabase > Database > Settings), SANS ajouter d'adresse :
+#                         l'hôte et l'utilisateur sont fixés plus bas, ce qui évite tout problème de caractères spéciaux
 #   BACKUP_PASSPHRASE   phrase secrète longue, à noter dans un gestionnaire de mots de passe
 on:
   schedule:
@@ -18,11 +19,11 @@ jobs:
     steps:
       - name: Vérifier les secrets
         env:
-          DB: ${{ secrets.SUPABASE_DB_URL }}
+          DB: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PP: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
           if [ -z "$DB" ] || [ -z "$PP" ]; then
-            echo "::error::Secrets SUPABASE_DB_URL et BACKUP_PASSPHRASE requis (voir l'en-tête du fichier)."
+            echo "::error::Secrets SUPABASE_DB_PASSWORD et BACKUP_PASSPHRASE requis (voir l'en-tête du fichier)."
             exit 1
           fi
           if [ ${#PP} -lt 16 ]; then echo "::error::BACKUP_PASSPHRASE trop courte (16 caractères minimum)."; exit 1; fi
@@ -38,15 +39,21 @@ jobs:
 
       - name: Exporter la base
         env:
-          DB: ${{ secrets.SUPABASE_DB_URL }}
+          # Session pooler (IPv4) du projet facturapro-prod ; seul le mot de passe est secret
+          PGHOST: aws-1-eu-north-1.pooler.supabase.com
+          PGPORT: '5432'
+          PGUSER: postgres.mdozjptoecygmpkjlohr
+          PGDATABASE: postgres
+          PGSSLMODE: require
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
           D=$(date -u +%Y-%m-%d)
           mkdir out
           # Schéma public complet (tables, fonctions, règles RLS) + données
-          pg_dump "$DB" --no-owner --no-privileges -n public -f out/public-$D.sql
+          pg_dump --no-owner --no-privileges -n public -f out/public-$D.sql
           # Comptes (e-mails, hash) : utile pour une restauration complète
-          pg_dump "$DB" --no-owner --no-privileges --data-only -t auth.users -t auth.identities -f out/auth-$D.sql \
+          pg_dump --no-owner --no-privileges --data-only -t auth.users -t auth.identities -f out/auth-$D.sql \
             || echo "::warning::Export des comptes (auth) impossible, sauvegarde du schéma public seulement."
           # Contrôle minimal : le fichier doit contenir la table principale
           grep -q "user_data" out/public-$D.sql
