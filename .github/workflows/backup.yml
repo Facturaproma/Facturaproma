@@ -13,6 +13,10 @@ on:
     - cron: '23 3 * * 1'   # chaque lundi à 03:23 UTC
   workflow_dispatch:
 
+# Moindre privilège : le jeton du workflow ne peut que lire le dépôt
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest

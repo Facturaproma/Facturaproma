@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # Met à jour les actions GitHub utilisées par les workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
