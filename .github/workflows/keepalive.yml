@@ -8,6 +8,10 @@ on:
     - cron: '17 6 * * *'   # tous les jours à 06:17 UTC
   workflow_dispatch:
 
+# Moindre privilège : le jeton du workflow ne peut que lire le dépôt
+permissions:
+  contents: read
+
 jobs:
   ping:
     runs-on: ubuntu-latest

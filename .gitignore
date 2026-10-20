@@ -43,3 +43,19 @@ backup/
 old/
 old_versions/
 *.old.html
+
+# Sauvegardes et secrets : ne JAMAIS les committer (dépôt public)
+*.gpg
+*.sql.gz
+backup*.tar.gz
+backup*/
+sauvegarde*/
+out/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+service_role*
+secrets*.txt
+*.dump
