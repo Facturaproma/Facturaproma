@@ -1,6 +1,6 @@
 // FacturaPro Service Worker
 // Version - changer ce numéro pour forcer mise à jour
-const CACHE_VERSION = 'facturapro-v14-lectureseule';
+const CACHE_VERSION = 'facturapro-v15-netfirst';
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fichiers à mettre en cache au moment de l'installation
@@ -87,6 +87,22 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
+    // === Pages HTML : Network-first (les mises à jour, dont la licence, arrivent tout de suite) ===
+    if (event.request.mode === 'navigate' || event.request.destination === 'document' || /\.html?$/.test(url.pathname)) {
+        event.respondWith(
+            fetch(event.request, { cache: 'no-cache' })
+                .then(response => {
+                    if (response && response.status === 200 && response.type !== 'opaque') {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy).catch(() => {}));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match(event.request).then(c => c || caches.match('./app.html')))
+        );
+        return;
+    }
+
     // === Assets statiques : Cache-first ===
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
