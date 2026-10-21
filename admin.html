@@ -2353,6 +2353,7 @@ async function adminLogin() {
         // ✅ Login OK
         currentAdmin = { email: email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
         applyRoleMode();
+        AdminSession.stamp(true); AdminSession.start();
 
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('app').classList.add('active');
@@ -2368,7 +2369,44 @@ async function adminLogin() {
     }
 }
 
+// ── Session admin : reconnexion obligatoire (inactivité 15 min, durée maximale 8 h)
+const ADMIN_IDLE_MIN = 15, ADMIN_MAX_HOURS = 8;
+const AdminSession = {
+    _g(k) { try { return parseInt(localStorage.getItem(k) || '0', 10) || 0; } catch { return 0; } },
+    _s(k, v) { try { localStorage.setItem(k, String(v)); } catch {} },
+    stamp(isLogin) { const n = Date.now(); if (isLogin) this._s('fpa_login_at', n); this._s('fpa_last_active', n); },
+    check() {
+        const n = Date.now();
+        let l = this._g('fpa_login_at'), a = this._g('fpa_last_active');
+        if (!l) { l = n; this._s('fpa_login_at', n); }
+        if (!a) { a = n; this._s('fpa_last_active', n); }
+        if (n - l > ADMIN_MAX_HOURS * 3600000) return 'max';
+        if (n - a > ADMIN_IDLE_MIN * 60000) return 'idle';
+        return null;
+    },
+    clear() { try { localStorage.removeItem('fpa_login_at'); localStorage.removeItem('fpa_last_active'); } catch {} },
+    _started: false,
+    start() {
+        if (this._started) return; this._started = true;
+        let last = 0;
+        const touch = () => { const n = Date.now(); if (n - last < 10000) return; last = n; this._s('fpa_last_active', n); };
+        ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => window.addEventListener(ev, touch, { passive: true, capture: true }));
+        const tick = async () => {
+            const r = this.check();
+            if (!r) return;
+            try { await supaClient.auth.signOut(); } catch {}
+            this.clear();
+            try { sessionStorage.setItem('fpa_msg', r); } catch {}
+            location.reload();
+        };
+        setInterval(tick, 15000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+        window.addEventListener('focus', tick);
+    }
+};
+
 async function adminLogout() {
+    AdminSession.clear();
     try { await supaClient.auth.signOut(); } catch (e) { console.warn(e); }
     currentAdmin = null;
     location.reload();
@@ -6025,12 +6063,28 @@ function showToast(msg, type = 'info') {
 // ============================================
 (async function restoreAdminSession() {
     try {
+        const why = sessionStorage.getItem('fpa_msg');
+        if (why) {
+            sessionStorage.removeItem('fpa_msg');
+            showAdminLoginError(why === 'max' ? 'Session expirée (durée maximale ' + ADMIN_MAX_HOURS + ' h). Reconnectez-vous.' : 'Déconnecté après ' + ADMIN_IDLE_MIN + ' minutes d\'inactivité. Reconnectez-vous.');
+        }
         const { data: { session } } = await supaClient.auth.getSession();
         if (!session) return;
         const who = await fetchAdminIdentity();
         if (!who || !(who.is_admin || who.is_staff)) return;
         currentAdmin = { email: who.email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
+        const expired = AdminSession.check();
+        if (expired) {
+            try { await supaClient.auth.signOut(); } catch {}
+            AdminSession.clear();
+            currentAdmin = null;
+            showAdminLoginError(expired === 'max'
+                ? 'Session expirée (durée maximale ' + ADMIN_MAX_HOURS + ' h). Reconnectez-vous.'
+                : 'Déconnecté après ' + ADMIN_IDLE_MIN + ' minutes d\'inactivité. Reconnectez-vous.');
+            return;
+        }
         applyRoleMode();
+        AdminSession.start();
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('app').classList.add('active');
         updateAdminSidebar();
