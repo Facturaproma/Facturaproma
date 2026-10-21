@@ -1,0 +1,15 @@
+{
+  "name": "facturaproma-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Tests reproductibles de FacturaPro (aucun secret requis)",
+  "scripts": {
+    "test": "node tests/app.test.js",
+    "test:sql": "bash tests/sql/run.sh"
+  },
+  "devDependencies": {
+    "jspdf": "2.5.1",
+    "jspdf-autotable": "3.5.31",
+    "playwright-core": "^1.48.0"
+  }
+}

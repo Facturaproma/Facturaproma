@@ -25,7 +25,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     
     <!-- Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
     
     <!-- Service Worker Registration -->
     <script>
@@ -350,7 +350,7 @@
         table.tbl-act th:last-child, table.tbl-act td:last-child {
             position: sticky; right: 0; z-index: 2;
             background: var(--surface); box-shadow: -6px 0 8px -6px var(--shadow-md);
-            white-space: normal; min-width: 112px;
+            white-space: normal; min-width: 150px;
         }
         table.tbl-act thead th:last-child { background: var(--surface-soft); }
         table.tbl-act td:last-child { display: table-cell; }
@@ -765,10 +765,18 @@
         }
 
         /* Items table in editor */
+        .editor-main { min-width: 0; }
+        .items-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
         .items-table {
             width: 100%;
+            min-width: 500px;
             margin: 20px 0;
         }
+        .items-table .item-qty { min-width: 50px; }
+        .items-table .item-price { min-width: 78px; }
+        .items-table .item-disc { min-width: 50px; }
+        .items-table .item-desc { min-width: 100px; }
+        .items-table .item-tva { min-width: 64px; padding-left: 6px; padding-right: 2px; }
 
         .items-table thead {
             background: var(--surface-soft);
@@ -3171,10 +3179,11 @@
                     <button class="btn btn-success" id="btnConvertQuote" style="display:none;" onclick="convertEditingQuote()">→ Convertir en facture</button>
                     <button class="btn btn-secondary" onclick="editorExport('pdf')" title="Enregistrer puis télécharger / imprimer en PDF">📥 PDF / Imprimer</button>
                     <button class="btn btn-secondary" onclick="editorExport('whatsapp')" title="Enregistrer puis envoyer par WhatsApp" style="color:#1da851;">💬 WhatsApp</button>
-                    <button class="btn btn-secondary" onclick="saveInvoice('draft')">Brouillon</button>
-                    <button class="btn btn-primary" onclick="saveInvoice('sent')">Enregistrer & Envoyer</button>
+                    <button class="btn btn-secondary lock-hide" onclick="saveInvoice('draft')">Brouillon</button>
+                    <button class="btn btn-primary lock-hide" onclick="saveInvoice('sent')">Enregistrer & Envoyer</button>
                 </div>
             </div>
+            <div id="editorLockBanner" class="alert alert-warning" style="display:none; margin: 0 0 16px;"></div>
 
             <div class="editor-grid">
                 <div class="editor-main">
@@ -3212,23 +3221,24 @@
 
                     <h3 style="font-family: 'Crimson Pro', serif; font-size: 18px; margin: 24px 0 12px;">Articles</h3>
 
-                    <table class="items-table">
+                    <div class="items-scroll"><table class="items-table">
                         <thead>
                             <tr>
-                                <th style="width: 45%;">Description</th>
-                                <th style="width: 12%;">Qté</th>
-                                <th style="width: 18%;">Prix unitaire</th>
-                                <th style="width: 10%;">TVA %</th>
-                                <th style="width: 15%;" style="text-align: right;">Total HT</th>
+                                <th>Description</th>
+                                <th style="width: 52px;">Qté</th>
+                                <th style="width: 84px;">Prix unit.</th>
+                                <th style="width: 56px;">Rem. %</th>
+                                <th style="width: 70px;">TVA %</th>
+                                <th style="width: 84px; text-align: right;">Total HT</th>
                                 <th style="width: 40px;"></th>
                             </tr>
                         </thead>
                         <tbody id="itemsBody"></tbody>
-                    </table>
+                    </table></div>
 
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
                         <button class="btn btn-primary btn-sm" onclick="addItemFromPicker()">📦 Choisir depuis catalogue</button>
-                        <button class="btn btn-secondary btn-sm" onclick="addItem()">✏️ Saisie manuelle</button>
+                        <button class="btn btn-secondary btn-sm lock-hide" onclick="addItem()">✏️ Saisie manuelle</button>
                     </div>
 
                     <div class="totals-section">
@@ -4486,20 +4496,6 @@
                         </button>
                         <button class="btn btn-danger" onclick="resetApp()" style="width: 100%;">
                             🔄 Tout réinitialiser
-                        </button>
-                    </div>
-
-                    <div class="aside-card">
-                        <h3>🧪 Mode Test (Dev)</h3>
-                        <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">À utiliser uniquement pour tester le système d'essai</p>
-                        <button class="btn btn-secondary" onclick="resetTrial()" style="width: 100%; margin-bottom: 8px; font-size: 12px;">
-                            🔄 Réinitialiser essai (14 jours)
-                        </button>
-                        <button class="btn btn-secondary" onclick="expireTrial()" style="width: 100%; margin-bottom: 8px; font-size: 12px;">
-                            ⏰ Forcer expiration (test)
-                        </button>
-                        <button class="btn btn-secondary" onclick="setTrialDaysLeft(2)" style="width: 100%; font-size: 12px;">
-                            🔴 Test : 2 jours restants
                         </button>
                     </div>
                 </aside>
@@ -5973,6 +5969,14 @@ const Storage = {
                     License.refresh();
                     return;
                 }
+                if (/FACTURE_VERROUILLEE/.test(error.message || '')) {
+                    // Le serveur protège les factures émises : on recharge la version serveur
+                    console.warn('Écriture refusée (facture émise verrouillée).');
+                    if (typeof showToast === 'function') showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error');
+                    await this.loadFromCloud();
+                    try { renderInvoices(); } catch {}
+                    return;
+                }
                 throw error;
             }
             
@@ -6125,20 +6129,68 @@ function showToast(message, type = '') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-function getNextNumber(type) {
-    const counter = Storage.get('counter', { invoice: 0, quote: 0, credit: 0 });
-    counter[type] = (counter[type] || 0) + 1;
-    Storage.set('counter', counter);
-    
+// ---- Calculs (arrondi à 2 décimales, ligne par ligne) -------------------
+// Règle : HT de ligne = quantité × prix × (1 − remise %), arrondi au centime ;
+// TVA de ligne = HT de ligne × taux, arrondie au centime ; les totaux sont la
+// somme des lignes arrondies. Ainsi les montants affichés s'additionnent exactement.
+function roundMoney(x) {
+    return Math.round((Number(x) + Number.EPSILON) * 100) / 100;
+}
+function computeLine(qty, price, tvaRate, discountPct) {
+    const q = Number(qty) || 0, p = Number(price) || 0, t = Number(tvaRate) || 0;
+    const d = Math.min(Math.max(Number(discountPct) || 0, 0), 100);
+    const totalHT = roundMoney(q * p * (1 - d / 100));
+    const totalTVA = roundMoney(totalHT * t / 100);
+    return { totalHT, totalTVA, totalTTC: roundMoney(totalHT + totalTVA) };
+}
+function computeTotals(items) {
+    const totalHT = roundMoney((items || []).reduce((s, i) => s + (i.totalHT || 0), 0));
+    const totalTVA = roundMoney((items || []).reduce((s, i) => s + (i.totalTVA || 0), 0));
+    return { totalHT, totalTVA, totalTTC: roundMoney(totalHT + totalTVA) };
+}
+
+// ---- Numérotation ---------------------------------------------------------
+function formatDocNumber(type, n) {
     const company = Storage.get('company', {});
     let prefix;
     if (type === 'invoice') prefix = company.invoicePrefix || 'FAC';
     else if (type === 'quote') prefix = company.quotePrefix || 'DEV';
     else if (type === 'credit') prefix = company.creditPrefix || 'AVR';  // Avoir
     else prefix = 'DOC';
-    
-    const year = new Date().getFullYear();
-    return `${prefix}-${year}-${String(counter[type]).padStart(3, '0')}`;
+    return `${prefix}-${new Date().getFullYear()}-${String(n).padStart(3, '0')}`;
+}
+
+// Numéro attribué par le serveur (séquence unique par compte). Si le serveur est
+// injoignable ou si sql/14 n'est pas installé, on retombe sur le compteur local.
+async function getNextNumber(type) {
+    const counter = Storage.get('counter', { invoice: 0, quote: 0, credit: 0 });
+    const floor = counter[type] || 0;
+    let n = null;
+    if (typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof supaClient !== 'undefined' && supaClient &&
+        Storage._currentUserId && navigator.onLine !== false) {
+        try {
+            const { data, error } = await supaClient.rpc('next_doc_number', { p_type: type, p_floor: floor });
+            if (!error && Number.isInteger(data)) n = data;
+        } catch (e) { /* repli local */ }
+    }
+    if (n === null) n = floor + 1;
+    counter[type] = n;
+    Storage.set('counter', counter);
+    return formatDocNumber(type, n);
+}
+
+const dn = (n) => (typeof n === 'string' && n.startsWith('BRO-')) ? 'Brouillon' : (n || '');
+const isDraftNumber = (num) => typeof num === 'string' && num.startsWith('BRO-');
+const draftNumber = () => 'BRO-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+const isLockedDoc = (d) => !!d && (d.type === 'invoice' || d.type === 'credit' || (!d.type && d.number)) && (d.status || 'draft') !== 'draft';
+
+// ---- Journal des opérations (piste d'audit) --------------------------------
+function logDoc(action, doc, detail = '') {
+    try {
+        const log = Storage.get('docLog', []) || [];
+        log.push({ ts: new Date().toISOString(), action, docId: doc && doc.id, number: doc && doc.number, detail });
+        Storage.set('docLog', log.slice(-2000));
+    } catch (e) { /* le journal ne doit jamais bloquer l'action */ }
 }
 
 function statusLabel(status) {
@@ -6693,7 +6745,7 @@ function navTo(page) {
     if (page === 'team') { navTo('dashboard'); return; }
     if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
-    if (page === 'invoice-editor') renderComplianceBox();
+    if (page === 'invoice-editor') { renderComplianceBox(); applyEditorLock(); }
     
     // Close mobile sidebar
     document.getElementById('sidebar').classList.remove('open');
@@ -6784,7 +6836,7 @@ function renderActionCenter(invoices) {
                 <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--border);">
                     <div style="flex:1; min-width:0;">
                         <strong>${escapeHtml(i.clientName || '—')}</strong>
-                        <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(i.number)} · ${i.overdueDays || 0} j de retard</div>
+                        <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(dn(i.number))} · ${i.overdueDays || 0} j de retard</div>
                     </div>
                     <strong>${formatCurrency(i.totalTTC)}</strong>
                     <button class="btn btn-secondary btn-sm" onclick="quickRelance('${i.id}')" title="Relancer par WhatsApp" style="color:#25D366;">💬 Relancer</button>
@@ -6872,7 +6924,7 @@ function renderDashboard() {
                 <tbody>
                     ${recent.map(i => `
                         <tr onclick="editInvoice('${i.id}')">
-                            <td><strong>${escapeHtml(i.number)}</strong></td>
+                            <td><strong>${escapeHtml(dn(i.number))}</strong></td>
                             <td>${escapeHtml(i.clientName || '—')}</td>
                             <td>${formatDate(i.date)}</td>
                             <td><strong>${formatCurrency(i.totalTTC)}</strong></td>
@@ -6971,7 +7023,7 @@ function renderInvoices() {
                 ${sorted.map(i => {
                     const isCredit = i.type === 'credit' || (i.totalTTC || 0) < 0;
                     const rowStyle = isCredit ? 'background: rgba(232, 177, 74, 0.04);' : '';
-                    const numberDisplay = isCredit ? `<strong style="color: var(--warning);">${escapeHtml(i.number)}</strong> <span style="font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 100px; font-weight: 700;">AVOIR</span>` : `<strong>${escapeHtml(i.number)}</strong>`;
+                    const numberDisplay = isCredit ? `<strong style="color: var(--warning);">${escapeHtml(dn(i.number))}</strong> <span style="font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 100px; font-weight: 700;">AVOIR</span>` : `<strong>${escapeHtml(dn(i.number))}</strong>`;
                     const amountDisplay = isCredit 
                         ? `<strong style="color: var(--danger);">${formatCurrency(i.totalTTC)}</strong>`
                         : `<strong>${formatCurrency(i.totalTTC)}</strong>`;
@@ -7005,7 +7057,7 @@ function newInvoice() {
     
     document.getElementById('editorTitle').textContent = 'Nouvelle facture';
     document.getElementById('editorType').value = 'invoice';
-    document.getElementById('editorInvoiceNumber').textContent = getNextNumberPreview('invoice');
+    document.getElementById('editorInvoiceNumber').textContent = 'Numéro attribué à l\'émission';
     document.getElementById('editorNumber').value = '';
     document.getElementById('editorDate').value = todayISO();
     document.getElementById('editorDueDate').value = addDaysISO(30);
@@ -7025,6 +7077,28 @@ function newInvoice() {
     document.getElementById('editorCompany').textContent = `Émis par ${company.name || 'votre entreprise'}`;
     
     navTo('invoice-editor');
+}
+
+// Facture émise = lecture seule (le serveur refuse aussi toute modification : sql/14)
+function applyEditorLock() {
+    const locked = editingType !== 'quote' && isLockedDoc(editingInvoice);
+    const page = document.getElementById('page-invoice-editor');
+    if (!page) return;
+    page.querySelectorAll('input, select, textarea').forEach(el => { el.disabled = locked; });
+    page.querySelectorAll('.lock-hide, .item-remove').forEach(el => { el.style.display = locked ? 'none' : ''; });
+    const ban = document.getElementById('editorLockBanner');
+    if (!ban) return;
+    if (!locked) { ban.style.display = 'none'; ban.innerHTML = ''; return; }
+    const hist = (Storage.get('docLog', []) || []).filter(l => l.docId === editingInvoice.id).slice(-5)
+        .map(l => `<li>${escapeHtml(new Date(l.ts).toLocaleString('fr-FR'))} — ${escapeHtml(l.action.replace(/_/g, ' '))}${l.detail ? ' (' + escapeHtml(l.detail) + ')' : ''}</li>`).join('');
+    const isCredit = editingInvoice.type === 'credit';
+    ban.innerHTML = `<strong>🔒 ${isCredit ? 'Avoir' : 'Facture'} ${escapeHtml(editingInvoice.number)} émis : non modifiable.</strong><br>`
+        + (isCredit ? '' : `Pour corriger une erreur, créez un avoir ; pour refaire une facture proche, utilisez « Dupliquer ». `)
+        + `<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">`
+        + (isCredit ? '' : `<button type="button" class="btn btn-secondary btn-sm" onclick="createCreditFromInvoice('${editingInvoice.id}')">↩️ Créer un avoir</button>`)
+        + `<button type="button" class="btn btn-secondary btn-sm" onclick="duplicateInvoice('${editingInvoice.id}')">📋 Dupliquer</button></div>`
+        + (hist ? `<ul style="margin:8px 0 0 18px; font-size:12px;">${hist}</ul>` : '');
+    ban.style.display = 'block';
 }
 
 function getNextNumberPreview(type) {
@@ -7049,10 +7123,10 @@ function editInvoice(id) {
     editingInvoice = invoice;
     editingType = 'invoice';
     
-    document.getElementById('editorTitle').textContent = `Facture ${invoice.number}`;
+    document.getElementById('editorTitle').textContent = isDraftNumber(invoice.number) ? 'Facture (brouillon)' : `Facture ${invoice.number}`;
     document.getElementById('editorType').value = 'invoice';
-    document.getElementById('editorInvoiceNumber').textContent = invoice.number;
-    document.getElementById('editorNumber').value = invoice.number;
+    document.getElementById('editorInvoiceNumber').textContent = isDraftNumber(invoice.number) ? 'Numéro attribué à l\'émission' : invoice.number;
+    document.getElementById('editorNumber').value = isDraftNumber(invoice.number) ? '' : invoice.number;
     document.getElementById('editorDate').value = invoice.date;
     document.getElementById('editorDueDate').value = invoice.dueDate || '';
     setEditorStatusOptions('invoice');
@@ -7082,7 +7156,7 @@ function duplicateInvoice(id) {
     
     document.getElementById('editorTitle').textContent = 'Nouvelle facture';
     document.getElementById('editorType').value = 'invoice';
-    document.getElementById('editorInvoiceNumber').textContent = getNextNumberPreview('invoice');
+    document.getElementById('editorInvoiceNumber').textContent = 'Numéro attribué à l\'émission';
     document.getElementById('editorNumber').value = '';
     document.getElementById('editorDate').value = todayISO();
     document.getElementById('editorDueDate').value = addDaysISO(30);
@@ -7104,20 +7178,35 @@ function duplicateInvoice(id) {
 }
 
 function deleteInvoice(id) {
-    if (!confirm('Supprimer cette facture ?')) return;
     const invoices = Storage.get('invoices', []);
+    const inv = invoices.find(i => i.id === id);
+    if (inv && isLockedDoc(inv)) {
+        showToast(`La facture ${inv.number} est émise : elle ne peut pas être supprimée. Créez un avoir pour l'annuler.`, 'error');
+        return;
+    }
+    if (!confirm('Supprimer ce brouillon ?')) return;
+    if (inv) logDoc('suppression_brouillon', inv);
     Storage.set('invoices', invoices.filter(i => i.id !== id));
     renderInvoices();
-    showToast('Facture supprimée', 'success');
+    showToast('Brouillon supprimé', 'success');
 }
 
 // ============================================
 // CREDIT NOTES (AVOIRS) - Remboursements
 // ============================================
-function createCreditFromInvoice(id) {
+async function createCreditFromInvoice(id) {
     const invoices = Storage.get('invoices', []);
     const original = invoices.find(i => i.id === id);
     if (!original) return;
+    if (!isLockedDoc(original)) {
+        showToast('Un avoir se crée sur une facture émise. Supprimez simplement ce brouillon.', 'error');
+        return;
+    }
+    const already = invoices.find(i => i.type === 'credit' && i.relatedInvoiceId === original.id);
+    if (already) {
+        showToast(`Un avoir existe déjà pour cette facture (${already.number}).`, 'error');
+        return;
+    }
     
     if (!confirm(`📝 Créer un avoir (note de crédit) pour cette facture ?\n\n` +
                  `Facture originale : ${original.number}\n` +
@@ -7129,7 +7218,8 @@ function createCreditFromInvoice(id) {
     }
     
     // Générer un nouveau numéro d'avoir
-    const creditNumber = getNextNumber('credit');
+    const reason = prompt('Motif de l\'avoir :', 'Remboursement / Annulation') || 'Remboursement';
+    const creditNumber = await getNextNumber('credit');
     
     // Créer l'avoir avec items en NÉGATIF
     const credit = {
@@ -7147,18 +7237,22 @@ function createCreditFromInvoice(id) {
         items: (original.items || []).map(item => ({
             ...item,
             quantity: -Math.abs(item.quantity || 0),  // Quantité négative
+            totalHT: -Math.abs(item.totalHT || 0),
+            totalTVA: -Math.abs(item.totalTVA || 0),
+            totalTTC: -Math.abs(item.totalTTC || 0)
         })),
         totalHT: -Math.abs(original.totalHT || original.subtotal || 0),
         totalTVA: -Math.abs(original.totalTVA || 0),
         totalTTC: -Math.abs(original.totalTTC || 0),
         status: 'sent',
-        notes: `Avoir relatif à la facture ${original.number}\nMotif : ${prompt('Motif de l\'avoir :', 'Remboursement / Annulation') || 'Remboursement'}`,
+        notes: `Avoir relatif à la facture ${original.number}\nMotif : ${reason}`,
         paymentTerms: '0',
         createdAt: new Date().toISOString()
     };
     
     invoices.push(credit);
     Storage.set('invoices', invoices);
+    logDoc('avoir', credit, `sur ${original.number}`);
     
     showToast(`✓ Avoir ${creditNumber} créé`, 'success');
     renderInvoices();
@@ -7191,7 +7285,7 @@ function updateEditorType() {
     } else {
         document.getElementById('editorTitle').textContent = editingInvoice ? `Facture ${editingInvoice.number}` : 'Nouvelle facture';
         document.getElementById('editorInvoiceNumber').textContent = 
-            editingInvoice ? editingInvoice.number : getNextNumberPreview('invoice');
+            editingInvoice ? dn(editingInvoice.number) : 'Numéro attribué à l\'émission';
     }
 }
 
@@ -7211,8 +7305,9 @@ function addItem(data = null) {
                 <button type="button" class="btn btn-secondary" onclick="openProductPicker('${rowId}')" title="Sélectionner un produit/service" style="padding: 6px 10px; font-size: 14px;">📦</button>
             </div>
         </td>
-        <td><input type="number" class="item-qty" min="1" step="0.01" value="${data?.quantity || 1}" oninput="updateTotals()"></td>
+        <td><input type="number" class="item-qty" min="0.01" step="0.01" value="${data?.quantity || 1}" oninput="updateTotals()"></td>
         <td><input type="number" class="item-price" min="0" step="0.01" placeholder="0.00" value="${data?.price || 0}" oninput="updateTotals()"></td>
+        <td><input type="number" class="item-disc" min="0" max="100" step="0.5" placeholder="0" value="${data?.discount || 0}" oninput="updateTotals()"></td>
         <td>
             <select class="item-tva" onchange="updateTotals()">
                 <option value="0" ${data?.tva == 0 ? 'selected' : ''}>0%</option>
@@ -7418,24 +7513,17 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function updateTotals() {
-    let totalHT = 0;
-    let totalTVA = 0;
-    
+    const lines = [];
     document.querySelectorAll('#itemsBody tr').forEach(row => {
-        const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-        const price = parseFloat(row.querySelector('.item-price').value) || 0;
-        const tva = parseFloat(row.querySelector('.item-tva').value) || 0;
-        
-        const lineHT = qty * price;
-        const lineTVA = lineHT * (tva / 100);
-        
-        totalHT += lineHT;
-        totalTVA += lineTVA;
-        
-        row.querySelector('.item-total').textContent = formatCurrency(lineHT);
+        const line = computeLine(
+            parseFloat(row.querySelector('.item-qty').value),
+            parseFloat(row.querySelector('.item-price').value),
+            parseFloat(row.querySelector('.item-tva').value),
+            parseFloat(row.querySelector('.item-disc')?.value));
+        lines.push(line);
+        row.querySelector('.item-total').textContent = formatCurrency(line.totalHT);
     });
-    
-    const totalTTC = totalHT + totalTVA;
+    const { totalHT, totalTVA, totalTTC } = computeTotals(lines);
     
     document.getElementById('totalHT').textContent = formatCurrency(totalHT);
     document.getElementById('totalTVA').textContent = formatCurrency(totalTVA);
@@ -7450,16 +7538,19 @@ function getCurrentItems() {
         const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
         const price = parseFloat(row.querySelector('.item-price').value) || 0;
         const tva = parseFloat(row.querySelector('.item-tva').value) || 0;
+        const discount = Math.min(Math.max(parseFloat(row.querySelector('.item-disc')?.value) || 0, 0), 100);
         
         if (desc && qty > 0) {
+            const line = computeLine(qty, price, tva, discount);
             items.push({
                 description: desc,
                 quantity: qty,
                 price: price,
+                discount: discount,
                 tva: tva,
-                totalHT: qty * price,
-                totalTVA: qty * price * (tva / 100),
-                totalTTC: qty * price * (1 + tva / 100)
+                totalHT: line.totalHT,
+                totalTVA: line.totalTVA,
+                totalTTC: line.totalTTC
             });
         }
     });
@@ -7469,7 +7560,18 @@ function getCurrentItems() {
 // ============================================
 // SAVE INVOICE / QUOTE
 // ============================================
-function persistEditor(forceStatus = null) {
+let _persisting = false;
+async function persistEditor(forceStatus = null) {
+    if (_persisting) return null;          // évite un double clic = deux documents
+    _persisting = true;
+    try { return await _persistEditor(forceStatus); } finally { _persisting = false; }
+}
+async function _persistEditor(forceStatus = null) {
+    // Une facture émise est figée : correction par avoir uniquement
+    if (editingInvoice && editingType !== 'quote' && isLockedDoc(editingInvoice)) {
+        showToast('Facture émise : non modifiable. Créez un avoir pour la corriger.', 'error');
+        return null;
+    }
     // Check license
     if (!License.hasFullAccess()) {
         showToast('🔒 Période d\'essai expirée. Activez votre licence pour continuer.', 'error');
@@ -7496,19 +7598,28 @@ function persistEditor(forceStatus = null) {
         return null;
     }
     
-    const totalHT = items.reduce((s, i) => s + i.totalHT, 0);
-    const totalTVA = items.reduce((s, i) => s + i.totalTVA, 0);
-    const totalTTC = totalHT + totalTVA;
+    const { totalHT, totalTVA, totalTTC } = computeTotals(items);
     
     const isQuote = editingType === 'quote';
     const storageKey = isQuote ? 'quotes' : 'invoices';
     const collection = Storage.get(storageKey, []);
     
+    const newStatus = forceStatus || document.getElementById('editorStatus').value;
+    let number = editingInvoice?.number;
+    let justIssued = false;
+    if (isQuote) {
+        if (!number) number = await getNextNumber('quote');
+    } else if (!number || isDraftNumber(number)) {
+        // Numéro officiel attribué uniquement à l'émission : un brouillon supprimé ne crée pas de trou
+        if (newStatus === 'draft') { number = number || draftNumber(); }
+        else { number = await getNextNumber('invoice'); justIssued = true; }
+    }
+
     const data = {
         // on conserve les champs que l'éditeur ne gère pas (lien devis ↔ facture, paiements, etc.)
         ...(editingInvoice || {}),
         id: editingInvoice?.id || uuid(),
-        number: editingInvoice?.number || getNextNumber(isQuote ? 'quote' : 'invoice'),
+        number: number,
         type: editingType,
         date: document.getElementById('editorDate').value,
         dueDate: document.getElementById('editorDueDate').value,
@@ -7520,7 +7631,7 @@ function persistEditor(forceStatus = null) {
         totalHT: totalHT,
         totalTVA: totalTVA,
         totalTTC: totalTTC,
-        status: forceStatus || document.getElementById('editorStatus').value,
+        status: newStatus,
         paymentTerms: document.getElementById('editorPaymentTerms').value,
         notes: document.getElementById('editorNotes').value,
         createdAt: editingInvoice?.createdAt || new Date().toISOString(),
@@ -7536,12 +7647,20 @@ function persistEditor(forceStatus = null) {
     
     Storage.set(storageKey, collection);
     editingInvoice = data;   // les enregistrements suivants mettent à jour ce document (pas de doublon)
+    if (justIssued) {
+        logDoc('emission', data, `Facture émise, total TTC ${data.totalTTC}`);
+        // le devis d'origine pointe vers le numéro officiel
+        const quotes = Storage.get('quotes', []);
+        const q = quotes.find(x => x.convertedTo === data.id);
+        if (q) { q.convertedInvoiceNumber = data.number; Storage.set('quotes', quotes); }
+    }
     return data;
 }
 
-function editorExport(kind) {
+async function editorExport(kind) {
     const isQuote = editingType === 'quote';
-    const data = persistEditor(null);
+    // Facture émise : on n'enregistre rien, on exporte le document tel quel
+    const data = (!isQuote && editingInvoice && isLockedDoc(editingInvoice)) ? editingInvoice : await persistEditor(null);
     if (!data) return;
     editingInvoice = data;
     const type = isQuote ? 'quote' : 'invoice';
@@ -7549,9 +7668,9 @@ function editorExport(kind) {
     else sendDocWhatsApp(data.id, type);
 }
 
-function saveInvoice(forceStatus = null) {
+async function saveInvoice(forceStatus = null) {
     const wasAccepted = editingType === 'quote' && editingInvoice && editingInvoice.status === 'accepted';
-    const data = persistEditor(forceStatus);
+    const data = await persistEditor(forceStatus);
     if (!data) return;
     const isQuote = editingType === 'quote';
     showToast(isQuote ? 'Devis enregistré ✓' : 'Facture enregistrée ✓', 'success');
@@ -7567,10 +7686,10 @@ function saveInvoice(forceStatus = null) {
 }
 
 // Bouton « Convertir en facture » dans l'éditeur de devis : enregistre d'abord, puis convertit
-function convertEditingQuote() {
-    const data = persistEditor(null);
+async function convertEditingQuote() {
+    const data = await persistEditor(null);
     if (!data) return;
-    convertQuoteToInvoice(data.id);
+    await convertQuoteToInvoice(data.id);
 }
 
 // ============================================
@@ -7692,7 +7811,7 @@ function editQuote(id) {
     navTo('invoice-editor');
 }
 
-function convertQuoteToInvoice(id, silent) {
+async function convertQuoteToInvoice(id, silent) {
     const quotes = Storage.get('quotes', []);
     const quote = quotes.find(q => q.id === id);
     if (!quote) return;
@@ -7702,7 +7821,7 @@ function convertQuoteToInvoice(id, silent) {
     if (quote.convertedTo) {
         const existing = invoices.find(i => i.id === quote.convertedTo);
         if (existing) {
-            if (confirm(`Ce devis a déjà été transformé en facture ${existing.number}.\n\nOuvrir cette facture ?`)) editInvoice(existing.id);
+            if (confirm(`Ce devis a déjà été transformé en facture ${isDraftNumber(existing.number) ? '(brouillon)' : existing.number}.\n\nOuvrir cette facture ?`)) editInvoice(existing.id);
             return;
         }
     }
@@ -7718,7 +7837,7 @@ function convertQuoteToInvoice(id, silent) {
     const newInvoice = {
         ...quote,
         id: uuid(),
-        number: getNextNumber('invoice'),
+        number: draftNumber(),     // le numéro officiel est attribué à l'émission
         type: 'invoice',
         status: 'draft',          // à vérifier puis « Enregistrer & Envoyer »
         date: todayISO(),
@@ -7740,12 +7859,13 @@ function convertQuoteToInvoice(id, silent) {
 
     quote.status = 'accepted';
     quote.convertedTo = newInvoice.id;
-    quote.convertedInvoiceNumber = newInvoice.number;
+    quote.convertedInvoiceNumber = 'brouillon';
     quote.convertedAt = nowIso;
     quote.updatedAt = nowIso;
     Storage.set('quotes', quotes);
 
-    showToast(`Facture ${newInvoice.number} créée en brouillon : vérifiez puis envoyez ✓`, 'success');
+    logDoc('conversion_devis', newInvoice, `depuis ${quote.number}`);
+    showToast('Facture créée en brouillon : vérifiez puis envoyez ✓', 'success');
     editInvoice(newInvoice.id);
 }
 
@@ -9543,6 +9663,9 @@ function exportData() {
         products: Storage.get('products', []),
         invoices: Storage.get('invoices', []),
         quotes: Storage.get('quotes', []),
+        payments: Storage.get('payments', []),
+        counter: Storage.get('counter', {}),
+        journal: Storage.get('docLog', []),
         exportDate: new Date().toISOString()
     };
     
@@ -9725,8 +9848,10 @@ function showAccountingExportMenu() {
 }
 
 async function resetApp() {
-    if (!confirm('⚠️ ATTENTION : Toutes vos données seront effacées définitivement. Continuer ?')) return;
-    if (!confirm('Êtes-vous absolument sûr ? Cette action est irréversible.')) return;
+    if (!confirm('⚠️ ATTENTION : Toutes vos données (factures émises comprises) seront effacées définitivement. Une copie sera téléchargée avant. Continuer ?')) return;
+    const word = prompt('Pour confirmer, tapez SUPPRIMER en majuscules :');
+    if (word !== 'SUPPRIMER') { showToast('Suppression annulée', 'info'); return; }
+    exportData();   // sauvegarde automatique avant effacement
     await Storage.clearAll();
     location.reload();
 }
@@ -10881,6 +11006,7 @@ function savePayment() {
             invoices[idx].status = 'sent';
         }
         Storage.set('invoices', invoices);
+        logDoc('paiement', invoices[idx], `${amount} DH (${method})`);
     }
     
     closeModal('paymentModal');
@@ -11164,7 +11290,7 @@ function generatePDF(id, type) {
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(...accentColor);
-    pdf.text(doc_data.number, 195, 30, { align: 'right' });
+    pdf.text(isDraftNumber(doc_data.number) ? 'BROUILLON' : doc_data.number, 195, 30, { align: 'right' });
     
     // === COMPANY INFO BOX ===
     let yPos = 48;
@@ -11230,17 +11356,21 @@ function generatePDF(id, type) {
     yPos += 40;
     
     // === ITEMS TABLE ===
-    const tableData = doc_data.items.map(item => [
-        item.description,
-        item.quantity.toString(),
-        formatCurrencyForPDF(item.price, false),
-        item.tva + '%',
-        formatCurrencyForPDF(item.totalHT, false)
-    ]);
+    const hasDiscount = doc_data.items.some(it => (it.discount || 0) > 0);
+    const tableData = doc_data.items.map(item => {
+        const row = [
+            item.description,
+            item.quantity.toString(),
+            formatCurrencyForPDF(item.price, false)
+        ];
+        if (hasDiscount) row.push((item.discount || 0) > 0 ? item.discount + '%' : '');
+        row.push(item.tva + '%', formatCurrencyForPDF(item.totalHT, false));
+        return row;
+    });
     
     pdf.autoTable({
         startY: yPos,
-        head: [['Désignation', 'Qté', 'P.U. HT', 'TVA', 'Total HT']],
+        head: [hasDiscount ? ['Désignation', 'Qté', 'P.U. HT', 'Remise', 'TVA', 'Total HT'] : ['Désignation', 'Qté', 'P.U. HT', 'TVA', 'Total HT']],
         body: tableData,
         theme: 'plain',
         headStyles: {
@@ -11263,7 +11393,14 @@ function generatePDF(id, type) {
         alternateRowStyles: {
             fillColor: [250, 248, 243]
         },
-        columnStyles: {
+        columnStyles: hasDiscount ? {
+            0: { cellWidth: 62, fontStyle: 'normal' },
+            1: { cellWidth: 16, halign: 'center' },
+            2: { cellWidth: 28, halign: 'right' },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 16, halign: 'center' },
+            5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+        } : {
             0: { cellWidth: 80, fontStyle: 'normal' },
             1: { cellWidth: 18, halign: 'center' },
             2: { cellWidth: 32, halign: 'right' },
@@ -11399,7 +11536,7 @@ function generatePDF(id, type) {
         });
     }
     
-    pdf.save(`${doc_data.number}.pdf`);
+    pdf.save(`${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`);
     
     // Show upgrade message for trial users
     if (licenseInfo.type === 'trial') {
