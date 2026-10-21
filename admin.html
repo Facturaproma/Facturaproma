@@ -2180,6 +2180,42 @@
 // CONFIGURATION
 // ============================================
 const SUPABASE_URL = 'https://mdozjptoecygmpkjlohr.supabase.co';
+
+// ── CAPTCHA hCaptcha (invisible). La clé de site est publique par conception.
+//    Le jeton est exigé par Supabase seulement si « Captcha protection » y est activée.
+const HCAPTCHA_SITEKEY = '71085fa4-d590-4300-9bce-5df68ae20bcc';
+let _hcWidget = null, _hcLoading = null;
+function _loadHCaptcha() {
+    if (window.hcaptcha) return Promise.resolve();
+    if (_hcLoading) return _hcLoading;
+    _hcLoading = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://js.hcaptcha.com/1/api.js?render=explicit';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => { _hcLoading = null; reject(new Error('captcha_load')); };
+        document.head.appendChild(s);
+    });
+    return _hcLoading;
+}
+async function getCaptchaToken() {
+    try {
+        await _loadHCaptcha();
+        if (_hcWidget === null) {
+            const box = document.createElement('div');
+            box.style.display = 'none';
+            document.body.appendChild(box);
+            _hcWidget = window.hcaptcha.render(box, { sitekey: HCAPTCHA_SITEKEY, size: 'invisible' });
+        }
+        const r = await window.hcaptcha.execute(_hcWidget, { async: true });
+        try { window.hcaptcha.reset(_hcWidget); } catch {}
+        return r && r.response ? r.response : undefined;
+    } catch (e) {
+        console.warn('Captcha indisponible:', e && e.message);
+        return undefined;
+    }
+}
+
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q';
 
 // 👑 Master account (irrévocable, accès permanent)
@@ -2268,7 +2304,7 @@ async function adminLogin() {
     }
     
     try {
-        const { error: authErr } = await supaClient.auth.signInWithPassword({ email, password: pwd });
+        const { error: authErr } = await supaClient.auth.signInWithPassword({ email, password: pwd, options: { captchaToken: await getCaptchaToken() } });
         if (authErr) {
             if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
             showAdminLoginError('Email ou mot de passe incorrect');
@@ -2356,7 +2392,7 @@ async function resetMasterPassword() {
 
     try {
         const redirectTo = new URL('app.html', location.href).href;
-        const { error } = await supaClient.auth.resetPasswordForEmail(email, { redirectTo });
+        const { error } = await supaClient.auth.resetPasswordForEmail(email, { redirectTo, captchaToken: await getCaptchaToken() });
         if (error) throw error;
         // Message volontairement identique pour tout e-mail (pas d'énumération de comptes)
         okEl.textContent = '✓ Si ce compte existe, un e-mail de réinitialisation vient d\'être envoyé.';
@@ -2434,7 +2470,7 @@ async function submitChangeAdminPassword() {
     
     try {
         // Ré-authentification avec le mot de passe actuel
-        const { error: reErr } = await supaClient.auth.signInWithPassword({ email: currentAdmin.email, password: current });
+        const { error: reErr } = await supaClient.auth.signInWithPassword({ email: currentAdmin.email, password: current, options: { captchaToken: await getCaptchaToken() } });
         if (reErr) {
             showErr('Mot de passe actuel incorrect');
             btn.disabled = false;
@@ -5693,7 +5729,7 @@ async function resetAdminPassword(email) {
     }
     try {
         const redirectTo = new URL('app.html', location.href).href;
-        const { error } = await supaClient.auth.resetPasswordForEmail(email, { redirectTo });
+        const { error } = await supaClient.auth.resetPasswordForEmail(email, { redirectTo, captchaToken: await getCaptchaToken() });
         if (error) throw error;
         showToast('E-mail de réinitialisation envoyé ✓', 'success');
     } catch (err) {

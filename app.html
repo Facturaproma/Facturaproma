@@ -5443,6 +5443,42 @@ if (document.readyState === 'loading') {
 // ============================================
 // 👉 Pour activer Supabase, remplacez ces valeurs :
 const SUPABASE_URL = 'https://mdozjptoecygmpkjlohr.supabase.co';
+
+// ── CAPTCHA hCaptcha (invisible). La clé de site est publique par conception.
+//    Le jeton est exigé par Supabase seulement si « Captcha protection » y est activée.
+const HCAPTCHA_SITEKEY = '71085fa4-d590-4300-9bce-5df68ae20bcc';
+let _hcWidget = null, _hcLoading = null;
+function _loadHCaptcha() {
+    if (window.hcaptcha) return Promise.resolve();
+    if (_hcLoading) return _hcLoading;
+    _hcLoading = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://js.hcaptcha.com/1/api.js?render=explicit';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => { _hcLoading = null; reject(new Error('captcha_load')); };
+        document.head.appendChild(s);
+    });
+    return _hcLoading;
+}
+async function getCaptchaToken() {
+    try {
+        await _loadHCaptcha();
+        if (_hcWidget === null) {
+            const box = document.createElement('div');
+            box.style.display = 'none';
+            document.body.appendChild(box);
+            _hcWidget = window.hcaptcha.render(box, { sitekey: HCAPTCHA_SITEKEY, size: 'invisible' });
+        }
+        const r = await window.hcaptcha.execute(_hcWidget, { async: true });
+        try { window.hcaptcha.reset(_hcWidget); } catch {}
+        return r && r.response ? r.response : undefined;
+    } catch (e) {
+        console.warn('Captcha indisponible:', e && e.message);
+        return undefined;
+    }
+}
+
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q';
 
 // ============================================
@@ -5602,12 +5638,14 @@ const Auth = {
         
         if (USE_SUPABASE) {
             if (!ensureSupabase()) throw new Error('Service indisponible. Vérifiez votre connexion.');
+            const captchaToken = await getCaptchaToken();
             const { data, error } = await supaClient.auth.signUp({ 
                 email, 
                 password,
-                options: { emailRedirectTo: new URL('app.html', window.location.href).href }
+                options: { emailRedirectTo: new URL('app.html', window.location.href).href, captchaToken }
             });
             if (error) {
+                if (/captcha/i.test(error.message)) throw new Error('Vérification anti-robot échouée. Rechargez la page et réessayez.');
                 if (error.message.includes('already registered')) {
                     throw new Error('Cet email est déjà utilisé');
                 }
@@ -5634,11 +5672,14 @@ const Auth = {
         
         if (USE_SUPABASE) {
             if (!ensureSupabase()) throw new Error('Service indisponible. Vérifiez votre connexion.');
+            const captchaToken = await getCaptchaToken();
             const { data, error } = await supaClient.auth.signInWithPassword({ 
                 email, 
-                password 
+                password,
+                options: { captchaToken }
             });
             if (error) {
+                if (/captcha/i.test(error.message)) throw new Error('Vérification anti-robot échouée. Rechargez la page et réessayez.');
                 throw new Error('Email ou mot de passe incorrect');
             }
             return { id: data.user.id, email: data.user.email };
@@ -5673,8 +5714,10 @@ const Auth = {
     async resetPassword(email) {
         email = email.trim().toLowerCase();
         if (USE_SUPABASE) {
+            const captchaToken = await getCaptchaToken();
             const { error } = await supaClient.auth.resetPasswordForEmail(email, {
-                redirectTo: new URL('app.html', window.location.href).href
+                redirectTo: new URL('app.html', window.location.href).href,
+                captchaToken
             });
             if (error) throw new Error(error.message);
             return true;
@@ -6284,7 +6327,8 @@ async function submitChangePassword() {
             // 1. Vérifier le mot de passe actuel en réauthentifiant
             const { error: authError } = await supaClient.auth.signInWithPassword({
                 email: session.email,
-                password: current
+                password: current,
+                options: { captchaToken: await getCaptchaToken() }
             });
             
             if (authError) {
