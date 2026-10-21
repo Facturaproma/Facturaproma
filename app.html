@@ -2933,7 +2933,7 @@
             <button class="nav-item" data-page="company" onclick="navTo('company')">
                 <span class="nav-icon">🏢</span> <span data-i18n="nav.company">Mon entreprise</span>
             </button>
-            <button class="nav-item" data-page="team" onclick="navTo('team')" id="navTeam">
+            <button class="nav-item" data-page="team" onclick="navTo('team')" id="navTeam" style="display:none">
                 <span class="nav-icon">👥</span> <span data-i18n="nav.team">Mon équipe</span>
             </button>
             <button class="nav-item" data-page="license" onclick="navTo('license')">
@@ -3142,6 +3142,7 @@
                 <h1 id="editorTitle">Nouvelle facture</h1>
                 <div class="topbar-actions">
                     <button class="btn btn-ghost" onclick="navTo('invoices')">Annuler</button>
+                    <button class="btn btn-success" id="btnConvertQuote" style="display:none;" onclick="convertEditingQuote()">→ Convertir en facture</button>
                     <button class="btn btn-secondary" onclick="saveInvoice('draft')">Brouillon</button>
                     <button class="btn btn-primary" onclick="saveInvoice('sent')">Enregistrer & Envoyer</button>
                 </div>
@@ -4428,7 +4429,7 @@
                     </div>
 
                     <div class="aside-card">
-                        <h3>📊 Export comptable <span style="background: linear-gradient(135deg, #1B3A6B, #122849); color: var(--accent); font-size: 9px; padding: 2px 6px; border-radius: 100px; font-weight: 700; margin-left: 4px; vertical-align: middle;">BUSINESS</span></h3>
+                        <h3>📊 Export comptable</h3>
                         <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">
                             Exportez vos factures dans des formats compatibles avec les logiciels comptables et la DGI Maroc.
                         </p>
@@ -5578,6 +5579,94 @@ function ensureSupabase() {
 // ============================================
 // AUTH SYSTEM (Hybrid: Supabase OR Local)
 // ============================================
+// ============================================
+// POLITIQUE DE SESSION : reconnexion obligatoire
+//  - inactivité : SESSION_IDLE_MIN minutes sans aucune action
+//  - durée maximale : SESSION_MAX_HOURS heures depuis la dernière connexion
+// (modifiez ces deux valeurs pour changer la règle)
+// ============================================
+const SESSION_IDLE_MIN = 30;
+const SESSION_MAX_HOURS = 12;
+const SessionPolicy = {
+    K_LOGIN: 'fp_login_at', K_ACTIVE: 'fp_last_active', K_MSG: 'fp_session_msg',
+    _get(k) { try { return parseInt(localStorage.getItem(k) || '0', 10) || 0; } catch { return 0; } },
+    _set(k, v) { try { localStorage.setItem(k, String(v)); } catch {} },
+    stamp(isLogin) {
+        const now = Date.now();
+        if (isLogin) this._set(this.K_LOGIN, now);
+        this._set(this.K_ACTIVE, now);
+        try { localStorage.removeItem(this.K_MSG); } catch {}
+    },
+    // null = session valide ; sinon 'idle' | 'max'
+    check() {
+        const now = Date.now();
+        let login = this._get(this.K_LOGIN), active = this._get(this.K_ACTIVE);
+        // Session existante sans trace (avant cette règle) : on démarre le décompte maintenant
+        if (!login) { login = now; this._set(this.K_LOGIN, now); }
+        if (!active) { active = now; this._set(this.K_ACTIVE, now); }
+        if (now - login > SESSION_MAX_HOURS * 3600000) return 'max';
+        if (now - active > SESSION_IDLE_MIN * 60000) return 'idle';
+        return null;
+    },
+    idleLeftMs() { return SESSION_IDLE_MIN * 60000 - (Date.now() - (this._get(this.K_ACTIVE) || Date.now())); },
+    message(reason) {
+        return reason === 'max'
+            ? 'Pour votre sécurité, la session a expiré (durée maximale de ' + SESSION_MAX_HOURS + ' h). Reconnectez-vous.'
+            : 'Pour votre sécurité, vous avez été déconnecté après ' + SESSION_IDLE_MIN + ' minutes d\'inactivité. Reconnectez-vous.';
+    },
+    clear() { try { [this.K_LOGIN, this.K_ACTIVE].forEach(k => localStorage.removeItem(k)); } catch {} },
+
+    _started: false,
+    start() {
+        if (this._started) return;
+        this._started = true;
+        let last = 0;
+        const touch = () => {
+            const n = Date.now();
+            if (n - last < 10000) return;   // au plus une écriture toutes les 10 s
+            last = n;
+            this._set(this.K_ACTIVE, n);
+            this._hideWarning();
+        };
+        ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev =>
+            window.addEventListener(ev, touch, { passive: true, capture: true }));
+        const tick = () => {
+            const r = this.check();
+            if (r) { forceLogout(r); return; }
+            const left = this.idleLeftMs();
+            if (left <= 60000) this._showWarning(Math.max(1, Math.ceil(left / 1000)));
+        };
+        setInterval(tick, 15000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+        window.addEventListener('focus', tick);
+    },
+    _showWarning(sec) {
+        let el = document.getElementById('sessionWarn');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'sessionWarn';
+            el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1A1F2E;color:#fff;padding:12px 16px;border-radius:12px;z-index:99998;font-size:14px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,.3);max-width:92vw;';
+            el.innerHTML = '<span>⏳ Déconnexion pour inactivité dans moins d\'une minute.</span><button style="background:#C9A24B;color:#1A1F2E;border:0;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer;" onclick="SessionPolicy.stamp(false);SessionPolicy._hideWarning()">Rester connecté</button>';
+            document.body.appendChild(el);
+        }
+        el.style.display = 'flex';
+    },
+    _hideWarning() { const el = document.getElementById('sessionWarn'); if (el) el.style.display = 'none'; }
+};
+
+async function forceLogout(reason) {
+    try { await Auth.logout(); } catch (e) { console.warn('logout', e); }
+    SessionPolicy.clear();
+    try { localStorage.setItem(SessionPolicy.K_MSG, reason); } catch {}
+    Storage._cache = {};
+    Storage._currentUserId = null;
+    SessionPolicy._hideWarning();
+    try { document.getElementById('loginForm').reset(); document.getElementById('signupForm').reset(); } catch {}
+    try { switchAuthTab('login'); } catch {}
+    showAuthScreen();
+    showAuthError(SessionPolicy.message(reason));
+}
+
 const Auth = {
     // ===== LOCAL FALLBACK =====
     async _hashPassword(password) {
@@ -5607,6 +5696,13 @@ const Auth = {
             try {
                 const { data: { session } } = await supaClient.auth.getSession();
                 if (!session) return null;
+                const expired = SessionPolicy.check();
+                if (expired) {
+                    try { await supaClient.auth.signOut(); } catch {}
+                    SessionPolicy.clear();
+                    try { localStorage.setItem(SessionPolicy.K_MSG, expired); } catch {}
+                    return null;
+                }
                 return {
                     userId: session.user.id,
                     email: session.user.email,
@@ -5623,6 +5719,13 @@ const Auth = {
                 if (!session) return null;
                 if (Date.now() - session.timestamp > 30 * 24 * 60 * 60 * 1000) {
                     localStorage.removeItem('fp_session');
+                    return null;
+                }
+                const expiredLocal = SessionPolicy.check();
+                if (expiredLocal) {
+                    localStorage.removeItem('fp_session');
+                    SessionPolicy.clear();
+                    try { localStorage.setItem(SessionPolicy.K_MSG, expiredLocal); } catch {}
                     return null;
                 }
                 return session;
@@ -6055,6 +6158,10 @@ async function checkOnboarding() {
         // Else: keep default (login)
         
         showAuthScreen();
+        try {
+            const why = localStorage.getItem(SessionPolicy.K_MSG);
+            if (why) { showAuthError(SessionPolicy.message(why)); localStorage.removeItem(SessionPolicy.K_MSG); }
+        } catch {}
         return;
     }
     
@@ -6398,12 +6505,24 @@ async function submitChangePassword() {
     }
 }
 
+(function wrapAuthForSession() {
+    ['login', 'signup'].forEach(function (name) {
+        const orig = Auth[name];
+        Auth[name] = async function () {
+            const r = await orig.apply(this, arguments);
+            SessionPolicy.stamp(true);
+            return r;
+        };
+    });
+})();
+
 async function handleLogout() {
     if (!confirm('Voulez-vous vraiment vous déconnecter ?\n\nVos données restent enregistrées et vous pourrez vous reconnecter à tout moment.')) {
         return;
     }
     
     await Auth.logout();
+    SessionPolicy.clear();
     Storage._cache = {};
     Storage._currentUserId = null;
     showToast('Déconnexion réussie', 'success');
@@ -6543,7 +6662,7 @@ function navTo(page) {
     if (page === 'cnss') renderCNSS();
     if (page === 'taxes') renderTaxes();
     if (page === 'company') loadCompanyForm();
-    if (page === 'team') navTo_team_render();
+    if (page === 'team') { navTo('dashboard'); return; }
     if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
     if (page === 'invoice-editor') renderComplianceBox();
@@ -6862,7 +6981,9 @@ function newInvoice() {
     document.getElementById('editorDate').value = todayISO();
     document.getElementById('editorDueDate').value = addDaysISO(30);
     document.getElementById('editorClient').value = '';
+    setEditorStatusOptions(editingType);
     document.getElementById('editorStatus').value = 'draft';
+    refreshConvertButton();
     document.getElementById('editorPaymentTerms').value = '30';
     document.getElementById('editorNotes').value = '';
     
@@ -6905,7 +7026,9 @@ function editInvoice(id) {
     document.getElementById('editorNumber').value = invoice.number;
     document.getElementById('editorDate').value = invoice.date;
     document.getElementById('editorDueDate').value = invoice.dueDate || '';
+    setEditorStatusOptions('invoice');
     document.getElementById('editorStatus').value = invoice.status;
+    refreshConvertButton();
     document.getElementById('editorPaymentTerms').value = invoice.paymentTerms || '30';
     document.getElementById('editorNotes').value = invoice.notes || '';
     
@@ -6934,7 +7057,9 @@ function duplicateInvoice(id) {
     document.getElementById('editorNumber').value = '';
     document.getElementById('editorDate').value = todayISO();
     document.getElementById('editorDueDate').value = addDaysISO(30);
+    setEditorStatusOptions(editingType);
     document.getElementById('editorStatus').value = 'draft';
+    refreshConvertButton();
     document.getElementById('editorPaymentTerms').value = original.paymentTerms || '30';
     document.getElementById('editorNotes').value = original.notes || '';
     
@@ -6979,7 +7104,7 @@ function createCreditFromInvoice(id) {
     
     // Créer l'avoir avec items en NÉGATIF
     const credit = {
-        id: 'credit-' + Date.now(),
+        id: uuid(),
         number: creditNumber,
         type: 'credit',
         relatedInvoiceId: original.id,
@@ -6994,7 +7119,7 @@ function createCreditFromInvoice(id) {
             ...item,
             quantity: -Math.abs(item.quantity || 0),  // Quantité négative
         })),
-        subtotal: -Math.abs(original.subtotal || 0),
+        totalHT: -Math.abs(original.totalHT || original.subtotal || 0),
         totalTVA: -Math.abs(original.totalTVA || 0),
         totalTTC: -Math.abs(original.totalTTC || 0),
         status: 'sent',
@@ -7010,8 +7135,26 @@ function createCreditFromInvoice(id) {
     renderInvoices();
 }
 
+function setEditorStatusOptions(type) {
+    const sel = document.getElementById('editorStatus');
+    if (!sel) return;
+    const opts = type === 'quote'
+        ? [['draft', 'Brouillon'], ['sent', 'Envoyé'], ['accepted', 'Accepté'], ['refused', 'Refusé']]
+        : [['draft', 'Brouillon'], ['sent', 'Envoyée'], ['paid', 'Payée'], ['overdue', 'En retard']];
+    const cur = sel.value;
+    sel.innerHTML = opts.map(o => `<option value="${o[0]}">${o[1]}</option>`).join('');
+    sel.value = opts.some(o => o[0] === cur) ? cur : 'draft';
+}
+
+function refreshConvertButton() {
+    const b = document.getElementById('btnConvertQuote');
+    if (b) b.style.display = (editingType === 'quote' && editingInvoice && editingInvoice.id) ? '' : 'none';
+}
+
 function updateEditorType() {
     editingType = document.getElementById('editorType').value;
+    setEditorStatusOptions(editingType);
+    refreshConvertButton();
     if (editingType === 'quote') {
         document.getElementById('editorTitle').textContent = editingInvoice ? `Devis ${editingInvoice.number}` : 'Nouveau devis';
         document.getElementById('editorInvoiceNumber').textContent = 
@@ -7297,31 +7440,31 @@ function getCurrentItems() {
 // ============================================
 // SAVE INVOICE / QUOTE
 // ============================================
-function saveInvoice(forceStatus = null) {
+function persistEditor(forceStatus = null) {
     // Check license
     if (!License.hasFullAccess()) {
         showToast('🔒 Période d\'essai expirée. Activez votre licence pour continuer.', 'error');
         navTo('license');
-        return;
+        return null;
     }
     
     const items = getCurrentItems();
     if (items.length === 0) {
         showToast('Ajoutez au moins un article', 'error');
-        return;
+        return null;
     }
     
     const clientId = document.getElementById('editorClient').value;
     if (!clientId) {
         showToast('Sélectionnez un client', 'error');
-        return;
+        return null;
     }
     
     const clients = Storage.get('clients', []);
     const client = clients.find(c => c.id === clientId);
     if (!client) {
         showToast('Client introuvable', 'error');
-        return;
+        return null;
     }
     
     const totalHT = items.reduce((s, i) => s + i.totalHT, 0);
@@ -7333,6 +7476,8 @@ function saveInvoice(forceStatus = null) {
     const collection = Storage.get(storageKey, []);
     
     const data = {
+        // on conserve les champs que l'éditeur ne gère pas (lien devis ↔ facture, paiements, etc.)
+        ...(editingInvoice || {}),
         id: editingInvoice?.id || uuid(),
         number: editingInvoice?.number || getNextNumber(isQuote ? 'quote' : 'invoice'),
         type: editingType,
@@ -7355,15 +7500,38 @@ function saveInvoice(forceStatus = null) {
     
     if (editingInvoice) {
         const idx = collection.findIndex(i => i.id === editingInvoice.id);
-        if (idx >= 0) collection[idx] = data;
+        if (idx >= 0) collection[idx] = data; else collection.push(data);
     } else {
         collection.push(data);
     }
     
     Storage.set(storageKey, collection);
+    editingInvoice = data;   // les enregistrements suivants mettent à jour ce document (pas de doublon)
+    return data;
+}
+
+function saveInvoice(forceStatus = null) {
+    const wasAccepted = editingType === 'quote' && editingInvoice && editingInvoice.status === 'accepted';
+    const data = persistEditor(forceStatus);
+    if (!data) return;
+    const isQuote = editingType === 'quote';
     showToast(isQuote ? 'Devis enregistré ✓' : 'Facture enregistrée ✓', 'success');
-    
+
+    // Devis accepté : proposer tout de suite la facture (sans rien ressaisir)
+    if (isQuote && data.status === 'accepted' && !data.convertedTo && !wasAccepted) {
+        if (confirm(`Le devis ${data.number} est accepté.\n\nCréer la facture correspondante maintenant ? (lignes, client et conditions repris automatiquement)`)) {
+            convertQuoteToInvoice(data.id, true);
+            return;
+        }
+    }
     setTimeout(() => navTo(isQuote ? 'quotes' : 'invoices'), 500);
+}
+
+// Bouton « Convertir en facture » dans l'éditeur de devis : enregistre d'abord, puis convertit
+function convertEditingQuote() {
+    const data = persistEditor(null);
+    if (!data) return;
+    convertQuoteToInvoice(data.id);
 }
 
 // ============================================
@@ -7414,7 +7582,9 @@ function renderQuotes() {
                         <td onclick="editQuote('${q.id}')"><strong>${formatCurrency(q.totalTTC)}</strong></td>
                         <td onclick="editQuote('${q.id}')"><span class="status-pill status-${q.status}">${statusLabel(q.status)}</span></td>
                         <td>
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); convertQuoteToInvoice('${q.id}')" title="Convertir en facture" style="color: var(--success);">→📄</button>
+                            ${q.convertedTo
+                                ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${q.convertedTo}')" title="Voir la facture" style="color: var(--success);">📄 ${escapeHtml(q.convertedInvoiceNumber || 'Facture')}</button>`
+                                : `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); convertQuoteToInvoice('${q.id}')" title="Convertir en facture" style="color: var(--success);">→📄 Facturer</button>`}
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${q.id}', 'quote')" title="Télécharger PDF">📥</button>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${q.id}', 'quote')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteQuote('${q.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
@@ -7435,7 +7605,9 @@ function newQuote() {
     document.getElementById('editorNumber').value = '';
     document.getElementById('editorDate').value = todayISO();
     document.getElementById('editorDueDate').value = addDaysISO(30);
+    setEditorStatusOptions(editingType);
     document.getElementById('editorStatus').value = 'draft';
+    refreshConvertButton();
     document.getElementById('editorNotes').value = '';
     
     populateClientSelect();
@@ -7463,7 +7635,10 @@ function editQuote(id) {
     document.getElementById('editorNumber').value = quote.number;
     document.getElementById('editorDate').value = quote.date;
     document.getElementById('editorDueDate').value = quote.dueDate || '';
+    setEditorStatusOptions('quote');
     document.getElementById('editorStatus').value = quote.status;
+    document.getElementById('editorPaymentTerms').value = quote.paymentTerms || '30';
+    refreshConvertButton();
     document.getElementById('editorNotes').value = quote.notes || '';
     
     populateClientSelect();
@@ -7477,36 +7652,61 @@ function editQuote(id) {
     navTo('invoice-editor');
 }
 
-function convertQuoteToInvoice(id) {
+function convertQuoteToInvoice(id, silent) {
     const quotes = Storage.get('quotes', []);
     const quote = quotes.find(q => q.id === id);
     if (!quote) return;
-    
-    if (!confirm(`Convertir le devis ${quote.number} en facture ?`)) return;
-    
     const invoices = Storage.get('invoices', []);
+
+    // Déjà transformé : on ne crée pas de doublon, on ouvre la facture existante
+    if (quote.convertedTo) {
+        const existing = invoices.find(i => i.id === quote.convertedTo);
+        if (existing) {
+            if (confirm(`Ce devis a déjà été transformé en facture ${existing.number}.\n\nOuvrir cette facture ?`)) editInvoice(existing.id);
+            return;
+        }
+    }
+    if (quote.status === 'refused' && !confirm(`Le devis ${quote.number} est marqué « Refusé ». Le transformer quand même en facture ?`)) return;
+    if (!silent && !confirm(`Transformer le devis ${quote.number} en facture ?\n\nLes lignes, le client et les conditions sont repris tels quels. Vous pourrez les vérifier avant l'envoi.`)) return;
+
+    const terms = quote.paymentTerms || '30';
+    const days = terms === 'immediate' ? 0 : (parseInt(terms, 10) || 30);
+    const nowIso = new Date().toISOString();
+    const ref = `Suite au devis ${quote.number}`;
+    const baseNotes = (quote.notes || '').trim();
+
     const newInvoice = {
         ...quote,
         id: uuid(),
         number: getNextNumber('invoice'),
         type: 'invoice',
-        status: 'sent',
+        status: 'draft',          // à vérifier puis « Enregistrer & Envoyer »
         date: todayISO(),
-        dueDate: addDaysISO(30),
+        dueDate: addDaysISO(days),
+        paymentTerms: terms,
+        items: JSON.parse(JSON.stringify(quote.items || [])),
+        notes: baseNotes.includes(quote.number) ? baseNotes : (baseNotes ? baseNotes + '\n' : '') + ref,
         sourceQuote: quote.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        sourceQuoteNumber: quote.number,
+        createdAt: nowIso,
+        updatedAt: nowIso
     };
-    
+    delete newInvoice.convertedTo;
+    delete newInvoice.convertedInvoiceNumber;
+    delete newInvoice.convertedAt;
+
     invoices.push(newInvoice);
     Storage.set('invoices', invoices);
-    
-    // Update quote status
+
     quote.status = 'accepted';
+    quote.convertedTo = newInvoice.id;
+    quote.convertedInvoiceNumber = newInvoice.number;
+    quote.convertedAt = nowIso;
+    quote.updatedAt = nowIso;
     Storage.set('quotes', quotes);
-    
-    showToast(`Facture ${newInvoice.number} créée ✓`, 'success');
-    setTimeout(() => navTo('invoices'), 800);
+
+    showToast(`Facture ${newInvoice.number} créée en brouillon : vérifiez puis envoyez ✓`, 'success');
+    editInvoice(newInvoice.id);
 }
 
 function deleteQuote(id) {
@@ -9696,7 +9896,7 @@ function updateTrialUI() {
     
     // Mapping centralisé des tiers
     const TIER_INFO = {
-        lifetime:   { icon: '🎁', name: 'Founder à vie',  badge: 'Founder' },
+        lifetime:   { icon: '🎁', name: 'À vie (offert)',  badge: 'À vie' },
         annual:     { icon: '🏆', name: 'Annuel',         badge: 'Annuel' },
         semestrial: { icon: '🔥', name: 'Semestriel',     badge: 'Semestriel' },
         monthly:    { icon: '⭐', name: 'Mensuel',        badge: 'Mensuel' },
@@ -10080,7 +10280,7 @@ async function purchaseLicense(tier) {
         semestrial: { price: 249, label: '🔥 Semestriel', period: '6 mois' },
         annual:     { price: 449, label: '🏆 Annuel',     period: 'an' },
         // Legacy : non vendus mais gérés pour upgrades anciens comptes
-        lifetime:   { price: 0,   label: '🎁 Founder à vie', period: 'à vie' },
+        lifetime:   { price: 0,   label: '🎁 À vie (offert)', period: 'à vie' },
         business:   { price: 199, label: '👔 Business',  period: 'mois' }
     };
     
@@ -10632,13 +10832,19 @@ function savePayment() {
     const invoices = Storage.get('invoices', []) || [];
     const idx = invoices.findIndex(i => i.id === invoiceId);
     if (idx >= 0) {
-        invoices[idx].status = 'paid';
-        invoices[idx].paidAt = date;
+        const totalPaid = payments.filter(p => p.invoiceId === invoiceId).reduce((t, p) => t + (p.amount || 0), 0);
+        invoices[idx].paidAmount = totalPaid;
+        if (totalPaid + 0.01 >= (invoices[idx].totalTTC || 0)) {
+            invoices[idx].status = 'paid';
+            invoices[idx].paidAt = date;
+        } else if (invoices[idx].status === 'draft') {
+            invoices[idx].status = 'sent';
+        }
         Storage.set('invoices', invoices);
     }
     
     closeModal('paymentModal');
-    showToast('Paiement enregistré ✓', 'success');
+    showToast(invoices[idx] && invoices[idx].status !== 'paid' ? 'Paiement partiel enregistré ✓ — reste ' + formatCurrency((invoices[idx].totalTTC||0) - (invoices[idx].paidAmount||0)) : 'Paiement enregistré ✓', 'success');
     renderPayments();
     renderDashboard();
 }
@@ -11178,6 +11384,7 @@ function closeModalIfBg(event, id) {
 // INIT
 // ============================================
 function renderAll() {
+    SessionPolicy.start();
     renderDashboard();
     populateClientSelect();
     updateTrialUI();
@@ -11203,7 +11410,7 @@ function blockedByLicense() {
 (function guardWriteActions() {
     ['newInvoice','newQuote','newClient','newProduct','editInvoice','duplicateInvoice',
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
-     'saveInvoice','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
+     'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
      'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo',
      'generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
@@ -11219,11 +11426,16 @@ function blockedByLicense() {
 // Boot avec gestion d'erreur robuste
 window.addEventListener('error', function(e) {
     console.error('[FacturaPro] Erreur:', e.message, 'Ligne:', e.lineno);
-    document.body.innerHTML += `
-        <div style="position:fixed;top:0;left:0;right:0;background:#C84A4A;color:white;padding:12px 20px;font-family:sans-serif;z-index:99999;font-size:13px;">
-            ⚠️ Erreur détectée : ${e.message} (ligne ${e.lineno})
-            <button onclick="this.parentElement.remove()" style="float:right;background:rgba(255,255,255,0.2);border:1px solid white;color:white;padding:2px 8px;border-radius:4px;cursor:pointer;">Fermer</button>
-        </div>`;
+    // appendChild (et non body.innerHTML +=) : réécrire le body détruirait tous les écouteurs de la page
+    const bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#C84A4A;color:white;padding:12px 20px;font-family:sans-serif;z-index:99999;font-size:13px;';
+    bar.textContent = '⚠️ Erreur détectée : ' + e.message + ' (ligne ' + e.lineno + ') ';
+    const close = document.createElement('button');
+    close.textContent = 'Fermer';
+    close.style.cssText = 'float:right;background:rgba(255,255,255,0.2);border:1px solid white;color:white;padding:2px 8px;border-radius:4px;cursor:pointer;';
+    close.onclick = () => bar.remove();
+    bar.appendChild(close);
+    document.body.appendChild(bar);
 });
 
 // Attendre que tout soit chargé
