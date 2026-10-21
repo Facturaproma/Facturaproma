@@ -5061,7 +5061,8 @@ function renderReports() {
         `+${todayRevenue.toLocaleString('fr-FR')} DH aujourd'hui`;
     
     // En attente paiement = codes pending
-    const pendingCodes = filteredCodes.filter(c => c.status === 'pending');
+    // Les codes cadeau (À vie, 0 DH) ne sont pas des ventes à relancer
+    const pendingCodes = filteredCodes.filter(c => c.status === 'pending' && (TIER_PRICES[codeOfferKey(c)] || 0) > 0);
     const pendingAmount = pendingCodes.reduce((s, c) => s + (TIER_PRICES[c.type] || 0), 0);
     document.getElementById('rpPending').innerHTML = 
         `${pendingAmount.toLocaleString('fr-FR')}<span style="font-size: 16px; color: var(--ink-mute);"> DH</span>`;
@@ -5093,7 +5094,7 @@ function renderReports() {
     // ═══════════════════════════════════════════
     // Codes à relancer
     // ═══════════════════════════════════════════
-    renderFollowUp(filteredCodes.filter(c => c.status === 'pending'));
+    renderFollowUp(pendingCodes);
     
     // ═══════════════════════════════════════════
     // Stats par statut
