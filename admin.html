@@ -549,6 +549,13 @@
             border-color: var(--warning);
         }
 
+        /* Profil assistant : uniquement la saisie des paiements */
+        body.role-assistant .nav-item:not([data-page="payments"]):not(.keep-staff) { display: none !important; }
+        body.role-assistant .nav-divider-staff { display: none !important; }
+        body.role-assistant .staff-hide { display: none !important; }
+        .staff-only { display: none; }
+        body.role-assistant .staff-only { display: block; }
+
         .alert-success {
             background: rgba(46, 125, 91, 0.08);
             border-color: var(--success);
@@ -678,7 +685,7 @@
             📜 Journal
         </a>
         
-        <div style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px;">
+        <div class="nav-divider-staff" style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px;">
             <a class="nav-item master-only" data-page="admins" onclick="navTo('admins')">
                 👥 Gestion admins
             </a>
@@ -691,10 +698,10 @@
             <div style="padding: 8px 12px; margin-bottom: 8px;" id="currentAdminInfo">
                 <!-- Filled dynamically -->
             </div>
-            <a class="nav-item" onclick="openChangeAdminPasswordModal()">
+            <a class="nav-item keep-staff" onclick="openChangeAdminPasswordModal()">
                 🔑 Changer mon mot de passe
             </a>
-            <a class="nav-item" onclick="adminLogout()" style="color: var(--danger);">
+            <a class="nav-item keep-staff" onclick="adminLogout()" style="color: var(--danger);">
                 🚪 Déconnexion
             </a>
         </div>
@@ -986,7 +993,16 @@
                 <button class="btn btn-primary" onclick="openPaymentModal()">+ Enregistrer un paiement</button>
             </div>
 
-            <div class="alert">
+            <div class="alert staff-only" style="border-left-color: var(--accent);">
+                <strong>🧾 Profil assistant :</strong> tu saisis ici les paiements reçus en banque. Tu ne vois ni les codes, ni les comptes clients ; la création et l'activation des licences sont réservées aux administrateurs.
+                Une saisie peut être annulée dans les 24 h.
+            </div>
+            <div class="card staff-only" style="margin-bottom:16px;">
+                <div class="card-header"><h2>📥 Demandes en attente de paiement</h2></div>
+                <div id="staffRequestsBody" style="overflow-x:auto;"></div>
+            </div>
+
+            <div class="alert staff-hide">
                 <strong>💰 Suivi des revenus :</strong> Enregistre ici chaque paiement reçu (virement, CMI, espèces). Ça t'aide à suivre ton revenu réel et à associer paiements ↔ codes générés.
             </div>
 
@@ -999,7 +1015,7 @@
                     <div class="stat-label">Ce mois</div>
                     <div class="stat-value" id="statMonthRevenue">0<span style="font-size: 16px; color: var(--ink-mute);"> DH</span></div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card staff-hide">
                     <div class="stat-label">Lifetime vendus</div>
                     <div class="stat-value" id="statLifetimeCount">0</div>
                 </div>
@@ -1859,6 +1875,20 @@
                 </table>
             </div>
 
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header">
+                    <h2>🧾 Assistants (saisie des paiements)</h2>
+                    <button class="btn btn-primary btn-sm" onclick="addStaff()">+ Ajouter un assistant</button>
+                </div>
+                <div class="alert" style="margin:0 20px 12px;">
+                    Un assistant voit les paiements et les demandes en attente (sans les codes) et enregistre les paiements reçus en banque. Il ne peut <strong>ni créer, ni voir de codes</strong>, ni activer ou suspendre une licence, ni voir les comptes clients. Chaque saisie est tracée dans le Journal.
+                </div>
+                <table>
+                    <thead><tr><th>E-mail</th><th>Ajouté le</th><th>Par</th><th></th></tr></thead>
+                    <tbody id="staffTable"><tr><td colspan="4" class="empty">Chargement...</td></tr></tbody>
+                </table>
+            </div>
+
             <div class="alert alert-warning" style="margin-top: 24px;">
                 <strong>⚠️ Sécurité importante</strong> :
                 <ul style="margin: 8px 0 0 20px; font-size: 13px;">
@@ -2313,15 +2343,16 @@ async function adminLogin() {
         }
 
         const who = await fetchAdminIdentity();
-        if (!who || !who.is_admin) {
+        if (!who || !(who.is_admin || who.is_staff)) {
             await supaClient.auth.signOut();
             if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
-            showAdminLoginError('Accès refusé : ce compte n\'est pas administrateur');
+            showAdminLoginError('Accès refusé : ce compte n\'a pas accès à cet espace');
             return;
         }
 
         // ✅ Login OK
-        currentAdmin = { email: email, isMaster: !!who.is_master };
+        currentAdmin = { email: email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
+        applyRoleMode();
 
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('app').classList.add('active');
@@ -2350,7 +2381,7 @@ function updateAdminSidebar() {
         el.innerHTML = `
             <div style="font-size: 12px; font-weight: 700; color: var(--ink);">${currentAdmin.email}</div>
             <div style="font-size: 10px; color: ${currentAdmin.isMaster ? 'var(--accent)' : 'var(--ink-mute)'}; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-top: 2px;">
-                ${currentAdmin.isMaster ? '👑 MASTER' : '👤 ADMIN'}
+                ${currentAdmin.isStaff ? '🧾 ASSISTANT' : currentAdmin.isMaster ? '👑 MASTER' : '👤 ADMIN'}
             </div>
         `;
     }
@@ -2503,7 +2534,58 @@ async function submitChangeAdminPassword() {
 // ============================================
 // DATA LOADING
 // ============================================
+let staffRequests = [];
+async function loadStaffData() {
+    try {
+        const { data, error } = await supaClient.from('admin_payments').select('*').order('payment_date', { ascending: false }).limit(300);
+        if (error) throw error;
+        allPayments = data || [];
+    } catch (err) { console.warn('staff payments', err); allPayments = []; }
+    try {
+        const { data, error } = await supaClient.rpc('staff_open_requests');
+        if (error) throw error;
+        staffRequests = data || [];
+    } catch (err) { console.warn('staff requests', err); staffRequests = []; }
+    renderPayments();
+    renderStaffRequests();
+}
+
+function renderStaffRequests() {
+    const box = document.getElementById('staffRequestsBody');
+    if (!box) return;
+    if (!staffRequests.length) { box.innerHTML = '<div class="empty" style="padding:16px;">Aucune demande en attente</div>'; return; }
+    const lbl = { monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur' };
+    box.innerHTML = '<table><thead><tr><th>Date</th><th>Client</th><th>Offre</th><th>Montant attendu</th><th></th></tr></thead><tbody>' +
+        staffRequests.map(r => `<tr>
+            <td>${formatDate(r.created_at)}</td>
+            <td><strong>${esc(r.client_email)}</strong></td>
+            <td>${esc(lbl[r.tier] || r.tier || '')}</td>
+            <td>${Number(r.final_price || 0).toLocaleString('fr-FR')} DH</td>
+            <td><button class="btn btn-primary btn-sm" onclick='prefillPayment(${JSON.stringify({ e: r.client_email, t: r.tier, a: r.final_price })})'>Saisir le paiement</button></td>
+        </tr>`).join('') + '</tbody></table>';
+}
+
+function prefillPayment(o) {
+    openPaymentModal();
+    document.getElementById('paymentEmail').value = o.e || '';
+    document.getElementById('paymentAmount').value = o.a || '';
+    const sel = document.getElementById('paymentType');
+    if ([...sel.options].some(x => x.value === o.t)) sel.value = o.t;
+}
+
+async function cancelMyPayment(id) {
+    if (!confirm('Annuler cette saisie ? (possible dans les 24 h suivant la saisie)')) return;
+    try {
+        const { data, error } = await supaClient.rpc('staff_cancel_payment', { p_id: id });
+        if (error) throw error;
+        if (!data || !data.ok) throw new Error('annulation impossible (saisie ancienne ou faite par quelqu\'un d\'autre)');
+        showToast('Saisie annulée', 'success');
+        await loadAllData();
+    } catch (err) { showToast('Erreur : ' + (err.message || err), 'error'); }
+}
+
 async function loadAllData() {
+    if (isStaffMode()) return loadStaffData();
     showToast('Chargement...', 'info');
     
     // Load codes
@@ -3469,8 +3551,11 @@ function renderPayments() {
             <td><strong style="color: var(--success);">${parseFloat(p.amount).toLocaleString('fr-FR')} DH</strong></td>
             <td><span class="badge badge-trial">${p.type}</span></td>
             <td>${modeIcons[p.payment_mode] || ''} ${p.payment_mode}</td>
-            <td style="font-size: 12px; color: var(--ink-mute);">${p.note || '—'}</td>
-            <td><button class="btn btn-secondary btn-sm" onclick="deletePayment('${p.id}')">🗑️</button></td>
+            <td style="font-size: 12px; color: var(--ink-mute);">${esc(p.note || '—')}${p.entered_by ? `<div style="font-size:11px;">saisi par ${esc(p.entered_by)}</div>` : ''}</td>
+            <td>${isStaffMode()
+                ? ((p.entered_by || '').toLowerCase() === (currentAdmin.email || '').toLowerCase() && Date.now() - new Date(p.created_at).getTime() < 86400000
+                    ? `<button class="btn btn-secondary btn-sm" onclick="cancelMyPayment('${p.id}')" title="Annuler ma saisie">↩️ Annuler</button>` : '')
+                : `<button class="btn btn-secondary btn-sm" onclick="deletePayment('${p.id}')">🗑️</button>`}</td>
         </tr>
     `).join('');
 }
@@ -5636,7 +5721,20 @@ function exportReportCSV() {
     showToast('Rapport CSV téléchargé ✓', 'success');
 }
 
+function isStaffMode() { return !!(currentAdmin && currentAdmin.isStaff); }
+
+// Profil assistant : on ne montre que la saisie des paiements
+function applyRoleMode() {
+    document.body.classList.toggle('role-assistant', isStaffMode());
+    if (isStaffMode()) {
+        const sel = document.getElementById('paymentType');
+        if (sel) [...sel.options].forEach(o => { if (!['monthly', 'annual', 'founder'].includes(o.value)) o.remove(); });
+        navTo('payments');
+    }
+}
+
 function navTo(page) {
+    if (isStaffMode() && page !== 'payments') page = 'payments';
     document.querySelector('.sidebar')?.classList.remove('open');
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -5682,6 +5780,7 @@ async function renderAdmins() {
     }
     
     await loadAllAdmins();
+    renderStaffList();
     
     const tbody = document.getElementById('adminsTable');
     if (allAdmins.length === 0) {
@@ -5716,6 +5815,43 @@ async function renderAdmins() {
             </tr>
         `;
     }).join('');
+}
+
+async function renderStaffList() {
+    const tb = document.getElementById('staffTable');
+    if (!tb) return;
+    try {
+        const { data, error } = await supaClient.from('staff').select('*').order('created_at', { ascending: true });
+        if (error) throw error;
+        tb.innerHTML = (data || []).length ? data.map(x => `<tr>
+            <td><strong>${esc(x.email)}</strong></td><td>${formatDate(x.created_at)}</td><td>${esc(x.added_by || '—')}</td>
+            <td><button class="btn btn-danger btn-sm" onclick='removeStaff(${JSON.stringify(x.email)})'>Retirer</button></td></tr>`).join('')
+            : '<tr><td colspan="4" class="empty">Aucun assistant</td></tr>';
+    } catch (err) {
+        tb.innerHTML = '<tr><td colspan="4" class="empty">Exécute sql/13_profil_assistant.sql dans Supabase pour activer ce profil.</td></tr>';
+    }
+}
+
+async function addStaff() {
+    const email = (prompt('E-mail de l\'assistant (il doit avoir un compte FacturaPro avec cet e-mail confirmé) :') || '').trim().toLowerCase();
+    if (!email) return;
+    try {
+        const { data, error } = await supaClient.rpc('admin_add_staff', { p_email: email });
+        if (error) throw error;
+        if (!data || !data.ok) throw new Error({ bad_email: 'e-mail invalide', is_admin: 'cette personne est déjà administrateur' }[data && data.reason] || 'refusé');
+        showToast('Assistant ajouté ✓', 'success');
+        renderStaffList();
+    } catch (err) { showToast('Erreur : ' + (err.message || err), 'error'); }
+}
+
+async function removeStaff(email) {
+    if (!confirm(`Retirer l'accès assistant de ${email} ?`)) return;
+    try {
+        const { error } = await supaClient.rpc('admin_remove_staff', { p_email: email });
+        if (error) throw error;
+        showToast('Assistant retiré', 'success');
+        renderStaffList();
+    } catch (err) { showToast('Erreur : ' + (err.message || err), 'error'); }
 }
 
 function openCreateAdminModal() {
@@ -5892,8 +6028,9 @@ function showToast(msg, type = 'info') {
         const { data: { session } } = await supaClient.auth.getSession();
         if (!session) return;
         const who = await fetchAdminIdentity();
-        if (!who || !who.is_admin) return;
-        currentAdmin = { email: who.email, isMaster: !!who.is_master };
+        if (!who || !(who.is_admin || who.is_staff)) return;
+        currentAdmin = { email: who.email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
+        applyRoleMode();
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('app').classList.add('active');
         updateAdminSidebar();
