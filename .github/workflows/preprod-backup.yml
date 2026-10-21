@@ -105,7 +105,7 @@ jobs:
           else
             git checkout --orphan preprod-reports && git rm -rf . >/dev/null 2>&1 || true
           fi
-          mkdir -p reports && cp /tmp/rep/* reports/ && git add reports && git commit -m "Rapport sauvegarde/restauration run ${GITHUB_RUN_ID}" && git push origin preprod-reports
+          mkdir -p reports && cp /tmp/rep/* reports/ && git rm -q --cached --ignore-unmatch reports/backup.md reports/check.txt reports/prep.md reports/run.md reports/scan.txt reports/scan1.txt reports/scan2.txt && git add "reports/backup-${GITHUB_RUN_ID}.md" && git commit -m "Rapport sauvegarde/restauration run ${GITHUB_RUN_ID}" && git push origin preprod-reports
       - name: Échec du job si un identifiant a été trouvé dans le dépôt ou la branche des rapports
         if: always() && steps.scan.outputs.repo_rc != '0'
         run: echo "::error::Analyse de secrets positive (voir le rapport)." && exit 1
