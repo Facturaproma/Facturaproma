@@ -3078,7 +3078,8 @@ function renderUsers() {
         }
         const actions = st === 'staff' ? '—' : `
             <button class="btn btn-secondary btn-sm" onclick="openLicenseModal('${a.user_id}')">⚙️ Licence</button>
-            <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend('${a.user_id}')">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>`;
+            <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend('${a.user_id}')">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>
+            <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount('${a.user_id}')">🗑️ Supprimer</button>`;
         return `
             <tr>
                 <td><strong>${esc(a.email)}</strong></td>
@@ -3203,6 +3204,30 @@ async function toggleSuspend(uid) {
         await loadAllData();
     } catch (err) {
         showToast('Erreur : ' + (err.message || err), 'error');
+    }
+}
+
+async function deleteAccount(uid) {
+    const a = allAccounts.find(x => x.user_id === uid);
+    if (!a) return;
+    const typed = prompt(`SUPPRESSION DÉFINITIVE de ${a.email}\n\nCompte, données, licence, codes, paiements enregistrés et demandes seront effacés. Impossible d'annuler.\n\nPour confirmer, retape l'e-mail exact :`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== String(a.email).toLowerCase()) {
+        showToast('E-mail différent : suppression annulée', 'error');
+        return;
+    }
+    try {
+        const { data, error } = await supaClient.rpc('admin_delete_account', { p_user: uid });
+        if (error) throw error;
+        if (!data || !data.ok) {
+            const why = { self: 'tu ne peux pas supprimer ton propre compte', is_admin: 'un administrateur ne peut pas être supprimé ici', unknown_user: 'compte introuvable' }[data && data.reason] || (data && data.reason) || 'refusé';
+            throw new Error(why);
+        }
+        showToast(`Compte supprimé : ${a.email}`, 'success');
+        await loadAllData();
+    } catch (err) {
+        const m = String(err.message || err);
+        showToast(/admin_delete_account|function/i.test(m) ? 'Exécute sql/12_admin_supprimer_compte.sql dans Supabase' : 'Erreur : ' + m, 'error');
     }
 }
 
