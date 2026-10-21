@@ -8897,7 +8897,7 @@ function renderTeamMembers() {
 
 function openInviteTeamMember() {
     if (!isBusinessTier()) {
-        showToast('🔒 Réservé aux comptes Business', 'error');
+        showToast('🔒 Réservé aux comptes avec licence active', 'error');
         return;
     }
     
@@ -9288,8 +9288,8 @@ function exportAccounting(format = 'csv') {
     const isTrialActive = info.type === 'trial' && !License.isExpired();
     
     if (!isUserLicensed() && !isTrialActive) {
-        showToast('🔒 L\'export comptable est réservé aux comptes Business', 'error');
-        if (confirm('Cette fonctionnalité est disponible avec le plan Business (199 DH/mois).\n\nVoulez-vous voir les options d\'abonnement ?')) {
+        showToast('🔒 L\'export comptable est réservé aux comptes avec licence active', 'error');
+        if (confirm('Cette fonctionnalité est disponible avec une licence active (Mensuel 49 DH, Annuel 449 DH).\n\nVoulez-vous voir les options d\'abonnement ?')) {
             navTo('license');
         }
         return;
@@ -9429,8 +9429,8 @@ function showAccountingExportMenu() {
     const isTrialActive = info.type === 'trial' && !License.isExpired();
     
     if (!isBusinessTier() && !isTrialActive) {
-        showToast('🔒 Réservé aux comptes Business', 'error');
-        if (confirm('Cette fonctionnalité est disponible avec le plan Business (199 DH/mois).\n\nVoir les options d\'abonnement ?')) {
+        showToast('🔒 Réservé aux comptes avec licence active', 'error');
+        if (confirm('Cette fonctionnalité est disponible avec une licence active (Mensuel 49 DH, Annuel 449 DH).\n\nVoir les options d\'abonnement ?')) {
             navTo('license');
         }
         return;
