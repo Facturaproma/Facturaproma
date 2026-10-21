@@ -2,6 +2,8 @@
 
 **Principe :** un projet Supabase **séparé** de la production (autre URL, autres clés, autre base, autres comptes). Rien de ce guide ne touche la production (`mdozjptoecygmpkjlohr`). Les scripts du dépôt refusent de s'exécuter si l'URL est celle de la production.
 
+**Cible autorisée :** `scripts/preprod-target.json` déclare l'unique projet de préproduction (`njjaomichdlnoscrnxlz`, créé le 21 octobre 2026, région eu-north-1, plan Free, distinct de la production). `scripts/preprod-guard.js` refuse toute autre URL, la production, une clé qui n'est pas « anon » (une clé `service_role` est refusée) et une clé appartenant à un autre projet.
+
 **Règle secrets :** aucune clé ni mot de passe n'est écrit dans un fichier du dépôt ni envoyé dans un chat. Tout passe par des variables d'environnement de votre terminal, ou par les « Secrets » GitHub. La clé `service_role` n'est **jamais** nécessaire pour ces tests : ne la copiez nulle part.
 
 ## A. Création du projet (≈ 15 min, 0 MAD)

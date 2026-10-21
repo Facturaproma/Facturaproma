@@ -6,11 +6,9 @@
 //   export PREPROD_ANON_KEY='<clé « anon / publishable » du projet de préproduction>'
 //   node scripts/serve-preprod.js        # puis ouvrir http://localhost:8180/app.html
 const http = require('http'), fs = require('fs'), path = require('path');
-const URL_ = process.env.PREPROD_URL, KEY = process.env.PREPROD_ANON_KEY;
-const PROD_REF = 'mdozjptoecygmpkjlohr';
-if (!URL_ || !KEY) { console.error('Variables PREPROD_URL et PREPROD_ANON_KEY requises.'); process.exit(1); }
-if (URL_.includes(PROD_REF)) { console.error('REFUS : cette URL est celle de la PRODUCTION.'); process.exit(1); }
-if (!/^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(URL_)) { console.error('PREPROD_URL doit ressembler à https://xxxx.supabase.co'); process.exit(1); }
+const { guard } = require('./preprod-guard');
+const G = guard(process.env.PREPROD_URL, process.env.PREPROD_ANON_KEY);
+const URL_ = G.url, KEY = G.key;
 const ROOT = path.join(__dirname, '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.ttf': 'font/ttf', '.png': 'image/png', '.svg': 'image/svg+xml', '.css': 'text/css' };
 http.createServer((q, r) => {

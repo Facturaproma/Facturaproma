@@ -7,8 +7,9 @@
 // la suppression du compte efface ses données). REFUSE de s'exécuter contre la production.
 const need = ['PREPROD_URL', 'PREPROD_ANON_KEY', 'TEST_A_EMAIL', 'TEST_A_PASSWORD', 'TEST_B_EMAIL', 'TEST_B_PASSWORD'];
 const miss = need.filter(k => !process.env[k]); if (miss.length) { console.error('Variables manquantes : ' + miss.join(', ')); process.exit(1); }
-const URL_ = process.env.PREPROD_URL.replace(/\/$/, ''), ANON = process.env.PREPROD_ANON_KEY;
-if (URL_.includes('mdozjptoecygmpkjlohr')) { console.error('REFUS : URL de PRODUCTION.'); process.exit(1); }
+const { guard } = require('../../scripts/preprod-guard');
+const G = guard(process.env.PREPROD_URL, process.env.PREPROD_ANON_KEY);
+const URL_ = G.url, ANON = G.key;
 const res = []; const ck = (n, ok, x = '') => { res.push(ok); console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok || !x ? '' : '  -> ' + x)); };
 const H = (tok) => ({ apikey: ANON, 'content-type': 'application/json', authorization: 'Bearer ' + (tok || ANON) });
 async function req(method, p, tok, body, extra = {}) {

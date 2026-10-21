@@ -1,0 +1,5 @@
+{
+  "_comment": "Identifiants non secrets. Seul ce projet est une cible autorisée pour les scripts de préproduction.",
+  "preprodRef": "njjaomichdlnoscrnxlz",
+  "prodRef": "mdozjptoecygmpkjlohr"
+}
