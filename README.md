@@ -10,9 +10,8 @@
 
 ## 🚀 Démo en ligne
 
-- 🏠 **Landing** : [facturepro-ma.netlify.app](https://facturepro-ma.netlify.app)
-- 💼 **Application** : [facturepro-ma.netlify.app/app](https://facturepro-ma.netlify.app/app)
-- 🔐 **Admin** : [facturepro-ma.netlify.app/admin](https://facturepro-ma.netlify.app/admin) (privé)
+- 🏠 **Landing** : [facturaproma.github.io/Facturaproma](https://facturaproma.github.io/Facturaproma/)
+- 💼 **Application** : [facturaproma.github.io/Facturaproma/app.html](https://facturaproma.github.io/Facturaproma/app.html)
 
 ---
 
