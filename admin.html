@@ -549,6 +549,11 @@
             border-color: var(--warning);
         }
 
+        .alert-success {
+            background: rgba(46, 125, 91, 0.08);
+            border-color: var(--success);
+        }
+
         .page { display: none; }
         .page.active { display: block; }
 
@@ -1063,6 +1068,33 @@
             </div>
 
             <!-- Entonnoir de conversion -->
+            <!-- Rapprochement codes / paiements (toute la période, indépendant du filtre) -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>⚖️ Rapprochement codes ↔ paiements</h2>
+                    <span style="font-size: 12px; color: var(--ink-mute);">Tout l'historique · attendu = codes activés × prix de l'offre</span>
+                </div>
+                <div id="recoBanner"></div>
+                <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr>
+                        <th>Offre</th><th>Codes générés</th><th>En attente</th><th>Activés</th><th>Révoqués</th>
+                        <th>Attendu</th><th>Reçu</th><th>Écart</th>
+                    </tr></thead>
+                    <tbody id="recoOffers"></tbody>
+                </table>
+                </div>
+                <h3 style="margin:18px 20px 8px; font-size:14px;">Détail par client</h3>
+                <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr>
+                        <th>Client</th><th>Codes activés</th><th>Attendu</th><th>Reçu</th><th>Solde</th><th>État</th>
+                    </tr></thead>
+                    <tbody id="recoClients"></tbody>
+                </table>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-header">
                     <h2>🔄 Entonnoir de conversion</h2>
@@ -2570,7 +2602,8 @@ function acctState(a) {
     if (a.is_staff) return 'staff';
     if (a.status === 'suspended') return 'suspended';
     const paid = PAID_TYPES.includes(a.type);
-    if (paid) return a.active ? 'paid' : 'paid_expired';
+    // Abonnement payant : « expiré » dès la date de fin (la grâce de 3 jours est signalée à part)
+    if (paid) return (a.expires_at && new Date(a.expires_at) < new Date()) ? 'paid_expired' : (a.active ? 'paid' : 'paid_expired');
     return a.active ? 'trial' : 'trial_expired';
 }
 
@@ -2592,8 +2625,19 @@ function acctMonthly(a) {
     return 0;
 }
 
+const GRACE_DAYS = 3; // doit correspondre à license_grace_days() (sql/09)
+function acctGraceLeft(a) {
+    if (!a.active || !a.expires_at || a.type === 'trial' || !PAID_TYPES.includes(a.type)) return null;
+    const left = Math.ceil((new Date(a.expires_at).getTime() + GRACE_DAYS * 86400000 - Date.now()) / 86400000);
+    return (new Date(a.expires_at) < new Date() && left > 0) ? left : null;
+}
+
 function acctStatusBadge(a) {
     const st = acctState(a);
+    if (st === 'paid_expired') {
+        const g = acctGraceLeft(a);
+        if (g !== null) return `<span class="badge badge-warning">En grâce (${g} j)</span>`;
+    }
     return {
         staff: '<span class="badge badge-mute">Équipe</span>',
         suspended: '<span class="badge badge-danger">Suspendu</span>',
@@ -2616,6 +2660,8 @@ function relanceMessage(kind, a) {
         return `Bonjour,\nVotre abonnement FacturaPro se termine le ${when}. Pour le renouveler : ${offers}. Vos jours restants sont conservés.\nRépondez à ce message et je vous envoie le code de renouvellement.\n— FacturaPro`;
     }
     if (kind === 'paid_expired') {
+        const g = acctGraceLeft(a);
+        if (g !== null) return `Bonjour,\nVotre abonnement FacturaPro a pris fin le ${when}. Par courtoisie, votre accès reste complet encore ${g} jour${g > 1 ? 's' : ''}, puis le compte passera en lecture seule (vos données sont conservées). Pour renouveler : ${offers}.\nRépondez à ce message et je vous envoie le code de renouvellement.\n— FacturaPro`;
         return `Bonjour,\nVotre abonnement FacturaPro a pris fin le ${when}. Votre compte est en lecture seule et vos données sont conservées. Pour reprendre : ${offers}.\nRépondez à ce message et je vous envoie votre code d'activation.\n— FacturaPro`;
     }
     return `Bonjour,\nVotre essai FacturaPro est terminé : votre compte est en lecture seule et vos données sont conservées. Pour reprendre la facturation : ${offers}.\nOffre fondateur limitée si vous êtes parmi les premiers clients. Je peux vous envoyer le code d'activation dès réception du paiement.\n— FacturaPro`;
@@ -5105,6 +5151,90 @@ function renderReports() {
     // Top clients
     // ═══════════════════════════════════════════
     renderTopClients(filteredCodes, filteredPayments);
+    renderReconciliation();
+}
+
+// ============================================
+// RAPPROCHEMENT codes générés ↔ paiements reçus
+// ============================================
+function codeOfferKey(c) { return /^FONDATEUR/i.test(c.note || '') ? 'founder' : c.type; }
+function paymentOfferKey(p) {
+    const amt = parseFloat(p.amount) || 0;
+    if (p.type === 'founder' || (p.type === 'annual' && amt === 299)) return 'founder';
+    return p.type;
+}
+
+function computeReconciliation() {
+    const offers = {};
+    const get = k => (offers[k] = offers[k] || { gen: 0, pending: 0, used: 0, revoked: 0, expected: 0, received: 0 });
+    const emails = {};
+    const em = e => { const k = (e || '').trim().toLowerCase() || '(sans e-mail)'; return (emails[k] = emails[k] || { email: k, codes: [], expected: 0, received: 0, pay: 0 }); };
+
+    for (const c of allCodes) {
+        const k = codeOfferKey(c), o = get(k);
+        o.gen++;
+        if (c.status === 'pending') o.pending++;
+        else if (c.status === 'revoked') o.revoked++;
+        else if (c.status === 'used') {
+            const price = TIER_PRICES[k] || 0;
+            o.used++; o.expected += price;
+            const e = em(c.client_email); e.codes.push(k); e.expected += price;
+        }
+    }
+    for (const p of allPayments) {
+        const amt = parseFloat(p.amount) || 0;
+        get(paymentOfferKey(p)).received += amt;
+        const e = em(p.client_email); e.received += amt; e.pay++;
+    }
+    return { offers, clients: Object.values(emails) };
+}
+
+function renderReconciliation() {
+    const tb = document.getElementById('recoOffers');
+    if (!tb) return;
+    const { offers, clients } = computeReconciliation();
+    const fmt = n => (Math.round(n * 100) / 100).toLocaleString('fr-FR');
+    const gap = n => n === 0 ? '<span class="badge badge-success">0</span>'
+        : n < 0 ? `<span class="badge badge-danger">${fmt(n)} DH manquant</span>`
+        : `<span class="badge badge-warning">+${fmt(n)} DH en plus</span>`;
+
+    const order = ['monthly', 'annual', 'founder', 'semestrial', 'business', 'lifetime'];
+    const rank = k => order.indexOf(k) < 0 ? 99 : order.indexOf(k);
+    const keys = Object.keys(offers).sort((a, b) => rank(a) - rank(b));
+    let tot = { gen: 0, pending: 0, used: 0, revoked: 0, expected: 0, received: 0 };
+    tb.innerHTML = keys.length ? keys.map(k => {
+        const o = offers[k];
+        for (const f in tot) tot[f] += o[f];
+        const label = k === 'lifetime' ? '🎁 À vie (cadeau, 0 DH)' : (TIER_LABELS[k] || esc(k));
+        return `<tr><td>${label}</td><td>${o.gen}</td><td>${o.pending}</td><td>${o.used}</td><td>${o.revoked}</td>
+            <td>${fmt(o.expected)} DH</td><td>${fmt(o.received)} DH</td><td>${gap(o.received - o.expected)}</td></tr>`;
+    }).join('') + `<tr style="font-weight:700"><td>Total</td><td>${tot.gen}</td><td>${tot.pending}</td><td>${tot.used}</td><td>${tot.revoked}</td>
+            <td>${fmt(tot.expected)} DH</td><td>${fmt(tot.received)} DH</td><td>${gap(tot.received - tot.expected)}</td></tr>`
+        : '<tr><td colspan="8" class="empty">Aucun code ni paiement</td></tr>';
+
+    const rows = clients.map(c => {
+        const solde = c.received - c.expected;
+        let st;
+        if (c.expected === 0 && c.received === 0) st = null;
+        else if (c.codes.length === 0) st = '<span class="badge badge-warning">Paiement sans code activé</span>';
+        else if (c.received === 0 && c.expected > 0) st = '<span class="badge badge-danger">Code activé, aucun paiement</span>';
+        else if (solde < 0) st = '<span class="badge badge-danger">Reste à encaisser</span>';
+        else if (solde > 0) st = '<span class="badge badge-warning">Trop-perçu / à affecter</span>';
+        else st = '<span class="badge badge-success">Soldé</span>';
+        return { c, solde, st };
+    }).filter(r => r.st);
+    const bad = rows.filter(r => !r.st.includes('Soldé'));
+    rows.sort((a, b) => (a.st.includes('Soldé') ? 1 : 0) - (b.st.includes('Soldé') ? 1 : 0) || Math.abs(b.solde) - Math.abs(a.solde));
+
+    document.getElementById('recoClients').innerHTML = rows.length ? rows.map(({ c, solde, st }) =>
+        `<tr><td>${esc(c.email)}</td><td>${c.codes.length ? c.codes.map(k => TIER_LABELS[k] || esc(k)).join(', ') : '—'}</td>
+         <td>${fmt(c.expected)} DH</td><td>${fmt(c.received)} DH</td><td><strong>${solde > 0 ? '+' : ''}${fmt(solde)} DH</strong></td><td>${st}</td></tr>`
+    ).join('') : '<tr><td colspan="6" class="empty">Rien à rapprocher</td></tr>';
+
+    const totalGap = tot.received - tot.expected;
+    document.getElementById('recoBanner').innerHTML = bad.length
+        ? `<div class="alert alert-warning" style="margin:0 20px 14px;">⚠️ <strong>${bad.length} client${bad.length > 1 ? 's' : ''} à vérifier</strong> — écart global ${totalGap >= 0 ? '+' : ''}${fmt(totalGap)} DH. Un code activé sans paiement enregistré, ou un paiement sans code, signale un oubli de saisie.</div>`
+        : `<div class="alert alert-success" style="margin:0 20px 14px;">✅ Codes activés et paiements concordent.</div>`;
 }
 
 function renderFunnel(requests, codesGenerated, paymentsReceived, revenue) {
