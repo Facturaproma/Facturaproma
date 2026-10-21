@@ -79,7 +79,7 @@ jobs:
           PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
           REPORT_PATH: reports/backup.md
         run: node scripts/preprod-apply.js cleanup
-      - name: Analyse de secrets (arbre, historique, branche des rapports, rapport à publier) — bloque la publication
+      - name: Analyse de secrets (rapport à publier, arbre Git, historique complet, branche preprod-reports)
         id: scan
         if: always()
         env:
@@ -87,10 +87,15 @@ jobs:
         run: |
           git fetch origin preprod-reports:refs/remotes/origin/preprod-reports 2>/dev/null || true
           B=""; git rev-parse --verify -q origin/preprod-reports >/dev/null && B="--branch origin/preprod-reports"
-          node scripts/scan-secrets.js --tree --history $B --file reports/backup.md | tee reports/scan.txt
-          { echo; echo '### Analyse de secrets (arbre Git, historique complet, branche preprod-reports, ce rapport)'; echo; echo '```'; cat reports/scan.txt; echo '```'; } >> reports/backup.md
-      - name: Publier le rapport (branche preprod-reports, jamais main)
-        if: always() && steps.scan.outcome == 'success'
+          set +e
+          node scripts/scan-secrets.js --file reports/backup.md > reports/scan1.txt; R1=$?
+          node scripts/scan-secrets.js --tree --history $B > reports/scan2.txt; R2=$?
+          { echo; echo '### Analyse de secrets'; echo; echo 'Rapport lui-même :'; echo '```'; cat reports/scan1.txt; echo '```'; echo 'Arbre Git, historique complet (toutes branches), branche preprod-reports :'; echo '```'; cat reports/scan2.txt; echo '```'; } >> reports/backup.md
+          cat reports/scan1.txt reports/scan2.txt
+          echo "report_clean=$([ $R1 -eq 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          echo "repo_rc=$R2" >> "$GITHUB_OUTPUT"
+      - name: Publier le rapport (branche preprod-reports, jamais main) — uniquement si le rapport ne contient aucun identifiant
+        if: always() && steps.scan.outputs.report_clean == 'yes'
         run: |
           [ -f reports/backup.md ] || exit 0
           mkdir -p /tmp/rep && cp reports/backup.md "/tmp/rep/backup-${GITHUB_RUN_ID}.md"
@@ -101,3 +106,6 @@ jobs:
             git checkout --orphan preprod-reports && git rm -rf . >/dev/null 2>&1 || true
           fi
           mkdir -p reports && cp /tmp/rep/* reports/ && git add reports && git commit -m "Rapport sauvegarde/restauration run ${GITHUB_RUN_ID}" && git push origin preprod-reports
+      - name: Échec du job si un identifiant a été trouvé dans le dépôt ou la branche des rapports
+        if: always() && steps.scan.outputs.repo_rc != '0'
+        run: echo "::error::Analyse de secrets positive (voir le rapport)." && exit 1

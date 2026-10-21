@@ -9,7 +9,8 @@ const ROOT = path.join(__dirname, '..');
 const args = process.argv.slice(2);
 const T = JSON.parse(fs.readFileSync(path.join(__dirname, 'preprod-target.json'), 'utf8'));
 const git = (a) => execFileSync('git', a, { cwd: ROOT, maxBuffer: 1024 * 1024 * 1024, encoding: 'utf8' });
-const PLACEHOLDER = /^(motdepasse|…|\.{3}|\[.*\]|<.*>|\*+|x{3,}|\$\{?[A-Za-z_]+\}?|%s|.*(FAKE|EXAMPLE|PLACEHOLDER|YOUR-PASSWORD|MOT_DE_PASSE|PASSWORD).*)$/i;
+// « Zk39dkd02kd » : mot de passe FICTIF des tests du scanner (tests/preprod/scan.test.js, premiers commits) — jamais un vrai secret.
+const PLACEHOLDER = /^(Zk39dkd02kd.*|motdepasse|…|\.{3}|\[.*\]|<.*>|\*+|x{3,}|\$\{?[A-Za-z_]+\}?|%s|(FAKE|EXAMPLE|PLACEHOLDER|YOUR-PASSWORD|MOT_DE_PASSE)\w*)$/i;
 const exact = [];
 if (process.env.PREPROD_DB_URL) {
   exact.push(['URL de connexion exacte', process.env.PREPROD_DB_URL]);

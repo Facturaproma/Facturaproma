@@ -69,6 +69,10 @@ async function snapshot(c) {
   await cat('sequences', `SELECT count(*)::int n, md5(coalesce(string_agg(schemaname||'.'||sequencename||':'||coalesce(last_value::text,'null'), ',' ORDER BY schemaname, sequencename),'')) h FROM pg_sequences WHERE schemaname IN ('public','auth')`);
   await cat('table_privileges', `SELECT count(*)::int n, md5(coalesce(string_agg(table_schema||'.'||table_name||':'||grantee||':'||privilege_type, ',' ORDER BY table_schema, table_name, grantee, privilege_type),'')) h FROM information_schema.role_table_grants WHERE table_schema IN ('public','auth') AND grantee IN ('anon','authenticated','service_role')`);
   await cat('function_privileges', `SELECT md5(coalesce(string_agg(p.oid::regprocedure::text||':'||r||':'||has_function_privilege(r, p.oid, 'EXECUTE'), ',' ORDER BY p.oid::regprocedure::text, r),'')) h FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN (VALUES ('anon'),('authenticated'),('service_role')) v(r) WHERE n.nspname='public' AND p.prokind='f' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid=p.oid AND d.deptype='e')`);
+  S.fn = {};   // détail par fonction (nom, empreinte de la définition, droits d'exécution) : sert à nommer précisément un écart
+  for (const r of (await c.query(`SELECT p.oid::regprocedure::text AS f, md5(pg_get_functiondef(p.oid)) AS d, p.prosecdef::text||coalesce(p.proconfig::text,'') AS c,
+      (SELECT string_agg(r||'='||has_function_privilege(r, p.oid, 'EXECUTE')::text, ',' ORDER BY r) FROM (VALUES ('anon'),('authenticated'),('service_role')) v(r)) AS x
+      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prokind='f' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid=p.oid AND d.deptype='e')`)).rows) S.fn[r.f] = { d: r.d, c: r.c, x: r.x };
   S.counters = (await c.query(`SELECT left(user_id::text,8) u, doc_type t, last_value v FROM public.doc_counters ORDER BY user_id, doc_type`)).rows;
   const inv = await c.query(`SELECT left(d.user_id::text,8) u, jsonb_agg(e->>'number' ORDER BY e->>'number') nums, jsonb_agg(e->>'status' ORDER BY e->>'number') sts
                                FROM public.user_data d, jsonb_array_elements(d.value) e WHERE d.key='invoices' AND jsonb_typeof(d.value)='array' GROUP BY d.user_id ORDER BY 1`);
@@ -85,6 +89,11 @@ function diff(a, b) {
     else if (x.h !== y.h) d.push(`table ${k} : contenu différent (empreinte)`);
   }
   for (const k of Object.keys(a.cat)) if (JSON.stringify(a.cat[k]) !== JSON.stringify(b.cat[k])) d.push(`catalogue « ${k} » : ${JSON.stringify(a.cat[k])} → ${JSON.stringify(b.cat[k])}`);
+  for (const f of new Set([...Object.keys(a.fn || {}), ...Object.keys(b.fn || {})])) {
+    const x = (a.fn || {})[f], y = (b.fn || {})[f];
+    if (!x || !y) d.push(`fonction ${f} : ${x ? 'absente' : 'ajoutée'} après restauration`);
+    else { if (x.d !== y.d) d.push(`fonction ${f} : définition différente`); if (x.c !== y.c) d.push(`fonction ${f} : SECURITY DEFINER/search_path différent`); if (x.x !== y.x) d.push(`fonction ${f} : droits d'exécution ${x.x} → ${y.x}`); }
+  }
   if (JSON.stringify(a.counters) !== JSON.stringify(b.counters)) d.push('compteurs de facturation (doc_counters) différents');
   if (JSON.stringify(a.invoices) !== JSON.stringify(b.invoices)) d.push('numéros de factures différents');
   return d;
