@@ -2,6 +2,32 @@
 
 > **Statut : proposition soumise à validation.** Aucun script de ce document n'a été exécuté, ni sur la base de production ni ailleurs. Aucune migration ne sera lancée sans accord écrit explicite.
 
+## 0. En bref
+
+| | |
+|---|---|
+| **Pourquoi** | Supprimer le risque de perte de données quand deux appareils écrivent en même temps ; préparer les rapports, les relances et le partage avec un comptable. |
+| **Quoi** | Une ligne par facture dans `documents` (puis clients et paiements), avec version pour la concurrence. |
+| **Comment** | Copie sans toucher à l'ancien stockage, double écriture, bascule par version, retour arrière possible à chaque phase. |
+| **Quand** | Seulement après votre accord, d'abord en préproduction. |
+| **Coût** | 0 MAD de service (plan gratuit) ; ~3 à 5 jours de travail. |
+
+### Avantages
+- Plus d'écrasement entre appareils (lignes distinctes) ; conflit explicite sur une même facture.
+- Verrouillage, numérotation et journal appliqués ligne par ligne, plus simples à prouver.
+- Requêtes serveur possibles (impayés, totaux par mois) sans télécharger tout le tableau ; chargement plus rapide quand le volume augmente.
+- Base saine pour les relances WhatsApp mesurables (une relance = une ligne liée à une facture).
+
+### Risques et parades
+| Risque | Parade |
+|---|---|
+| Perte ou altération de données à la copie | Sauvegarde vérifiée par restauration ; copie non destructive (l'ancien stockage n'est jamais modifié) ; rapprochement nombre + sommes par compte, bloquant |
+| Anciens appareils qui écrivent encore dans l'ancien format | Double écriture pendant la transition ; conversion serveur ; drapeau de version |
+| Régression de l'application | Suites de tests existantes adaptées + tests de concurrence ; essai complet en préproduction |
+| Données historiques incohérentes (doublons de numéros, factures émises sans numéro valide) | Dry-run qui les liste avant toute copie ; décision au cas par cas, jamais de correction silencieuse |
+| Coupure de service | Aucune coupure prévue : phases A/B sans arrêt ; la coupure C est une simple bascule |
+| Dépassement des limites du plan gratuit | Taille actuelle très faible ; à mesurer au dry-run |
+
 ## 1. Problème à résoudre
 
 Aujourd'hui, toutes les factures d'un compte sont stockées dans **une seule ligne** `user_data(key='invoices')`, sous forme d'un tableau JSON. Chaque enregistrement renvoie le tableau complet : **le dernier appareil qui écrit gagne**. Deux appareils qui modifient des factures différentes peuvent donc s'écraser (seul un correctif « fusion + réessai » côté application atténue le cas des factures émises). Les brouillons, clients et paiements (autres clés) ont le même défaut.
@@ -48,13 +74,18 @@ Règles serveur réutilisées de `sql/14` : déclencheur de verrouillage (une li
 3. **Copie** : `INSERT INTO documents … ON CONFLICT (user_id,id) DO NOTHING` (rejouable sans risque). Les anciennes lignes `user_data` **ne sont ni modifiées ni supprimées**.
 4. **Contrôle** : pour chaque compte, nombre et sommes de `documents` = nombre et sommes de l'ancien tableau (requête de rapprochement ; toute différence bloque la bascule).
 
+### Comment on vérifie que l'historique est conservé
+Pour chaque compte, avant et après : nombre de documents par type et par statut ; somme HT, TVA et TTC ; liste des numéros (ensemble identique, aucun doublon) ; empreinte (hash) de chaque facture émise comparée entre l'ancien tableau et la nouvelle ligne ; relecture visuelle de 3 comptes réels (avec leur accord) ou de comptes de test. Toute différence arrête la migration. Les factures émises ne sont jamais réécrites : leur contenu `body` est copié tel quel.
+
 ## 4. Compatibilité temporaire avec l'application actuelle
 
 - **Phase A – double écriture** (nouvelle version de l'appli) : l'appli lit encore `user_data`, écrit dans `user_data` **et** appelle `documents`. Un déclencheur ou la fonction RPC `upsert_document(...)` garde `documents` à jour. Rien ne casse pour les anciens onglets/appareils.
 - **Phase B – lecture depuis `documents`** derrière un indicateur de version côté appli (`user_data.key='schema'`), appareil par appareil. Un appareil non mis à jour continue d'écrire dans l'ancien tableau : le déclencheur le convertit en lignes (compat) jusqu'à la date de coupure.
 - **Phase C – coupure** : plus d'écriture dans `user_data.invoices` ; verrouillage en lecture seule de l'ancienne clé ; conservation 90 jours puis archivage.
 
-## 5. Gestion des conflits entre appareils
+## 5. Gestion des conflits entre appareils (modifications concurrentes)
+
+Mécanisme : chaque ligne porte `version`. Une modification envoie `version` attendue ; le serveur n'accepte que si elle est inchangée, puis l'incrémente.
 
 - Modification d'une même facture brouillon par deux appareils : le second reçoit « conflit de version » et affiche la version serveur + ses modifications pour choix (pas d'écrasement silencieux).
 - Modifications de factures différentes : plus aucun conflit (lignes distinctes).
