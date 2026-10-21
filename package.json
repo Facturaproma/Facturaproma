@@ -8,7 +8,7 @@
     "test:sql": "bash tests/sql/run.sh",
     "test:integration": "node tests/integration/cloud.test.js && node tests/integration/concurrence.test.js",
     "test:all": "npm test && npm run test:sql && npm run test:integration && npm run test:preprod-local",
-    "test:preprod-local": "node tests/preprod/apply.local.test.js && node tests/preprod/check.mock.test.js"
+    "test:preprod-local": "node tests/preprod/apply.local.test.js && node tests/preprod/check.mock.test.js && node tests/preprod/backup.local.test.js && node tests/preprod/scan.test.js"
   },
   "devDependencies": {
     "jspdf": "2.5.1",
