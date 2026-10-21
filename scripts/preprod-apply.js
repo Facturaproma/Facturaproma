@@ -37,6 +37,8 @@ async function install(c, ctx) {
     log(`Base vide confirmée : marqueur « préproduction / ${ctx.ref} » posé.`);
   } else await requireMarker(c, ctx);
   await c.query('CREATE TABLE IF NOT EXISTS public._fp_migrations (name text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz DEFAULT now())');
+  // tables techniques : jamais accessibles via l'API publique
+  await c.query('REVOKE ALL ON public._fp_env, public._fp_migrations FROM anon, authenticated');
   for (const s of MAN.ordre) {
     const sql = fs.readFileSync(path.join(ROOT, 'sql', s.file), 'utf8');
     const sha = crypto.createHash('sha256').update(sql).digest('hex');
@@ -63,6 +65,7 @@ async function postcheck(c, ctx) {
   ck('RLS activée sur toutes les tables de public', (await q("SELECT count(*)::int n FROM pg_class c JOIN pg_namespace s ON s.oid=c.relnamespace WHERE s.nspname='public' AND c.relkind='r' AND NOT c.relrowsecurity"))[0].n === 0);
   // Supabase accorde par défaut des droits d'accès aux rôles anon/authenticated sur les nouvelles tables : c'est la RLS qui protège.
   // Ce n'est donc PAS un échec ; on le journalise et on vérifie surtout qu'aucune table n'est sans RLS (contrôle précédent).
+  ck('tables techniques _fp_* inaccessibles à anon/authenticated', !(await q("SELECT bool_or(has_table_privilege(r, t, 'SELECT')) b FROM unnest(ARRAY['anon','authenticated']) r, unnest(ARRAY['public._fp_env','public._fp_migrations']) t"))[0].b);
   const ag = await q("SELECT DISTINCT table_name FROM information_schema.role_table_grants WHERE grantee='anon' AND table_schema='public' ORDER BY 1");
   log(`INFO droits de table accordés à anon (protégés par la RLS) : ${ag.length ? ag.map(r => r.table_name).join(', ') : 'aucun'}`);
   ck('fonctions SECURITY DEFINER : search_path fixé', (await q("SELECT count(*)::int n FROM pg_proc p JOIN pg_namespace s ON s.oid=p.pronamespace WHERE s.nspname='public' AND p.prosecdef AND NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig,'{}')) cfg WHERE cfg LIKE 'search_path=%')"))[0].n === 0);

@@ -1,5 +1,5 @@
 {
   "_comment": "Pousser une modification de CE fichier sur la branche dev/fondations déclenche le workflow « preprod » (préproduction UNIQUEMENT). action : install | check | install+check | cleanup | status",
-  "action": "install",
-  "nonce": "1"
+  "action": "install+check",
+  "nonce": "2"
 }
