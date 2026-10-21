@@ -10253,6 +10253,7 @@ async function activateLicense() {
                 used: '⚠️ Ce code a déjà été utilisé',
                 revoked: '⚠️ Ce code a été révoqué. Contactez le support.',
                 wrong_email: '⚠️ Ce code est destiné à un autre compte',
+                too_many_attempts: '⏳ Trop de tentatives. Réessayez dans une heure ou contactez le support.',
                 not_authenticated: '⚠️ Connectez-vous pour activer un code'
             };
             showToast(reasons[result && result.reason] || 'Activation impossible', 'error');
