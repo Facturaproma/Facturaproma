@@ -1,6 +1,6 @@
 // FacturaPro Service Worker
 // Version - changer ce numéro pour forcer mise à jour
-const CACHE_VERSION = 'facturapro-v15-netfirst';
+const CACHE_VERSION = 'facturapro-v16-netfirst';
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fichiers à mettre en cache au moment de l'installation
@@ -15,7 +15,7 @@ const URLS_TO_CACHE = [
 const EXTERNAL_CACHE = [
     'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js'
 ];
 
 // === INSTALL: Cache les fichiers essentiels ===

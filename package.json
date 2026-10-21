@@ -4,12 +4,15 @@
   "version": "1.0.0",
   "description": "Tests reproductibles de FacturaPro (aucun secret requis)",
   "scripts": {
-    "test": "node tests/app.test.js",
-    "test:sql": "bash tests/sql/run.sh"
+    "test": "node tests/app.test.js && node tests/regression.test.js",
+    "test:sql": "bash tests/sql/run.sh",
+    "test:integration": "node tests/integration/cloud.test.js && node tests/integration/concurrence.test.js",
+    "test:all": "npm test && npm run test:sql && npm run test:integration"
   },
   "devDependencies": {
     "jspdf": "2.5.1",
     "jspdf-autotable": "3.5.31",
-    "playwright-core": "^1.48.0"
+    "playwright-core": "^1.48.0",
+    "pg": "^8.11.0"
   }
 }

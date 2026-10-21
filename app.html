@@ -777,6 +777,19 @@
         .items-table .item-disc { min-width: 50px; }
         .items-table .item-desc { min-width: 100px; }
         .items-table .item-tva { min-width: 64px; padding-left: 6px; padding-right: 2px; }
+        .items-table .item-total { white-space: nowrap; }
+        /* Écrans moyens (≈1100-1400 px) : panneau latéral plus étroit et cellules plus serrées pour que « Total HT » reste visible sans défilement */
+        @media (min-width: 1101px) and (max-width: 1400px) {
+            .editor-grid { grid-template-columns: 1fr 300px; gap: 16px; }
+            .items-table { min-width: 0; }
+            .items-table th { padding: 10px 6px; }
+            .items-table td { padding: 6px 3px; }
+            .items-table input { padding: 8px 6px; }
+            .items-table .item-qty { min-width: 44px; }
+            .items-table .item-price { min-width: 70px; }
+            .items-table .item-disc { min-width: 44px; }
+            .items-table .item-tva { min-width: 58px; }
+        }
 
         .items-table thead {
             background: var(--surface-soft);
@@ -4469,14 +4482,14 @@
                     <div class="aside-card">
                         <h3>📊 Export comptable</h3>
                         <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">
-                            Exportez vos factures dans des formats compatibles avec les logiciels comptables et la DGI Maroc.
+                            Exportez vos factures émises en CSV (à importer dans votre logiciel ou à transmettre à votre comptable).
                         </p>
                         
                         <div style="background: var(--surface-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
                             <strong style="display: block; margin-bottom: 6px;">📦 Formats inclus :</strong>
                             <div style="display: flex; flex-direction: column; gap: 4px; color: var(--ink-soft);">
                                 <div>✓ <strong>CSV Excel</strong> (Sage, EBP, Cegid, Quadratus...)</div>
-                                <div>✓ <strong>FEC</strong> (Fichier Écritures Comptables - DGI Maroc)</div>
+                                <div>✓ <strong>FEC</strong> (modèle français, non validé DGI : à faire contrôler par votre comptable)</div>
                                 <div>✓ Compatible cabinet comptable</div>
                             </div>
                         </div>
@@ -4709,7 +4722,7 @@
 <div class="modal-overlay" id="accountingExportModal" onclick="closeModalIfBg(event, 'accountingExportModal')">
     <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 560px;">
         <h2>📊 Export Comptable</h2>
-        <p>Choisissez le format adapté à votre logiciel comptable ou à la DGI</p>
+        <p>Choisissez le format adapté à votre logiciel comptable ou à votre comptable</p>
 
         <div style="display: flex; flex-direction: column; gap: 12px; margin: 16px 0;">
             <!-- CSV Excel -->
@@ -4736,7 +4749,7 @@
                 <div style="display: flex; gap: 12px; align-items: start;">
                     <div style="font-size: 32px;">🏛️</div>
                     <div style="flex: 1;">
-                        <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">Format FEC (DGI Maroc)</div>
+                        <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">Format FEC (modèle français)</div>
                         <div style="font-size: 12px; color: var(--ink-mute); margin-bottom: 6px;">Fichier Écritures Comptables (export à faire valider par votre comptable)</div>
                         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                             <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Export comptable</span>
@@ -4750,7 +4763,7 @@
         </div>
 
         <div style="background: rgba(201, 169, 91, 0.08); border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 8px; font-size: 12px; color: var(--ink-soft); margin: 16px 0;">
-            💡 <strong>Conseil</strong> : Demandez à votre comptable quel format il préfère. La plupart utilisent le CSV Excel. Le FEC est requis en cas de contrôle fiscal DGI.
+            💡 <strong>Conseil</strong> : Demandez à votre comptable quel format il préfère. La plupart utilisent le CSV Excel. Le format FEC est un modèle d'origine française, fourni à titre indicatif : il n'est ni certifié ni validé par la DGI.
         </div>
 
         <div class="modal-actions">
@@ -5947,7 +5960,31 @@ const Storage = {
         }
     },
     
-    async _syncToCloud(key, value) {
+    // Deux appareils : la liste des factures est écrite en un bloc. Quand le serveur refuse l'écriture
+    // parce qu'elle « oublierait » une facture émise ailleurs, on fusionne (par identifiant) puis on réessaie :
+    // aucune facture émise ni nouvelle facture locale n'est perdue.
+    async _mergeInvoicesWithCloud(local) {
+        const { data, error } = await supaClient.from('user_data').select('key, value').eq('user_id', this._currentUserId);
+        if (error) return null;
+        const row = (data || []).find(r => r.key === 'invoices');
+        const cloud = (row && Array.isArray(row.value)) ? row.value : [];
+        const localById = new Map((local || []).map(i => [i.id, i]));
+        const out = cloud.map(c => {
+            const l = localById.get(c.id);
+            if (!l) return c;                                   // créée sur un autre appareil : conservée
+            if ((c.status || 'draft') !== 'draft') {             // émise : le serveur fait foi, sauf avancement du règlement
+                return (l.paidAmount || 0) > (c.paidAmount || 0)
+                    ? { ...c, status: l.status, paidAmount: l.paidAmount, paidAt: l.paidAt, payments: l.payments || c.payments }
+                    : c;
+            }
+            return l;                                           // brouillon : la version locale (plus récente) l'emporte
+        });
+        const cloudIds = new Set(cloud.map(c => c.id));
+        (local || []).forEach(l => { if (!cloudIds.has(l.id)) out.push(l); });   // nouvelles factures locales
+        return out;
+    },
+
+    async _syncToCloud(key, value, retried = false) {
         // Si offline, ajouter à la queue
         if (typeof SyncManager !== 'undefined' && !SyncManager.isOnline) {
             SyncManager.addPendingChange({ type: 'storage', key });
@@ -5969,7 +6006,17 @@ const Storage = {
                     License.refresh();
                     return;
                 }
-                if (/FACTURE_VERROUILLEE/.test(error.message || '')) {
+                if (/FACTURE_VERROUILLEE|NUMERO_EN_DOUBLE|NUMERO_NON_ATTRIBUE/.test(error.message || '')) {
+                    if (key === 'invoices' && !retried && /FACTURE_VERROUILLEE/.test(error.message || '')) {
+                        const merged = await this._mergeInvoicesWithCloud(value);
+                        if (merged) {
+                            this._cache['invoices'] = merged;
+                            try { localStorage.setItem(this._buildLocalKey('invoices', this._currentUserId), JSON.stringify(merged)); } catch {}
+                            await this._syncToCloud(key, merged, true);
+                            try { renderInvoices(); } catch {}
+                            return;
+                        }
+                    }
                     // Le serveur protège les factures émises : on recharge la version serveur
                     console.warn('Écriture refusée (facture émise verrouillée).');
                     if (typeof showToast === 'function') showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error');
@@ -6134,7 +6181,9 @@ function showToast(message, type = '') {
 // TVA de ligne = HT de ligne × taux, arrondie au centime ; les totaux sont la
 // somme des lignes arrondies. Ainsi les montants affichés s'additionnent exactement.
 function roundMoney(x) {
-    return Math.round((Number(x) + Number.EPSILON) * 100) / 100;
+    // Symétrique pour les montants négatifs (avoirs) : -1,005 -> -1,01 comme +1,005 -> 1,01
+    const n = Number(x) || 0;
+    return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100 || 0;
 }
 function computeLine(qty, price, tvaRate, discountPct) {
     const q = Number(qty) || 0, p = Number(price) || 0, t = Number(tvaRate) || 0;
@@ -6160,21 +6209,48 @@ function formatDocNumber(type, n) {
     return `${prefix}-${new Date().getFullYear()}-${String(n).padStart(3, '0')}`;
 }
 
-// Numéro attribué par le serveur (séquence unique par compte). Si le serveur est
-// injoignable ou si sql/14 n'est pas installé, on retombe sur le compteur local.
+// Numéro OFFICIEL : attribué uniquement par le serveur (séquence unique par compte).
+// Si le serveur est injoignable, injoignable après erreur, ou si sql/14 n'est pas installé,
+// l'émission est REFUSÉE (la facture reste en brouillon) : jamais de numéro officiel local.
+// Seul le mode local sans serveur (démonstration) utilise le compteur du navigateur,
+// et les devis (documents non fiscaux) peuvent se rabattre sur le compteur local.
+class NumberingError extends Error {
+    constructor(code, message) { super(message); this.code = code; }
+}
 async function getNextNumber(type) {
     const counter = Storage.get('counter', { invoice: 0, quote: 0, credit: 0 });
     const floor = counter[type] || 0;
+    const cloud = typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof supaClient !== 'undefined' && supaClient && Storage._currentUserId;
     let n = null;
-    if (typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof supaClient !== 'undefined' && supaClient &&
-        Storage._currentUserId && navigator.onLine !== false) {
-        try {
-            const { data, error } = await supaClient.rpc('next_doc_number', { p_type: type, p_floor: floor });
-            if (!error && Number.isInteger(data)) n = data;
-        } catch (e) { /* repli local */ }
+    if (cloud) {
+        let failure = null;
+        if (navigator.onLine === false) {
+            failure = new NumberingError('OFFLINE', 'Hors connexion : impossible d\'obtenir un numéro officiel. Le document est enregistré en brouillon ; émettez-le une fois reconnecté.');
+        } else {
+            try {
+                const { data, error } = await supaClient.rpc('next_doc_number', { p_type: type, p_floor: floor });
+                if (error) {
+                    const msg = String(error.message || '');
+                    if (/LICENCE_INACTIVE/.test(msg)) failure = new NumberingError('LICENSE', 'Licence inactive : émission impossible.');
+                    else if (error.code === 'PGRST202' || error.code === '42883' || /next_doc_number/.test(msg)) failure = new NumberingError('SERVER_UPDATE', 'Mise à jour du serveur requise pour émettre une facture. Contactez le support.');
+                    else failure = new NumberingError('NETWORK', 'Serveur injoignable : impossible d\'obtenir un numéro officiel. Le document reste en brouillon ; réessayez dans un instant.');
+                } else if (Number.isInteger(data) && data > 0) {
+                    n = data;
+                } else {
+                    failure = new NumberingError('NETWORK', 'Réponse inattendue du serveur : le document reste en brouillon.');
+                }
+            } catch (e) {
+                failure = new NumberingError('NETWORK', 'Serveur injoignable : impossible d\'obtenir un numéro officiel. Le document reste en brouillon ; réessayez dans un instant.');
+            }
+        }
+        if (n === null) {
+            if (type !== 'quote') throw failure;    // facture / avoir : jamais de numéro local
+            n = floor + 1;                          // devis : repli local toléré (document non fiscal)
+        }
+    } else {
+        n = floor + 1;                              // mode local sans serveur (démonstration)
     }
-    if (n === null) n = floor + 1;
-    counter[type] = n;
+    counter[type] = Math.max(n, floor);
     Storage.set('counter', counter);
     return formatDocNumber(type, n);
 }
@@ -7219,7 +7295,9 @@ async function createCreditFromInvoice(id) {
     
     // Générer un nouveau numéro d'avoir
     const reason = prompt('Motif de l\'avoir :', 'Remboursement / Annulation') || 'Remboursement';
-    const creditNumber = await getNextNumber('credit');
+    let creditNumber;
+    try { creditNumber = await getNextNumber('credit'); }
+    catch (e) { if (e instanceof NumberingError) { showToast(e.message, 'error'); return; } throw e; }
     
     // Créer l'avoir avec items en NÉGATIF
     const credit = {
@@ -7604,15 +7682,26 @@ async function _persistEditor(forceStatus = null) {
     const storageKey = isQuote ? 'quotes' : 'invoices';
     const collection = Storage.get(storageKey, []);
     
-    const newStatus = forceStatus || document.getElementById('editorStatus').value;
+    let newStatus = forceStatus || document.getElementById('editorStatus').value;
     let number = editingInvoice?.number;
     let justIssued = false;
+    let issuanceBlocked = false;
     if (isQuote) {
         if (!number) number = await getNextNumber('quote');
-    } else if (!number || isDraftNumber(number)) {
-        // Numéro officiel attribué uniquement à l'émission : un brouillon supprimé ne crée pas de trou
-        if (newStatus === 'draft') { number = number || draftNumber(); }
-        else { number = await getNextNumber('invoice'); justIssued = true; }
+    } else {
+        const wasDraft = !editingInvoice || (editingInvoice.status || 'draft') === 'draft';
+        if (wasDraft && newStatus !== 'draft') {
+            // Émission : le numéro officiel vient du serveur. Sans serveur, on reste en brouillon.
+            try { number = await getNextNumber('invoice'); justIssued = true; }
+            catch (e) {
+                if (!(e instanceof NumberingError)) throw e;
+                issuanceBlocked = true; newStatus = 'draft';
+                number = (editingInvoice && isDraftNumber(editingInvoice.number)) ? editingInvoice.number : draftNumber();
+                showToast(e.message, 'error');
+            }
+        } else if (!number) {
+            number = draftNumber();
+        }
     }
 
     const data = {
@@ -7654,7 +7743,7 @@ async function _persistEditor(forceStatus = null) {
         const q = quotes.find(x => x.convertedTo === data.id);
         if (q) { q.convertedInvoiceNumber = data.number; Storage.set('quotes', quotes); }
     }
-    return data;
+    return issuanceBlocked ? Object.assign({}, data, { _issuanceBlocked: true }) : data;
 }
 
 async function editorExport(kind) {
@@ -7673,6 +7762,7 @@ async function saveInvoice(forceStatus = null) {
     const data = await persistEditor(forceStatus);
     if (!data) return;
     const isQuote = editingType === 'quote';
+    if (data._issuanceBlocked) return;   // message d'erreur déjà affiché, on reste sur le brouillon
     showToast(isQuote ? 'Devis enregistré ✓' : 'Facture enregistrée ✓', 'success');
 
     // Devis accepté : proposer tout de suite la facture (sans rien ressaisir)
@@ -9110,7 +9200,7 @@ function exportReportCSV(type) {
     
     if (type === 'invoices') {
         const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
-            i.type !== 'credit' && isInReportRange(i.date, range)
+            i.type !== 'credit' && i.status !== 'draft' && isInReportRange(i.date, range)
         );
         headers = ['N° Facture', 'Date', 'Client', 'Montant HT', 'TVA', 'Montant TTC', 'Échéance', 'Statut', 'Date Paiement'];
         rows = allInvoices.map(i => [
@@ -9702,11 +9792,12 @@ function exportAccounting(format = 'csv') {
         return;
     }
     
-    const invoices = Storage.get('invoices', []);
+    // Seules les factures et avoirs ÉMIS sont exportés : un brouillon (numéro provisoire BRO-) n'est pas une pièce comptable.
+    const invoices = (Storage.get('invoices', []) || []).filter(i => i.status !== 'draft');
     const company = Storage.get('company', {});
     
     if (invoices.length === 0) {
-        showToast('Aucune facture à exporter', 'error');
+        showToast('Aucune facture émise à exporter', 'error');
         return;
     }
     
@@ -9720,6 +9811,7 @@ function exportAccounting(format = 'csv') {
             'Désignation',
             'Quantité',
             'Prix Unitaire HT',
+            'Remise %',
             'Total HT',
             'TVA %',
             'Montant TVA',
@@ -9735,6 +9827,10 @@ function exportAccounting(format = 'csv') {
             
             // Une ligne par item de la facture
             (inv.items || []).forEach(item => {
+                // Montants = ceux de la facture (arrondis ligne par ligne, remise incluse), pas recalculés
+                const L = (item.totalHT !== undefined)
+                    ? { totalHT: item.totalHT, totalTVA: item.totalTVA, totalTTC: item.totalTTC }
+                    : computeLine(item.quantity, item.unitPrice, item.tva, item.discount);
                 rows.push([
                     formatDate(inv.date),
                     inv.number || '',
@@ -9743,11 +9839,12 @@ function exportAccounting(format = 'csv') {
                     (item.description || '').replace(/[",;]/g, ' '),
                     item.quantity || 0,
                     (item.unitPrice || 0).toFixed(2),
-                    ((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2),
+                    item.discount || 0,
+                    Number(L.totalHT || 0).toFixed(2),
                     item.tva || 0,
-                    (((item.quantity || 0) * (item.unitPrice || 0)) * ((item.tva || 0) / 100)).toFixed(2),
-                    ((item.quantity || 0) * (item.unitPrice || 0) * (1 + (item.tva || 0) / 100)).toFixed(2),
-                    inv.status || 'draft',
+                    Number(L.totalTVA || 0).toFixed(2),
+                    Number(L.totalTTC || 0).toFixed(2),
+                    inv.status || '',
                     inv.paymentDate ? formatDate(inv.paymentDate) : '',
                     inv.paymentMode || ''
                 ]);
@@ -9770,7 +9867,7 @@ function exportAccounting(format = 'csv') {
         
         showToast('Export comptable CSV téléchargé ✓', 'success');
     } else if (format === 'fec') {
-        // Format FEC (Fichier des Écritures Comptables) - format marocain DGI
+        // Export au format FEC (modèle français, aucune validation DGI) : à contrôler par votre comptable avant tout usage
         const headers = [
             'JournalCode',
             'JournalLib',
@@ -9794,24 +9891,27 @@ function exportAccounting(format = 'csv') {
         
         const rows = [];
         invoices.forEach((inv, idx) => {
-            if (inv.status !== 'paid') return; // FEC uniquement sur factures validées
+            // Ventes comptabilisées à l'émission (hors brouillons, déjà filtrés) ; un avoir inverse les sens débit/crédit
+            const sign = (inv.type === 'credit' || (inv.totalTTC || 0) < 0) ? -1 : 1;
             
             const client = (Storage.get('clients', []).find(c => c.id === inv.clientId)) || {};
             const ecrNum = String(idx + 1).padStart(5, '0');
             const dateFormatted = (inv.date || '').replace(/-/g, '');
-            const totalHT = (inv.totalHT || 0).toFixed(2);
-            const totalTVA = (inv.totalTVA || 0).toFixed(2);
-            const totalTTC = (inv.totalTTC || 0).toFixed(2);
+            const totalHT = Math.abs(inv.totalHT || 0).toFixed(2);
+            const totalTVA = Math.abs(inv.totalTVA || 0).toFixed(2);
+            const totalTTC = Math.abs(inv.totalTTC || 0).toFixed(2);
+            const Z = '0.00';
+            const lib = sign < 0 ? 'Avoir' : 'Vente';
             
-            // Ligne 1 : Client (débit)
-            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '3421', 'Clients', client.id || '', client.name || '', inv.number, dateFormatted, `Vente ${inv.number}`, totalTTC, '0.00', '', '', dateFormatted, totalTTC, 'MAD']);
+            // Ligne 1 : Client (débit pour une facture, crédit pour un avoir)
+            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '3421', 'Clients', client.id || '', client.name || '', inv.number, dateFormatted, `${lib} ${inv.number}`, sign > 0 ? totalTTC : Z, sign > 0 ? Z : totalTTC, '', '', dateFormatted, totalTTC, 'MAD']);
             
-            // Ligne 2 : Vente (crédit)
-            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '7111', 'Ventes de marchandises', '', '', inv.number, dateFormatted, `Vente ${inv.number}`, '0.00', totalHT, '', '', dateFormatted, totalHT, 'MAD']);
+            // Ligne 2 : Vente (crédit pour une facture, débit pour un avoir)
+            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '7111', 'Ventes de marchandises', '', '', inv.number, dateFormatted, `${lib} ${inv.number}`, sign > 0 ? Z : totalHT, sign > 0 ? totalHT : Z, '', '', dateFormatted, totalHT, 'MAD']);
             
-            // Ligne 3 : TVA collectée (crédit)
+            // Ligne 3 : TVA collectée
             if (parseFloat(totalTVA) > 0) {
-                rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '4455', 'TVA collectée', '', '', inv.number, dateFormatted, `TVA Vente ${inv.number}`, '0.00', totalTVA, '', '', dateFormatted, totalTVA, 'MAD']);
+                rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '4455', 'TVA collectée', '', '', inv.number, dateFormatted, `TVA ${lib} ${inv.number}`, sign > 0 ? Z : totalTVA, sign > 0 ? totalTVA : Z, '', '', dateFormatted, totalTVA, 'MAD']);
             }
         });
         
@@ -9848,6 +9948,10 @@ function showAccountingExportMenu() {
 }
 
 async function resetApp() {
+    if ((Storage.get('invoices', []) || []).some(i => isLockedDoc(i))) {
+        alert('Réinitialisation impossible : votre compte contient des factures émises, qui doivent être conservées. Pour supprimer votre compte et vos données, contactez le support.');
+        return;
+    }
     if (!confirm('⚠️ ATTENTION : Toutes vos données (factures émises comprises) seront effacées définitivement. Une copie sera téléchargée avant. Continuer ?')) return;
     const word = prompt('Pour confirmer, tapez SUPPRIMER en majuscules :');
     if (word !== 'SUPPRIMER') { showToast('Suppression annulée', 'info'); return; }
@@ -11211,7 +11315,55 @@ function openInMailto() {
 // ============================================
 // PDF GENERATION
 // ============================================
-function generatePDF(id, type) {
+// --- Texte arabe dans les PDF -------------------------------------------------
+// Les polices standard de jsPDF n'ont pas de glyphes arabes. La police Noto Naskh Arabic (licence OFL,
+// fonts/) est chargée uniquement si le document contient de l'arabe, puis les textes arabes sont mis
+// en forme (liaison des lettres + sens droite-à-gauche) avec processArabic de jsPDF.
+const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F]/;
+let _arabicFontB64 = null;
+async function loadArabicFont() {
+    if (_arabicFontB64) return _arabicFontB64;
+    const res = await fetch('fonts/NotoNaskhArabic-Regular.ttf');
+    if (!res.ok) throw new Error('police arabe indisponible (' + res.status + ')');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    _arabicFontB64 = btoa(bin);
+    return _arabicFontB64;
+}
+async function enableArabicPdf(pdf) {
+    const b64 = await loadArabicFont();
+    pdf.addFileToVFS('NotoNaskhArabic.ttf', b64);
+    pdf.addFont('NotoNaskhArabic.ttf', 'NotoNaskhArabic', 'normal');
+    pdf.addFont('NotoNaskhArabic.ttf', 'NotoNaskhArabic', 'bold');
+    const shape = (t) => (typeof t === 'string' && ARABIC_RE.test(t)) ? pdf.processArabic(t) : t;
+    const origText = pdf.text.bind(pdf);
+    pdf.text = function (text, x, y, opts, ...rest) {
+        const list = Array.isArray(text) ? text : [text];
+        if (!list.some(t => typeof t === 'string' && ARABIC_RE.test(t))) return origText(text, x, y, opts, ...rest);
+        // texte arabe : police arabe, mise en forme, alignement à droite si la ligne est entièrement arabe
+        const prev = pdf.getFont();
+        pdf.setFont('NotoNaskhArabic', 'normal');
+        const out = list.map(shape);
+        const r = origText(Array.isArray(text) ? out : out[0], x, y, opts, ...rest);
+        pdf.setFont(prev.fontName, prev.fontStyle);
+        return r;
+    };
+    // autoTable : police arabe pour les cellules arabes (mesure de largeur correcte) + mise en forme
+    const origAT = pdf.autoTable.bind(pdf);
+    pdf.autoTable = function (o) {
+        const prevHook = o.didParseCell;
+        o.didParseCell = function (d) {
+            if (d.cell && Array.isArray(d.cell.text) && d.cell.text.some(t => ARABIC_RE.test(t))) {
+                d.cell.styles.font = 'NotoNaskhArabic'; d.cell.styles.fontStyle = 'normal';
+                d.cell.text = d.cell.text.map(shape);
+            }
+            if (prevHook) prevHook(d);
+        };
+        return origAT(o);
+    };
+}
+
+async function generatePDF(id, type) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
     const doc_data = collection.find(d => d.id === id);
     if (!doc_data) return;
@@ -11219,6 +11371,10 @@ function generatePDF(id, type) {
     const company = Storage.get('company', {});
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    if (ARABIC_RE.test(JSON.stringify([doc_data, company]))) {
+        try { await enableArabicPdf(pdf); }
+        catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée, vérifiez votre connexion). Le PDF sera généré sans lui.', 'error'); }
+    }
     
     const isInvoice = type === 'invoice';
     const isCredit = doc_data.type === 'credit' || (doc_data.totalTTC || 0) < 0;
@@ -11469,7 +11625,7 @@ function generatePDF(id, type) {
         pdf.setTextColor(180, 100, 20);
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'italic');
-        pdf.text('⚠ Attention : TVA appliquée. Vérifiez votre statut fiscal.', 19, yPos + 7);
+        pdf.text('Attention : TVA appliquée. Vérifiez votre statut fiscal.', 19, yPos + 7);
         yPos += 16;
     }
     
