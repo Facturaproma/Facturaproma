@@ -63,6 +63,8 @@ jobs:
           export PREPROD_URL="https://$(node -p "require('./scripts/preprod-target.json').preprodRef").supabase.co"
           export PREPROD_ANON_KEY="$(node -p "require('./scripts/preprod-target.json').anonKey")"
           node tests/preprod/check.js 2>&1 | tee reports/check.txt | tail -8
+          # jeu de données plus riche pour la preuve des numéros (A : +5 émises, B : +4 émises), ajouté aux factures existantes
+          node tests/preprod/seed-invoices.js
           { echo '### Données de test préparées (check.js, exécution réelle sur Supabase préproduction)'; echo; echo '```'; tail -3 reports/check.txt; echo '```'; echo; } >> reports/backup.md
       - name: Sauvegarde, restauration locale, contrôles
         env:
