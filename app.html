@@ -346,6 +346,14 @@
             font-size: 12px;
         }
 
+        /* Colonne Actions toujours visible (collée à droite) quand le tableau défile */
+        table.tbl-act th:last-child, table.tbl-act td:last-child {
+            position: sticky; right: 0; z-index: 2;
+            background: var(--surface); box-shadow: -6px 0 8px -6px var(--shadow-md);
+            white-space: normal; min-width: 112px;
+        }
+        table.tbl-act thead th:last-child { background: var(--surface-soft); }
+        table.tbl-act td:last-child { display: table-cell; }
         /* Boutons d'action des tableaux : bien visibles et faciles à toucher */
         td .btn-ghost.btn-sm {
             min-width: 40px; height: 40px; padding: 0 10px;
@@ -3161,6 +3169,8 @@
                 <div class="topbar-actions">
                     <button class="btn btn-ghost" onclick="navTo('invoices')">Annuler</button>
                     <button class="btn btn-success" id="btnConvertQuote" style="display:none;" onclick="convertEditingQuote()">→ Convertir en facture</button>
+                    <button class="btn btn-secondary" onclick="editorExport('pdf')" title="Enregistrer puis télécharger / imprimer en PDF">📥 PDF / Imprimer</button>
+                    <button class="btn btn-secondary" onclick="editorExport('whatsapp')" title="Enregistrer puis envoyer par WhatsApp" style="color:#1da851;">💬 WhatsApp</button>
                     <button class="btn btn-secondary" onclick="saveInvoice('draft')">Brouillon</button>
                     <button class="btn btn-primary" onclick="saveInvoice('sent')">Enregistrer & Envoyer</button>
                 </div>
@@ -6945,7 +6955,7 @@ function renderInvoices() {
     }
     
     el.innerHTML = `
-        <table>
+        <table class="tbl-act">
             <thead>
                 <tr>
                     <th>Numéro</th>
@@ -6975,6 +6985,7 @@ function renderInvoices() {
                             <td onclick="editInvoice('${i.id}')">${amountDisplay}</td>
                             <td onclick="editInvoice('${i.id}')"><span class="status-pill status-${i.status}">${statusLabel(i.status)}</span></td>
                             <td>
+                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Modifier / imprimer">✏️</button>
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥</button>
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${i.id}', 'invoice')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); duplicateInvoice('${i.id}')" title="Dupliquer">📋</button>
@@ -7528,6 +7539,16 @@ function persistEditor(forceStatus = null) {
     return data;
 }
 
+function editorExport(kind) {
+    const isQuote = editingType === 'quote';
+    const data = persistEditor(null);
+    if (!data) return;
+    editingInvoice = data;
+    const type = isQuote ? 'quote' : 'invoice';
+    if (kind === 'pdf') generatePDF(data.id, type);
+    else sendDocWhatsApp(data.id, type);
+}
+
 function saveInvoice(forceStatus = null) {
     const wasAccepted = editingType === 'quote' && editingInvoice && editingInvoice.status === 'accepted';
     const data = persistEditor(forceStatus);
@@ -7580,7 +7601,7 @@ function renderQuotes() {
     }
     
     el.innerHTML = `
-        <table>
+        <table class="tbl-act">
             <thead>
                 <tr>
                     <th>Numéro</th>
@@ -7603,6 +7624,7 @@ function renderQuotes() {
                             ${q.convertedTo
                                 ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${q.convertedTo}')" title="Voir la facture" style="color: var(--success);">📄 ${escapeHtml(q.convertedInvoiceNumber || 'Facture')}</button>`
                                 : `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); convertQuoteToInvoice('${q.id}')" title="Convertir en facture" style="color: var(--success);">→📄 Facturer</button>`}
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editQuote('${q.id}')" title="Modifier / imprimer">✏️</button>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${q.id}', 'quote')" title="Télécharger PDF">📥</button>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${q.id}', 'quote')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteQuote('${q.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
@@ -7763,7 +7785,7 @@ function renderClients() {
     }
     
     el.innerHTML = `
-        <table>
+        <table class="tbl-act">
             <thead>
                 <tr>
                     <th>Nom</th>
@@ -7913,7 +7935,7 @@ function renderProducts() {
     }
     
     el.innerHTML = `
-        <table>
+        <table class="tbl-act">
             <thead>
                 <tr>
                     <th>Désignation</th>
@@ -10689,7 +10711,7 @@ function renderPayments() {
             </div>`;
     } else {
         listEl.innerHTML = `
-            <table>
+            <table class="tbl-act">
                 <thead>
                     <tr>
                         <th>Facture</th>
@@ -10938,7 +10960,7 @@ function renderReminders() {
     }
     
     listEl.innerHTML = `
-        <table>
+        <table class="tbl-act">
             <thead>
                 <tr>
                     <th>Facture</th>
