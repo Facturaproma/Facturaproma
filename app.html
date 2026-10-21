@@ -9472,13 +9472,15 @@ const License = {
 
     _fromServer(r) {
         let expires = r.expires_at || null;
+        let graceUntil = r.grace_until || null;
         // Licence suspendue ou refusée par le serveur => traitée comme expirée
         if (r.active === false && (!expires || new Date(expires) > this.now())) {
             expires = new Date(this.now().getTime() - 1000).toISOString();
+            graceUntil = null;
         }
         return {
             type: r.type, status: 'active', tier: r.type,
-            startedAt: r.started_at, expiresAt: expires,
+            startedAt: r.started_at, expiresAt: expires, graceUntil: graceUntil,
             promoCodeUsed: null
         };
     },
@@ -9560,10 +9562,26 @@ const License = {
         
         const TIERS_WITH_EXPIRY = ['trial', 'monthly', 'semestrial', 'annual', 'business'];
         if (TIERS_WITH_EXPIRY.includes(info.type) && info.status === 'active') {
-            return new Date(info.expiresAt) < this.now();
+            // Abonnement payant : la période de grâce (serveur) repousse le blocage
+            const limit = info.graceUntil || info.expiresAt;
+            return new Date(limit) < this.now();
         }
         
         return false;
+    },
+
+    // Abonnement payant terminé mais encore dans la période de grâce
+    inGrace() {
+        const info = this.get();
+        if (!info.graceUntil || info.type === 'trial' || info.type === 'lifetime') return false;
+        const now = this.now();
+        return new Date(info.expiresAt) < now && now <= new Date(info.graceUntil);
+    },
+
+    graceDaysLeft() {
+        const info = this.get();
+        if (!info.graceUntil) return 0;
+        return Math.max(0, Math.ceil((new Date(info.graceUntil) - this.now()) / 86400000));
     },
     
     // Check if user has full access
@@ -9641,6 +9659,24 @@ function updateTrialUI() {
         business:   { icon: '👔', name: 'Business',       badge: 'Business' }
     };
     
+    // Abonnement terminé, période de grâce en cours : tout fonctionne, mais il faut renouveler
+    if (License.inGrace()) {
+        const g = License.graceDaysLeft();
+        banner.style.display = 'flex';
+        banner.className = 'trial-banner urgent';
+        document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">⚠️</span> Abonnement expiré — il vous reste <strong>${g}</strong> jour${g > 1 ? 's' : ''} avant le passage en lecture seule`;
+        document.getElementById('trialBannerCountdown').style.display = 'none';
+        banner.querySelector('button').style.display = 'inline-block';
+        banner.querySelector('button').textContent = 'Renouveler →';
+        overlay.classList.remove('active');
+        badge.style.display = 'block';
+        badge.className = 'trial-badge urgent';
+        badge.querySelector('.trial-badge-label').textContent = 'Abonnement expiré';
+        badge.querySelector('.trial-badge-value').innerHTML = `<span>${g}</span> jour${g > 1 ? 's' : ''} de grâce`;
+        badge.querySelector('.trial-badge-cta').textContent = '→ Renouveler maintenant';
+        return;
+    }
+
     // Active paid license
     if (PAID_TIER_TYPES.includes(info.type) && info.status === 'active' && (!License.isExpired() || info.type === 'lifetime')) {
         const tierData = TIER_INFO[info.type] || { icon: '✓', name: info.type, badge: info.type };
@@ -9651,12 +9687,17 @@ function updateTrialUI() {
         } else {
             // Autres tiers payants : banner discret (pour rappel renouvellement)
             banner.style.display = 'flex';
-            banner.className = 'trial-banner licensed';
+            const dl = License.getDaysRemaining();
+            const soon = info.type !== 'lifetime' && dl >= 0 && dl <= 7;
+            banner.className = soon ? (dl <= 1 ? 'trial-banner urgent' : 'trial-banner warning') : 'trial-banner licensed';
             const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '';
             document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierData.icon}</span> ${tierData.name} actif${expDate ? ` · Renouvellement le ${expDate}` : ''}`;
             document.getElementById('trialBannerCountdown').style.display = 'none';
+            if (soon) {
+                document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${dl <= 1 ? '🔴' : '⏰'}</span> ${tierData.name} : fin ${dl <= 0 ? 'aujourd\'hui' : dl === 1 ? 'demain' : 'dans ' + dl + ' jours'} — pensez à renouveler`;
+            }
             const banBtn = banner.querySelector('button');
-            if (banBtn) banBtn.style.display = 'none';
+            if (banBtn) { banBtn.style.display = soon ? 'inline-block' : 'none'; if (soon) banBtn.textContent = 'Renouveler →'; }
         }
         
         // Update sidebar badge
@@ -9677,7 +9718,7 @@ function updateTrialUI() {
     if (License.isExpired()) {
         banner.style.display = 'flex';
         banner.className = 'trial-banner expired';
-        document.getElementById('trialBannerText').innerHTML = '<span class="trial-banner-icon">🔒</span> Période d\'essai terminée';
+        document.getElementById('trialBannerText').innerHTML = License.get().type === 'trial' ? '<span class="trial-banner-icon">🔒</span> Période d\'essai terminée' : '<span class="trial-banner-icon">🔒</span> Abonnement expiré — lecture seule';
         document.getElementById('trialBannerCountdown').style.display = 'none';
         banner.querySelector('button').style.display = 'inline-block';
         banner.querySelector('button').textContent = 'Activer ma licence →';
