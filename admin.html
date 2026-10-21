@@ -2013,6 +2013,7 @@
             <select id="activateType">
                 <option value="monthly">📅 Mensuel (49 DH/mois)</option>
                 <option value="annual">🏆 Annuel (449 DH/an)</option>
+                <option value="founder">🎁 Fondateur (299 DH/an · 20 places)</option>
                 <option value="lifetime">🎁 À vie (offert, hors vente)</option>
             </select>
         </div>
@@ -3513,7 +3514,7 @@ function openActivateModalFor(email) {
 
 async function activateLicense() {
     const email = document.getElementById('activateEmail').value.trim().toLowerCase();
-    const type = document.getElementById('activateType').value;
+    const rawType = document.getElementById('activateType').value;
     const note = document.getElementById('activateNote').value.trim();
     
     if (!email) {
@@ -3521,6 +3522,17 @@ async function activateLicense() {
         return;
     }
     
+    // Offre fondateurs : licence annuelle, 20 codes maximum (même règle que « Générer codes »)
+    let type = rawType, finalNote = note;
+    if (rawType === 'founder') {
+        if (countFounderCodes() >= FOUNDER_LIMIT) {
+            showToast(`Offre fondateurs complète (${FOUNDER_LIMIT}/${FOUNDER_LIMIT})`, 'error');
+            return;
+        }
+        type = 'annual';
+        finalNote = ('FONDATEUR 299 DH/an ' + note).trim();
+    }
+
     const code = generateLicenseCode();
     
     try {
@@ -3530,7 +3542,7 @@ async function activateLicense() {
                 code: code,
                 type: type,
                 client_email: email,
-                note: note,
+                note: finalNote,
                 status: 'pending'
             });
         if (error) throw error;
