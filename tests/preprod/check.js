@@ -65,6 +65,12 @@ const num = (tok, type = 'invoice') => req('POST', '/rest/v1/rpc/next_doc_number
   ck('isolation : B ne voit aucune donnée de A', peek.status === 200 && Array.isArray(peek.body) && peek.body.length === 0, JSON.stringify(peek.body).slice(0, 100));
   const evil = await up(B.tok, A.id, [{ ...inv, totalTTC: 1 }]);
   ck('isolation : B ne peut pas écrire dans le compte de A', evil.status >= 400, String(evil.status));
+  // licence : un compte ne peut pas consulter celle d'un autre (point 6)
+  const licOf = (tok, uid) => req('POST', '/rest/v1/rpc/has_active_license', tok, { p_uid: uid });
+  const ownL = await licOf(A.tok, A.id), othL = await licOf(A.tok, B.id), othL2 = await licOf(B.tok, A.id);
+  ck('has_active_license : A lit sa propre licence', ownL.status === 200 && ownL.body === true, JSON.stringify([ownL.status, ownL.body]));
+  ck('has_active_license : A ne peut pas consulter la licence de B (null)', othL.status === 200 && othL.body === null, JSON.stringify([othL.status, othL.body]));
+  ck('has_active_license : B ne peut pas consulter la licence de A (null)', othL2.status === 200 && othL2.body === null, JSON.stringify([othL2.status, othL2.body]));
   // verrouillage
   const mod = await up(A.tok, A.id, [{ ...inv, totalTTC: 1 }]);
   ck('verrouillage : modification du montant d\'une facture émise refusée', mod.status >= 400 && /FACTURE_VERROUILLEE/.test(JSON.stringify(mod.body)), JSON.stringify(mod.body).slice(0, 160));

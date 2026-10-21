@@ -61,7 +61,10 @@ STABLE
 SECURITY DEFINER
 SET search_path = public, auth
 AS $$
-    SELECT COALESCE(
+    -- Un utilisateur connecté ne peut interroger QUE sa propre licence (un administrateur peut interroger
+    -- toutes les licences ; sans identité de session — éditeur SQL, service_role — l'appel reste libre).
+    -- Toute autre demande renvoie NULL : aucune information sur la licence d'un autre compte.
+    SELECT CASE WHEN auth.uid() IS NULL OR p_uid IS NOT DISTINCT FROM auth.uid() OR public.is_admin() THEN COALESCE(
         (SELECT l.status = 'active'
                 AND (l.expires_at IS NULL OR l.expires_at > NOW())
            FROM public.licenses l
@@ -71,7 +74,7 @@ AS $$
            FROM auth.users u
           WHERE u.id = p_uid),
         FALSE
-    );
+    ) ELSE NULL END;
 $$;
 
 REVOKE ALL ON FUNCTION public.has_active_license(UUID) FROM PUBLIC, anon;
