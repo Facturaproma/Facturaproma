@@ -27,7 +27,7 @@ BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS admin_updated_at ON admins;
 CREATE TRIGGER admin_updated_at

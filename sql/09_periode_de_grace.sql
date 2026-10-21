@@ -14,6 +14,7 @@
 CREATE OR REPLACE FUNCTION public.license_grace_days()
 RETURNS INT
 LANGUAGE sql IMMUTABLE
+SET search_path = public
 AS $$ SELECT 3 $$;
 
 REVOKE ALL ON FUNCTION public.license_grace_days() FROM PUBLIC, anon;
