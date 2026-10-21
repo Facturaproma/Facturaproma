@@ -1,0 +1,5 @@
+Analyse de secrets : 75 source(s) examinée(s), 4 découverte(s).
+  - URL de connexion avec mot de passe : arbre:tests/preprod/scan.test.js:8
+  - URL de connexion avec mot de passe : arbre:tests/preprod/scan.test.js:13
+  - URL de connexion avec mot de passe : historique(toutes les branches):703
+  - URL de connexion avec mot de passe : historique(toutes les branches):708
