@@ -346,6 +346,24 @@
             font-size: 12px;
         }
 
+        /* Boutons d'action des tableaux : bien visibles et faciles à toucher */
+        td .btn-ghost.btn-sm {
+            min-width: 40px; height: 40px; padding: 0 10px;
+            font-size: 19px; line-height: 1;
+            background: var(--surface); border: 1.5px solid var(--border);
+            border-radius: 10px; margin: 2px 3px 2px 0;
+            box-shadow: 0 1px 2px var(--shadow);
+        }
+        td .btn-ghost.btn-sm:hover { background: var(--surface-soft); border-color: var(--ink-mute); }
+        td .btn-ghost.btn-sm[title="Supprimer"] { border-color: rgba(200,74,74,.45); background: rgba(200,74,74,.07); }
+        td .btn-ghost.btn-sm[title="Convertir en facture"],
+        td .btn-ghost.btn-sm[title="Voir la facture"] {
+            font-size: 13px; font-weight: 700; color: #fff !important;
+            background: var(--success); border-color: var(--success);
+        }
+        td .btn-ghost.btn-sm[title="Convertir en facture"]:hover,
+        td .btn-ghost.btn-sm[title="Voir la facture"]:hover { background: #256a4b; }
+
         /* Page sections */
         .page {
             display: none;
