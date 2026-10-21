@@ -1,0 +1,22 @@
+{
+  "_comment": "Ordre officiel d'installation d'un projet NEUF (vérifié par double exécution sur PostgreSQL local). Les scripts listés en « exclus » ne sont JAMAIS exécutés par les outils automatiques.",
+  "ordre": [
+    { "file": "00_setup_complet.sql", "role": "Tables de base (user_data, admin_codes, admin_payments, subscription_requests, admin_settings) + RLS", "reexecutable": true },
+    { "file": "05_admins.sql", "role": "Table admins", "reexecutable": true, "depend": ["00"] },
+    { "file": "06_securite_rls.sql", "role": "Politiques RLS, fonctions d'identité, compte Master (e-mail du propriétaire, sans donnée de production)", "reexecutable": true, "depend": ["00", "05"] },
+    { "file": "07_licence_serveur.sql", "role": "Licences côté serveur, essai automatique, activation de code", "reexecutable": true, "depend": ["06"] },
+    { "file": "08_admin_comptes.sql", "role": "Fonctions d'administration des comptes", "reexecutable": true, "depend": ["07"] },
+    { "file": "09_periode_de_grace.sql", "role": "Période de grâce de la licence", "reexecutable": true, "depend": ["07"] },
+    { "file": "10_anti_abus.sql", "role": "Limites anti-abus (déclencheurs, tentatives de code)", "reexecutable": true, "depend": ["07"] },
+    { "file": "12_admin_supprimer_compte.sql", "role": "Suppression de compte par un administrateur", "reexecutable": true, "depend": ["08"] },
+    { "file": "13_profil_assistant.sql", "role": "Profil assistant (staff), journal admin", "reexecutable": true, "depend": ["12"] },
+    { "file": "14_numerotation_et_verrouillage.sql", "role": "Compteurs serveur, verrouillage des factures émises, journal doc_events", "reexecutable": true, "depend": ["07", "10"] }
+  ],
+  "exclus": [
+    { "file": "01_initial.sql", "raison": "Remplacé par 00 (même contenu, version tout-en-un)" },
+    { "file": "02_admin_tables.sql", "raison": "Remplacé par 00" },
+    { "file": "03_subscriptions.sql", "raison": "Remplacé par 00" },
+    { "file": "04_admin_settings.sql", "raison": "Remplacé par 00" },
+    { "file": "11_nettoyage_comptes_test.sql", "raison": "Suppression de comptes réservée à la PRODUCTION, en deux temps, à la main. Jamais automatisée." }
+  ]
+}

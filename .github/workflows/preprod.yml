@@ -1,0 +1,98 @@
+# Installation et vérification AUTOMATIQUES de la PRÉPRODUCTION Supabase (jamais la production).
+# Déclenchement : modification de ops/preprod-run.json sur la branche dev/fondations (ou lancement manuel).
+# Secret requis, stocké UNIQUEMENT dans l'environnement GitHub « preprod » : PREPROD_DB_URL (voir docs/PREPRODUCTION_SUPABASE.md).
+# Garde-fous : scripts/preprod-db.js refuse tout projet autre que celui de scripts/preprod-target.json ;
+# la base doit porter le marqueur « préproduction » (ou être totalement vide à la 1re installation).
+name: preprod
+on:
+  push:
+    branches: [dev/fondations]
+    paths: ['ops/preprod-run.json']
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'install | check | install+check | cleanup | status'
+        required: true
+        default: 'status'
+permissions:
+  contents: write   # uniquement pour publier le rapport sur la branche « preprod-reports »
+concurrency:
+  group: preprod
+  cancel-in-progress: false
+jobs:
+  preprod:
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Dépendance (pg uniquement)
+        run: npm install --no-save --ignore-scripts pg@8
+      - name: Action demandée et secret présent
+        id: cfg
+        env:
+          DB: ${{ secrets.PREPROD_DB_URL }}
+          INPUT_ACTION: ${{ github.event.inputs.action }}
+        run: |
+          if [ -z "$DB" ]; then echo "::error::Secret PREPROD_DB_URL absent de l'environnement GitHub « preprod »."; exit 1; fi
+          A="${INPUT_ACTION:-$(node -p "require('./ops/preprod-run.json').action")}"
+          case "$A" in install|check|install+check|cleanup|status) ;; *) echo "::error::action inconnue"; exit 1;; esac
+          echo "action=$A" >> "$GITHUB_OUTPUT"
+          mkdir -p reports; printf '# Rapport préproduction — run %s — action %s — commit %s\n' "$GITHUB_RUN_ID" "$A" "$GITHUB_SHA" > reports/run.md
+      - name: Vérifier la cible (aucune connexion si ce n'est pas la préproduction)
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+        run: node -e "const p=require('./scripts/preprod-db').parseDbUrl(process.env.PREPROD_DB_URL); console.log('Cible autorisée :', p.ref, p.host)"
+      - name: Installer les scripts SQL
+        if: contains(steps.cfg.outputs.action, 'install')
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/run.md
+        run: node scripts/preprod-apply.js install
+      - name: Contrôles de sécurité (lecture seule)
+        if: contains(steps.cfg.outputs.action, 'install') || steps.cfg.outputs.action == 'status'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/run.md
+        run: |
+          set +e
+          node scripts/preprod-apply.js postcheck; RC=$?
+          node scripts/preprod-apply.js status
+          exit $RC
+      - name: Créer les comptes de test fictifs et lancer check.js
+        if: contains(steps.cfg.outputs.action, 'check')
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/run.md
+        run: |
+          set -o pipefail
+          PA="$(openssl rand -hex 16)Aa1!"; PB="$(openssl rand -hex 16)Bb2!"
+          echo "::add-mask::$PA"; echo "::add-mask::$PB"
+          export TEST_A_PASSWORD="$PA" TEST_B_PASSWORD="$PB"
+          node scripts/preprod-apply.js seed
+          export TEST_A_EMAIL=preprod-a@facturapro-test.invalid TEST_B_EMAIL=preprod-b@facturapro-test.invalid
+          export PREPROD_URL="https://$(node -p "require('./scripts/preprod-target.json').preprodRef").supabase.co"
+          export PREPROD_ANON_KEY="$(node -p "require('./scripts/preprod-target.json').anonKey")"
+          node tests/preprod/check.js 2>&1 | tee reports/check.txt
+          { echo; echo '### check.js'; echo; echo '```'; cat reports/check.txt; echo '```'; } >> reports/run.md
+      - name: Nettoyer les comptes de test
+        if: always() && (contains(steps.cfg.outputs.action, 'check') || steps.cfg.outputs.action == 'cleanup')
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/run.md
+        run: node scripts/preprod-apply.js cleanup
+      - name: Publier le rapport (branche preprod-reports, jamais main)
+        if: always()
+        run: |
+          [ -f reports/run.md ] || exit 0
+          mkdir -p /tmp/rep && cp reports/run.md "/tmp/rep/run-${GITHUB_RUN_ID}.md"
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin preprod-reports >/dev/null 2>&1; then
+            git fetch origin preprod-reports && git checkout -f -B preprod-reports origin/preprod-reports
+          else
+            git checkout --orphan preprod-reports && git rm -rf . >/dev/null 2>&1 || true
+          fi
+          mkdir -p reports && cp /tmp/rep/* reports/ && git add reports && git commit -m "Rapport préproduction run ${GITHUB_RUN_ID}" && git push origin preprod-reports

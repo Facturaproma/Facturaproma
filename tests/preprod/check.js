@@ -3,6 +3,12 @@
 // Variables d'environnement requises (jamais à communiquer dans un chat) :
 //   PREPROD_URL, PREPROD_ANON_KEY, TEST_A_EMAIL, TEST_A_PASSWORD, TEST_B_EMAIL, TEST_B_PASSWORD
 // Prérequis : deux comptes de TEST déjà créés et confirmés dans la préproduction (essai actif).
+// EFFETS DE BORD (tous limités aux 2 comptes de TEST « …@facturapro-test.invalid », vérifié au démarrage) :
+//   - consomme ~25 numéros de facture du compte A et 1 du compte B (compteurs de test) ;
+//   - écrit 1 facture émise fictive (verrouillée) dans user_data du compte A + lignes du journal doc_events ;
+//   - tentatives d'écriture/suppression qui DOIVENT être refusées (si l'une réussissait, elle ne toucherait que ces comptes de test) ;
+//   - aucune suppression de compte, aucune lecture/écriture d'un autre utilisateur ; aucun appel d'administration réussi attendu.
+// Nettoyage : `node scripts/preprod-apply.js cleanup` (supprime uniquement ces 2 comptes et leurs données en cascade).
 // Les factures de test émises sont verrouillées : supprimez ensuite les comptes de test (Dashboard > Authentication > Users ;
 // la suppression du compte efface ses données). REFUSE de s'exécuter contre la production.
 const need = ['PREPROD_URL', 'PREPROD_ANON_KEY', 'TEST_A_EMAIL', 'TEST_A_PASSWORD', 'TEST_B_EMAIL', 'TEST_B_PASSWORD'];
@@ -10,17 +16,23 @@ const miss = need.filter(k => !process.env[k]); if (miss.length) { console.error
 const { guard } = require('../../scripts/preprod-guard');
 const G = guard(process.env.PREPROD_URL, process.env.PREPROD_ANON_KEY);
 const URL_ = G.url, ANON = G.key;
+const TEST_DOMAIN = '@facturapro-test.invalid';
+for (const k of ['TEST_A_EMAIL', 'TEST_B_EMAIL']) if (!process.env[k].toLowerCase().endsWith(TEST_DOMAIN)) { console.error(`REFUS : ${k} doit se terminer par ${TEST_DOMAIN} (comptes de test uniquement).`); process.exit(1); }
+if (process.env.TEST_A_EMAIL === process.env.TEST_B_EMAIL) { console.error('REFUS : les comptes A et B doivent être différents.'); process.exit(1); }
 const res = []; const ck = (n, ok, x = '') => { res.push(ok); console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok || !x ? '' : '  -> ' + x)); };
 const H = (tok) => ({ apikey: ANON, 'content-type': 'application/json', authorization: 'Bearer ' + (tok || ANON) });
 async function req(method, p, tok, body, extra = {}) {
   const r = await fetch(URL_ + p, { method, headers: { ...H(tok), ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
   let j = null; const t = await r.text(); try { j = JSON.parse(t); } catch { j = t; } return { status: r.status, body: j };
 }
-const login = async (e, p) => { const r = await req('POST', '/auth/v1/token?grant_type=password', null, { email: e, password: p }); return r.status === 200 ? { tok: r.body.access_token, id: r.body.user.id } : null; };
+const login = async (e, p) => { const r = await req('POST', '/auth/v1/token?grant_type=password', null, { email: e, password: p }); return (r.status === 200 && r.body.user.email.toLowerCase().endsWith(TEST_DOMAIN)) ? { tok: r.body.access_token, id: r.body.user.id } : null; };
 const num = (tok, type = 'invoice') => req('POST', '/rest/v1/rpc/next_doc_number', tok, { p_type: type, p_floor: 0 });
 (async () => {
   const A = await login(process.env.TEST_A_EMAIL, process.env.TEST_A_PASSWORD), B = await login(process.env.TEST_B_EMAIL, process.env.TEST_B_PASSWORD);
   ck('connexion réelle des comptes A et B (Supabase Auth)', !!A && !!B); if (!A || !B) process.exit(1);
+  // comme l'application à la connexion : crée l'essai (my_license) côté serveur
+  const la = await req('POST', '/rest/v1/rpc/my_license', A.tok, {}), lb = await req('POST', '/rest/v1/rpc/my_license', B.tok, {});
+  ck('my_license() crée l\'essai des deux comptes de test', la.status === 200 && lb.status === 200 && la.body && la.body.ok === true && lb.body && lb.body.ok === true, JSON.stringify([la.status, la.body]).slice(0, 160));
   const bad = await req('POST', '/auth/v1/token?grant_type=password', null, { email: process.env.TEST_A_EMAIL, password: 'mauvais-mot-de-passe-xyz' });
   ck('mauvais mot de passe refusé', bad.status >= 400 && bad.status < 500, String(bad.status));
   const anon = await req('POST', '/rest/v1/rpc/next_doc_number', null, { p_type: 'invoice', p_floor: 0 });

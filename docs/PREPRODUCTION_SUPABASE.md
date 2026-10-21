@@ -15,7 +15,25 @@
 5. *Authentication → Attack protection / Captcha* : en préproduction, désactivez hCaptcha **ou** utilisez les clés de test publiques documentées par hCaptcha (à vérifier dans la documentation hCaptcha). Le captcha réel se teste ensuite une fois, à la main, en production… après votre accord.
 6. *Authentication → SMTP* : laissez le SMTP intégré de Supabase pour la préproduction (limité, suffisant pour quelques comptes de test).
 
-## B. Installer le schéma (SQL Editor, une requête NEUVE par script, dans cet ordre)
+
+## Voie automatisée (recommandée) : GitHub Actions, sans copier-coller de SQL
+
+Le sandbox de développement n'a **pas** d'accès réseau à `*.supabase.co` (refus 403 de la politique de sortie) ; l'outil Supabase connecté à l'assistant refuse les écritures. La seule voie automatisée et reproductible est donc le workflow `.github/workflows/preprod.yml`, qui tourne sur les serveurs GitHub.
+
+**Une seule fois, de votre côté (≈ 5 min) — aucune valeur à publier dans le chat :**
+1. Supabase → projet **facturapro-preprod** → *Project Settings → Database → Reset database password* : choisissez un mot de passe long (gestionnaire de mots de passe).
+2. Même page → *Connection string* (ou bouton *Connect*) → onglet **Session pooler** → copiez l'URI et remplacez `[YOUR-PASSWORD]` par votre mot de passe. Elle ressemble à `postgresql://postgres.njjaomichdlnoscrnxlz:…@aws-0-…pooler.supabase.com:5432/postgres`.
+3. GitHub → dépôt → *Settings → Environments → New environment* `preprod` → *Deployment branches* : « Selected branches » = `dev/fondations` → *Add secret* : nom `PREPROD_DB_URL`, valeur = l'URI de l'étape 2.
+
+Ensuite tout se pilote en poussant `ops/preprod-run.json` (champ `action` : `install`, `check`, `install+check`, `cleanup`, `status`). Le rapport est publié sur la branche `preprod-reports` (jamais `main`). Les scripts refusent tout projet autre que celui de `scripts/preprod-target.json`, et toute base qui n'est ni vide ni marquée « préproduction ».
+
+Commandes équivalentes en local (si vous préférez, avec `PREPROD_DB_URL` dans votre terminal) : `node scripts/preprod-apply.js install|postcheck|seed|cleanup|status`.
+
+## Ordre réel des scripts SQL et réexécutabilité
+
+Voir `sql/MANIFEST.json` : ordre 00 → 05 → 06 → 07 → 08 → 09 → 10 → 12 → 13 → 14 ; 01 à 04 sont remplacés par 00 ; 11 (nettoyage de comptes) est **exclu** et jamais automatisé. Les 10 scripts ont été exécutés deux fois de suite sur une base locale vierge sans erreur (réexécutables). Aucune donnée de production n'est copiée : seul le compte « Master » (votre adresse) est déclaré par `06`, sans mot de passe.
+
+## B. Installer le schéma (méthode manuelle de secours) (SQL Editor, une requête NEUVE par script, dans cet ordre)
 
 `sql/00_setup_complet.sql` → `05_admins.sql` → `06_securite_rls.sql` → `07_licence_serveur.sql` → `08_admin_comptes.sql` → `09_periode_de_grace.sql` → `10_anti_abus.sql` → `12_admin_supprimer_compte.sql` → `13_profil_assistant.sql` → `14_numerotation_et_verrouillage.sql`.
 
