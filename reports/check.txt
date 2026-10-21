@@ -1,0 +1,23 @@
+PASS connexion réelle des comptes A et B (Supabase Auth)
+PASS my_license() crée l'essai des deux comptes de test
+PASS mauvais mot de passe refusé
+PASS numérotation refusée sans connexion (rôle anon)
+PASS lecture de user_data sans connexion : aucune ligne
+PASS SQL 14 appliqué : next_doc_number répond (200)
+PASS deux appels consécutifs = numéros consécutifs
+PASS 20 émissions simultanées : 20 numéros distincts
+PASS compteur du compte B indépendant de celui de A
+PASS écriture directe dans doc_counters refusée
+PASS écriture directe dans doc_events (journal) refusée
+PASS A peut enregistrer une facture émise avec un numéro attribué par le serveur
+PASS isolation : B ne voit aucune donnée de A
+PASS isolation : B ne peut pas écrire dans le compte de A
+PASS verrouillage : modification du montant d'une facture émise refusée
+PASS verrouillage : suppression d'une facture émise refusée
+PASS verrouillage : effacement de la ligne des factures refusé
+PASS numéro inventé (non attribué par le serveur) refusé
+PASS la facture émise est intacte après les tentatives
+PASS journal serveur : l'émission est tracée
+PASS compte non administrateur : admin_list_accounts refusé
+
+21/21 vérifications de préproduction réussies
