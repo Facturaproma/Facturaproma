@@ -447,8 +447,26 @@ async function cleanup() {
   const winEnd = scope && scope.created_between ? scope.created_between[1] : null, winRuns = scope && scope.runs_until ? scope.runs_until : winEnd;
   const firstCreated = idRows.reduce((m, r) => (!m || new Date(r.created_at) < m ? new Date(r.created_at) : m), null);
   const runsInWin = runsAll.filter((r) => firstCreated && winRuns && new Date(r.started_at) >= firstCreated && new Date(r.started_at) <= new Date(winRuns));
+  // rattachement de chaque ligne _mig_runs : (a) elle cite un compte de la campagne, ou (b) à défaut, un horodatage d'une ligne de mode / testeur / événement d'un compte de la campagne tombe dans la même seconde (preuve temporelle)
+  const repRows = await q('SELECT run_id::text run_id, report::text rep FROM public._mig_runs');
+  const tsRows = await q(`SELECT 'mode' src, u.email, to_jsonb(m)::text j FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT 'testeur', u.email, to_jsonb(t)::text FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT 'evenement', u.email, to_jsonb(e)::text FROM public.doc_events e JOIN auth.users u ON u.id=e.user_id WHERE u.email = ANY($1)`, [EMAILS]);
+  const stamps = []; for (const r of tsRows) for (const m of r.j.matchAll(/"(\d{4}-\d{2}-\d{2}T[0-9:.]+(?:[+-]\d{2}:?\d{2}|Z))"/g)) stamps.push({ src: r.src, who: r.email.split('@')[0], t: new Date(m[1]).getTime() });
+  const attrib = runsAll.map((r) => {
+    const rep = (repRows.find((x) => x.run_id === r.run_id) || {}).rep || '';
+    const cited = us.length ? idRows.filter((u) => rep.includes(u.id.slice(0, 8))).map((u) => u.email.split('@')[0]) : [];
+    const st = new Date(r.started_at).getTime();
+    const near = stamps.filter((x) => Math.abs(x.t - st) <= 1000).sort((a, b) => Math.abs(a.t - st) - Math.abs(b.t - st));
+    const emptyAccounts = /"accounts":\s*\[\s*\]/.test(rep) || cited.length > 0;
+    return { run: r.run_id.slice(0, 8), started: new Date(r.started_at).toISOString(), cited, near: near[0] ? `${near[0].who}/${near[0].src} à ${Math.abs(near[0].t - st)} ms` : null, ok: cited.length > 0 || (!!near[0] && emptyAccounts) };
+  });
+  out('- Rattachement des lignes `_mig_runs` : ' + attrib.map((a) => `${a.run}@${a.started} → ${a.cited.length ? 'cite ' + a.cited.join(',') : a.near ? 'horodatage proche : ' + a.near + ' ; rapport sans compte à migrer' : 'NON ATTRIBUÉE'}`).join(' ; '));
+  const otherUsers = (await q1('SELECT count(*)::int n FROM auth.users WHERE NOT (email = ANY($1))', [EMAILS])).n;
+  out(`- Autres comptes pouvant déclencher une bascule : ${otherUsers} (aucun autre compte dans la base).`);
+  const attribOk = attrib.every((a) => a.ok) && otherUsers === 0;
   out(`- Lignes \`_mig_runs\` : ${runsAll.length} au total, ${runsInWin.length} dans la fenêtre de la campagne (${runsAll.map((r) => r.run_id.slice(0, 8) + '@' + new Date(r.started_at).toISOString()).join(', ') || 'aucune'}).`);
-  rec('C0', `identité : exactement ${EMAILS.length} comptes aux adresses prévues, tous créés pendant le run ${scope && scope.run} (${scope && scope.created_between && scope.created_between.join(' → ')}), et toutes les lignes _mig_runs sont postérieures à leur création et dans la fenêtre`, `${EMAILS.length} comptes, fenêtre respectée, toutes les lignes _mig_runs dans la fenêtre`, `${idRows.length} comptes, fenêtre ${inWin ? 'respectée' : 'NON respectée'}, _mig_runs ${runsInWin.length}/${runsAll.length} dans la fenêtre`, idRows.length === EMAILS.length && !!inWin && runsInWin.length === runsAll.length, { fatal: true, proof: 'adresses exactes, UUID, dates et lignes _mig_runs affichés ci-dessus' });
+  rec('C0', `identité : exactement ${EMAILS.length} comptes aux adresses prévues, tous créés pendant le run ${scope && scope.run} (${scope && scope.created_between && scope.created_between.join(' → ')}), et toutes les lignes _mig_runs sont postérieures à leur création et dans la fenêtre`, `${EMAILS.length} comptes, fenêtre respectée, toutes les lignes _mig_runs dans la fenêtre et attribuées`, `${idRows.length} comptes, fenêtre ${inWin ? 'respectée' : 'NON respectée'}, _mig_runs ${runsInWin.length}/${runsAll.length} dans la fenêtre, attribuées ${attrib.filter((a) => a.ok).length}/${attrib.length}`, idRows.length === EMAILS.length && !!inWin && runsInWin.length === runsAll.length && attribOk, { fatal: true, proof: 'adresses exactes, UUID, dates et lignes _mig_runs affichés ci-dessus' });
   const st = await q(`SELECT u.email, COALESCE((SELECT mode FROM public.doc_store_mode m WHERE m.user_id=u.id),'legacy') mode, (SELECT count(*) FROM public.documents d WHERE d.user_id=u.id)::int docs, (SELECT count(*) FROM public.doc_payments d WHERE d.user_id=u.id)::int pays,
       (SELECT count(*) FROM public.doc_history d WHERE d.user_id=u.id)::int hist, (SELECT count(*) FROM public.user_data d WHERE d.user_id=u.id)::int ud FROM auth.users u WHERE u.id::text = ANY($1) ORDER BY 1`, [uids]);
   out('| Compte | mode | documents | paiements | journal | lignes user_data |\n|---|---|---|---|---|---|\n' + st.map((r) => `| ${r.email.split('@')[0]} | ${r.mode} | ${r.docs} | ${r.pays} | ${r.hist} | ${r.ud} |`).join('\n'));
