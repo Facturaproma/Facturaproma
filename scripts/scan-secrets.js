@@ -14,7 +14,7 @@ const PLACEHOLDER = /^(Zk39dkd02kd.*|motdepasse|…|\.{3}|\[.*\]|<.*>|\*+|x{3,}|
 const exact = [];
 if (process.env.PREPROD_DB_URL) {
   exact.push(['URL de connexion exacte', process.env.PREPROD_DB_URL]);
-  try { const u = new URL(process.env.PREPROD_DB_URL); for (const v of [decodeURIComponent(u.password), u.password]) if (v && v.length >= 8) exact.push(['mot de passe de la base', v]); } catch { /* ignoré */ }
+  try { const u = new URL(process.env.PREPROD_DB_URL); for (const v of [decodeURIComponent(u.password), u.password, encodeURIComponent(decodeURIComponent(u.password))]) if (v && v.length >= 8) exact.push(['mot de passe de la base', v]); } catch { /* ignoré */ }
 }
 function b64json(x) { try { return JSON.parse(Buffer.from(x.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch { return null; } }
 function scanText(name, text) {

@@ -45,7 +45,10 @@ ORDER BY p.proname;
 INSERT INTO auth.users(id, email) VALUES ('dddddddd-0000-0000-0000-000000000004', 'plain@test.invalid');
 INSERT INTO auth.users(id, email) VALUES ('eeeeeeee-0000-0000-0000-000000000005', 'victime@test.invalid');
 INSERT INTO public.licenses(user_id, type, status, expires_at) VALUES ('dddddddd-0000-0000-0000-000000000004','annual','active', now()+interval '100 days');
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+-- comme sur Supabase (droits par défaut), SAUF les tables que les scripts 15/16 restreignent volontairement (leurs REVOKE restent testés)
+DO $$ DECLARE t text; BEGIN FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='public'
+  AND tablename NOT IN ('documents','doc_payments','doc_history','doc_deleted','_mig_runs','_mig_source_backup','_mig_conflicts')
+LOOP EXECUTE format('GRANT ALL ON public.%I TO authenticated', t); END LOOP; END $$;
 CREATE OR REPLACE FUNCTION pg_temp.refuse(sql text) RETURNS boolean LANGUAGE plpgsql AS
 $$ BEGIN EXECUTE sql; RETURN false; EXCEPTION WHEN OTHERS THEN RETURN true; END $$;
 SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub', 'dddddddd-0000-0000-0000-000000000004', false);

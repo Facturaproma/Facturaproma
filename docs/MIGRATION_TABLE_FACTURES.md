@@ -1,4 +1,54 @@
-# Proposition de migration : une ligne par facture (PLAN — rien n'est exécuté)
+# Migration « une ligne par document » — plan révisé après audit (22/10/2026)
+
+> **Statut : scripts PRÉPARÉS et testés EN LOCAL uniquement (base jetable). Rien n'a été exécuté sur Supabase (ni préproduction, ni production) pour cette migration.**
+> Aucune donnée de préproduction n'est migrée avant votre accord sur ce plan. La production, `main` et le déploiement ne sont pas concernés.
+
+## A. Ce que l'audit a trouvé dans le plan initial (§0–§9 plus bas) et comment c'est corrigé
+
+| Constat dans le code / le plan | Correction apportée |
+|---|---|
+| Le plan ne couvrait que la clé `invoices`. Or les **devis** sont dans la clé `quotes`, les **paiements** dans `payments`, le **journal client** dans `docLog` (tronqué à 2000 entrées). | Les 4 clés sont migrées : `documents` (factures, avoirs, devis), `doc_payments`, `doc_history`. `doc_events` (journal serveur) n'est pas touché. |
+| Les ids pouvaient se recouper entre factures et devis (clé primaire `(user_id, id)`). | Clé primaire `(user_id, doc_type, id)`. |
+| Colonnes `numeric(14,2)` : un montant historique à 3 décimales aurait été **arrondi en silence**. | `numeric` sans échelle ; le corps JSON d'origine est conservé tel quel (`body`) et comparé par empreinte SHA-256. |
+| Index unique sur tous les numéros émis : les **devis** peuvent avoir des numéros en double (repli local si le serveur est injoignable). | Unicité imposée aux factures et avoirs seulement ; les doublons de devis sont détectés au dry-run et **bloquent** (décision humaine). |
+| Le numéro d'une facture historique peut dépasser le compteur serveur (comptes antérieurs à `sql/14`) → le déclencheur de numérotation aurait refusé la copie. | Pendant la copie seulement (identifiant de run secret, illisible pour les utilisateurs), le contrôle d'attribution est suspendu ; l'unicité reste imposée ; le dry-run avertit si un numéro dépasse le compteur. |
+| Rattrapage des écritures faites dans l'ancien format pendant la migration : seulement annoncé. | Implémenté : `legacy_sha` ; rejouer `fp_mig_run` rafraîchit les lignes non modifiées côté nouveau, **note en conflit** (`_mig_conflicts`, version ancienne conservée) les lignes modifiées des deux côtés, sans rien écraser. |
+| Journal `docLog` : le rang dans le tableau change quand il est tronqué. | Identité = empreinte de l'entrée + rang parmi les entrées identiques ; les entrées sorties du tableau tronqué restent conservées. |
+| Suppressions faites par le nouveau chemin ressuscitées par un rattrapage ou un retour arrière. | Table `doc_deleted` (pierres tombales). |
+| Aucune **pièce jointe** n'existe dans l'application (seul le logo, en base64 dans `company`). | Rien à migrer ; le dry-run signale toute pièce jointe / data-URI dans un document ; `company` et `clients` ne sont pas touchés. |
+| Retour arrière annoncé (`migrate_back`) mais non défini, sans garantie sur les écritures récentes. | `fp_mig_rollback` : aperçu par défaut, sauvegarde préalable de l'état courant, fusion sans perte, rejouable. |
+
+Limite connue du retour arrière : un **brouillon supprimé sur un ancien appareil** après la copie réapparaît (le nouveau stockage le contient encore). Aucune facture émise ne peut disparaître (verrouillage serveur).
+
+## B. Ce qui est livré (non exécuté sur Supabase)
+
+- `sql/15_documents.sql` : tables `documents`, `doc_payments`, `doc_history`, `doc_deleted`, tables techniques `_mig_*` ; RLS en lecture seule pour le propriétaire, **aucune écriture directe** ; déclencheur de verrouillage et de numéro serveur (mêmes règles que `sql/14`) ; fonctions `upsert_document` (version attendue + identifiant d'opération rejouable), `delete_document`, `record_payment` (atomique et rejouable).
+- `sql/16_migration_donnees.sql` : `fp_mig_dry_run`, `fp_mig_run(compte, appliquer)`, `fp_mig_verify`, `fp_mig_rollback(compte, appliquer)`. Aucune n'est exécutable par `anon` ni `authenticated`.
+- Ces deux scripts sont dans `sql/MANIFEST.json` sous la clé `migration_table_par_facture` et **pas** dans `ordre` : l'installateur de préproduction ne les applique pas.
+- Contrôles bloquants du dry-run : valeur non-tableau, élément non-objet, document ou paiement sans id, id en double, facture/avoir émis sans numéro valide, numéro émis en double (factures, avoirs, devis). Avertissements : paiement orphelin, règlement incohérent, montant/date illisible, pièce jointe, avoir sans facture d'origine, numéro au-delà du compteur, document supprimé depuis.
+- Contrôles de la copie (dans une sous-transaction : au moindre écart **toute la copie est annulée**) : présence de chaque élément, empreinte identique élément par élément, colonnes dérivées, sommes HT/TVA/TTC et comptes par compte et par type, paiements (nombre et somme), journal (chaque entrée présente et identique), absence de doublon.
+- L'application (`app.html`) **n'est pas modifiée** : elle écrit toujours dans `user_data`. Brancher l'application sur `upsert_document` (phase A du §4) est une étape ultérieure qui demandera votre accord.
+
+## C. Tests (tous en LOCAL, base PostgreSQL jetable ; imitation d'auth Supabase : SIMULATION)
+
+| Test | Fichier | Résultat |
+|---|---|---|
+| Dry-run, bloquants, arrêt avant copie, arrêt sur écart pendant la copie (sabotage volontaire, copie annulée), migration, idempotence, rattrapage, conflit des deux côtés, non-modification de l'ancien stockage, retour arrière (aperçu, application, rejeu, aller-retour), RLS, droits, verrouillage, numéros, licence, paiements, cascade de suppression | `tests/sql/test_migration.sql` | 79 tests |
+| 10 appareils sur le même document ; créations simultanées du même id ; 20 émissions simultanées ; deux appareils sur des documents différents (+ témoin de l'ancien tableau qui perd une écriture) ; coupure avant validation ; réponse perdue après validation ; émission et paiements rejoués ; migration de 200 documents pendant 20 écritures | `tests/integration/migration.test.js` | 18 tests |
+
+Exécutés par `npm run test:all` ; le total des tests SQL du dépôt est passé de 74 à 153.
+
+## D. Prochaines étapes (chacune demande votre accord écrit)
+
+1. Répétition sur la préproduction **avec des comptes de test jetables uniquement** : installer `15` et `16`, créer des données fictives, `fp_mig_run(…, true)`, vérification, retour arrière, restauration de la sauvegarde. La préproduction ne contient aujourd'hui aucun compte hors tests.
+2. Adaptation de l'application (double écriture puis lecture depuis `documents`), testée en préproduction.
+3. **Production** : uniquement avec une autorisation distincte, une sauvegarde de production dont la restauration a été testée, et un dry-run relu ligne par ligne.
+
+---
+
+# Plan initial (conservé pour référence — voir la section A pour les corrections)
+
+## Proposition initiale de migration : une ligne par facture
 
 > **Statut : proposition soumise à validation.** Aucun script de ce document n'a été exécuté, ni sur la base de production ni ailleurs. Aucune migration ne sera lancée sans accord écrit explicite.
 
