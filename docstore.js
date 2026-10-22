@@ -108,10 +108,12 @@
       for (const e of state.docLog || []) { const c = canon(e); S.logCount.set(c, (S.logCount.get(c) || 0) + 1); }
     }
 
-    async function fetchAll(table, cols, orderCol) {
+    async function fetchAll(table, cols, orderCols) {   // tri TOTAL (clé primaire en départage) : sans cela, deux lignes de même created_at peuvent changer de page d'une requête à l'autre (doublon ou manque)
       const out = []; const PAGE = 1000;
       for (let from = 0; ; from += PAGE) {
-        const r = await client.from(table).select(cols).eq('user_id', userId).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
+        let rq = client.from(table).select(cols).eq('user_id', userId);
+        for (const oc of [].concat(orderCols)) rq = rq.order(oc, { ascending: true });
+        const r = await rq.range(from, from + PAGE - 1);
         if (r.error) { const e = new Error(r.error.message || 'lecture impossible'); e.code = r.error.code; e.status = r.status; e.cause = r.error; throw e; }
         out.push(...(r.data || []));
         if ((r.data || []).length < PAGE) break;
@@ -154,8 +156,8 @@
       // ----- chargement depuis le serveur (en mode documents uniquement) -----
       async load(dry) {   // dry : lit sans toucher à l'instantané ni aux versions (retourne { state, versions }) ; l'appelant décide de les appliquer
         if (S.mode !== 'documents') throw new Error('load() hors mode documents');
-        const docs = await fetchAll('documents', 'doc_type,id,version,body,created_at', 'created_at');
-        const pays = await fetchAll('doc_payments', 'id,body,created_at', 'created_at');
+        const docs = await fetchAll('documents', 'doc_type,id,version,body,created_at', ['created_at', 'doc_type', 'id']);
+        const pays = await fetchAll('doc_payments', 'id,body,created_at', ['created_at', 'id']);
         const hist = await fetchAll('doc_history', 'seq,ts,body', 'seq');
         const state = { invoices: [], quotes: [], payments: pays.map((p) => p.body), docLog: hist.slice().sort((a, b) => tms(a.ts) - tms(b.ts) || (a.seq || 0) - (b.seq || 0)).map((h) => h.body) };
         const versions = {};

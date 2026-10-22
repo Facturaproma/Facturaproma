@@ -40,8 +40,13 @@ exports.run = async function run(h) {
     const { p } = dv;
     await p.goto(BASE + '/app.html?mode=login'); await p.waitForTimeout(1500);
     await p.fill('#loginEmail', EMAIL(k)); await p.fill('#loginPassword', pw(k)); await p.click('#loginBtn');
-    await until(async () => (await p.isVisible('#mainApp')) || (await p.isVisible('#onbCompanyName')) || (await p.evaluate(() => !!document.querySelector('[onclick*="selectStatus"]'))), 30000);
-    await p.waitForTimeout(1500);
+    // attend un écran réellement VISIBLE (application ou 1re étape d'intégration) ; sinon échoue avec le texte visible (message d'erreur d'authentification éventuel), sans aucun secret
+    const shown = await until(async () => (await p.isVisible('#mainApp')) || (await p.isVisible('#onbStep1')), 45000);
+    if (!shown) {
+      const seen = await p.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 300));
+      throw new Error('connexion par l\'interface : ni application ni intégration visibles après 45 s ; texte visible : « ' + seen + ' »');
+    }
+    await p.waitForTimeout(800);
     if (!(await p.isVisible('#mainApp'))) {
       await p.evaluate(() => selectStatus(document.querySelector('[onclick*="selectStatus"]').getAttribute('onclick').match(/'(.*?)'/)[1]));
       await p.evaluate(() => onboardingNext(1));

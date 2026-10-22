@@ -17,7 +17,7 @@ function fakeClient(script = {}) {
       const s = script[fn]; const r = typeof s === 'function' ? s(args, calls.length) : s;
       return r || { data: { ok: true, version: 1 }, error: null };
     },
-    from(table) { const st = { table, filters: {} }; const b = { select() { return b; }, eq() { return b; }, order() { return b; }, range() { return b; },
+    from(table) { const st = { table, filters: {} }; const b = { select() { return b; }, eq() { return b; }, order(c) { (script.__orders = script.__orders || []).push(table + ':' + c); return b; }, range() { return b; },
       then(res, rej) { return Promise.resolve((script.__tables || {})[table] || { data: [], error: null }).then(res, rej); } }; return b; }
   };
 }
@@ -193,6 +193,14 @@ const mk = (over = {}) => {
     ck('R5 relecture concurrente à une modification : état rechargé NON appliqué (pas d\'écrasement), brouillon envoyé une seule fois', out === null && reloaded === null && t.client.calls.filter((c) => c.fn === 'upsert_document' && c.args.p_doc.id === 'pendant').length === 1, 'out=' + (out && 'état') + ' reloaded=' + !!reloaded);
     t.st.commit('invoices', mine); await flushAll(t.st);
     ck('R5  … l\'instantané reste cohérent : une réécriture identique n\'envoie rien de plus', t.client.calls.filter((c) => c.fn === 'upsert_document' && c.args.p_doc.id === 'pendant').length === 1); }
+
+  { // D13 : tri total de la lecture paginée (la clé primaire départage les created_at identiques)
+    const script = { get_doc_mode: { data: 'documents', error: null }, __tables: {} };
+    const t = mk({ client: fakeClient(script) }); await t.st.start();
+    const o = (script.__orders || []).join(' ');
+    ck('D13 lecture paginée : documents triés par created_at, doc_type, id (tri total, pas de doublon ni de manque entre pages)', /documents:created_at documents:doc_type documents:id/.test(o), o);
+    ck('D13  … paiements triés par created_at, id ; journal par seq', /doc_payments:created_at doc_payments:id/.test(o) && /doc_history:seq/.test(o), o);
+  }
 
   const bad = res.filter((x) => !x).length;
   console.log(`\n${res.length - bad}/${res.length} tests de docstore.js réussis (SIMULATION locale : faux client, aucun Supabase)`);
