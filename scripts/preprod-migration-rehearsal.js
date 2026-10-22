@@ -291,6 +291,8 @@ async function rehearse() {
   const us = Object.fromEntries((await uidsOf(c)).map((r) => [r.email.replace(DOMAIN, '').replace('mig-', ''), r.id]));
   if (Object.keys(us).length !== 5) throw new Error('REFUS : les 5 comptes de test sont absents.');
   if (!(await q1("SELECT to_regclass('public.documents') t")).t) throw new Error('REFUS : sql/15 non installé.');
+  // sql/17 refuse, par conception, les écritures du nouveau stockage pour un compte « legacy » : cette répétition (qui écrit via upsert_document sur des comptes legacy) n'est valable QUE avant sql/17.
+  if ((await q1("SELECT to_regclass('public.doc_store_mode') t")).t) throw new Error('REFUS : sql/17 est installé ; cette répétition suppose des comptes en mode legacy qui écrivent dans le nouveau stockage. Utiliser la répétition « mode » (bascule contrôlée).');
   await createAccounts(c);                                   // nouveaux mots de passe aléatoires pour cette session
   await checkForeign(c, 'avant la répétition');
   // Réentrance : si une exécution précédente s'est arrêtée en cours de route, on remet à zéro le NOUVEAU stockage des seuls comptes de test,

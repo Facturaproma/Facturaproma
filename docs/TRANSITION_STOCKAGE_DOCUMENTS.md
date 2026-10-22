@@ -1,6 +1,7 @@
 # Transition progressive vers le stockage « une ligne par document » — architecture proposée
 
-**Statut : PROPOSITION à valider. `app.html` n'est pas modifié. `sql/17_mode_stockage.sql` est un brouillon non appliqué, absent de `sql/MANIFEST.json` (donc de l'installateur).**
+**Statut : PROPOSITION à valider — voir aussi `docs/REVUE_SQL17.md` (revue : version 2 du script, défauts corrigés).**
+**(historique) Statut initial : PROPOSITION à valider. `app.html` n'est pas modifié. `sql/17_mode_stockage.sql` est un brouillon non appliqué, absent de `sql/MANIFEST.json` (donc de l'installateur).**
 Périmètre : PRÉPRODUCTION et comptes de TEST uniquement. Aucune migration automatique, aucune bascule générale, ancien stockage conservé.
 
 ## 1. Principe : un mode par compte, décidé par le serveur, une seule source d'écriture
