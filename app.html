@@ -5340,35 +5340,13 @@ const SyncManager = {
                         this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id);
                         continue;
                     }
-                    const value = Storage.get(change.key);
                     if (!supaClient || !Storage._currentUserId) { failed.push(change); continue; }   // pas de client/session : rien n'est envoyé, rien n'est déclaré synchronisé (avant : `window._supabaseClient`, jamais défini)
-                    {
-                        const { error: upErr } = await supaClient
-                            .from('user_data')
-                            .upsert({
-                                user_id: Storage._currentUserId,
-                                key: change.key,
-                                value: value,
-                                updated_at: new Date().toISOString()
-                            }, { onConflict: 'user_id,key' });
-                        if (upErr) {
-                            // l'erreur n'est plus masquée : refus de mode / licence / verrouillage = retirés avec message ; réseau = conservé en file
-                            if (DocStoreGlue.handleLegacyRefusal(upErr, change.key, value)) { continue; }
-                            if (upErr.code === '42501' || /row-level security/i.test(upErr.message || '')) {
-                                // licence : refus du serveur => l'écriture RESTE en attente (jamais marquée synchronisée) ; relancée à la prochaine reprise, sans boucle
-                                try { License.refresh(); } catch {} console.warn('[Sync] écriture refusée (licence), conservée en attente :', change.key);
-                                failed.push(change); continue;
-                            }
-                            else if (/FACTURE_VERROUILLEE|NUMERO_EN_DOUBLE|NUMERO_NON_ATTRIBUE/.test(upErr.message || '')) {
-                                console.warn('[Sync] écriture refusée (facture émise verrouillée) :', change.key);
-                                DocStoreGlue.archiveRefused(change.key, value, 'FACTURE_VERROUILLEE');
-                                try { showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error'); } catch {}
-                                this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id);
-                                try { await Storage.loadFromCloud(); renderInvoices(); } catch {}
-                                continue;
-                            } else { throw upErr; }
-                        }
-                    }
+                    // UNE seule logique d'envoi (celle de l'écriture directe : fusion des factures, refus de mode, licence). Résultat : 'ok' | 'kept' (reste en attente) | 'dropped' (refus explicite, copie de récupération)
+                    const sent = JSON.stringify(Storage.get(change.key));
+                    const res = await Storage._syncToCloud(change.key, Storage.get(change.key));
+                    if (res === 'kept') { failed.push(change); continue; }                       // refus (licence), réseau, session : l'écriture RESTE en attente, jamais marquée synchronisée
+                    if (res === 'dropped') { this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id); continue; }   // refus explicite déjà signalé
+                    if (JSON.stringify(Storage.get(change.key)) !== sent) { failed.push(change); continue; }   // modifié pendant l'envoi : l'entrée reste (la valeur la plus récente sera renvoyée)
                 }
                 synced++;
                 // Retirer de la queue
@@ -6185,7 +6163,7 @@ const Storage = {
         // Si offline, ajouter à la queue
         if (typeof SyncManager !== 'undefined' && !SyncManager.isOnline) {
             SyncManager.addPendingChange({ type: 'storage', key });
-            return;
+            return 'kept';
         }
         
         try {
@@ -6198,13 +6176,13 @@ const Storage = {
             
             if (error) {
                 // MODE_NOUVEAU_STOCKAGE (SQLSTATE 42501 aussi !) : le compte est passé au nouveau stockage — ce n'est PAS une licence expirée, et on ne réessaie pas
-                if (DocStoreGlue.handleLegacyRefusal(error, key, value)) return;
+                if (DocStoreGlue.handleLegacyRefusal(error, key, value)) return 'dropped';
                 // 42501 = refus RLS : licence expirée côté serveur
                 if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
                     console.warn('Écriture refusée par le serveur (licence) : conservée en attente.');
                     License.refresh();
                     if (typeof SyncManager !== 'undefined') SyncManager.addPendingChange({ type: 'storage', key });   // jamais perdue ni déclarée synchronisée
-                    return;
+                    return 'kept';
                 }
                 if (/FACTURE_VERROUILLEE|NUMERO_EN_DOUBLE|NUMERO_NON_ATTRIBUE/.test(error.message || '')) {
                     if (key === 'invoices' && !retried && /FACTURE_VERROUILLEE/.test(error.message || '')) {
@@ -6212,17 +6190,18 @@ const Storage = {
                         if (merged) {
                             this._cache['invoices'] = merged;
                             try { localStorage.setItem(this._buildLocalKey('invoices', this._currentUserId), JSON.stringify(merged)); } catch {}
-                            await this._syncToCloud(key, merged, true);
+                            const r2 = await this._syncToCloud(key, merged, true);
                             try { renderInvoices(); } catch {}
-                            return;
+                            return r2;
                         }
                     }
                     // Le serveur protège les factures émises : on recharge la version serveur
                     console.warn('Écriture refusée (facture émise verrouillée).');
+                    DocStoreGlue.archiveRefused(key, value, 'FACTURE_VERROUILLEE');
                     if (typeof showToast === 'function') showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error');
                     await this.loadFromCloud();
                     try { renderInvoices(); } catch {}
-                    return;
+                    return 'dropped';
                 }
                 throw error;
             }
@@ -6232,12 +6211,14 @@ const Storage = {
                 SyncManager.lastSyncTime = Date.now();
                 SyncManager.updateUI();
             }
+            return 'ok';
         } catch (err) {
             console.warn('Cloud sync failed:', err);
             // Si erreur réseau, ajouter à la queue pour retry plus tard
             if (typeof SyncManager !== 'undefined') {
                 SyncManager.addPendingChange({ type: 'storage', key });
             }
+            return 'kept';
         }
     },
     

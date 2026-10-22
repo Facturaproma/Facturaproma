@@ -305,7 +305,19 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
     await O.E(() => { Storage.set('company', { ...Storage.get('company', {}), name: 'A' }); Storage.set('company', { ...Storage.get('company', {}), name: 'B' }); });
     forcedErr = { message: 'TypeError: Failed to fetch' }; await O.E(() => { Storage.set('company', { ...Storage.get('company', {}), name: 'C' }); Storage.set('company', { ...Storage.get('company', {}), name: 'D' }); }); await O.p.waitForTimeout(500);
     check('REVUE plusieurs écritures hors ligne sur la même clé : une seule entrée en attente (valeur courante rejouée)', (await pend()).filter(k => k === 'company').length === 1, (await pend()).join());
-    forcedErr = null; be.handle = origHandle;
+    forcedErr = null; await O.E(() => { SyncManager.pendingChanges = []; });
+    // course : nouvelle écriture PENDANT le rejeu de la file, et son envoi échoue (réseau) → l'entrée ne doit pas disparaître
+    { let release = null, nCall = 0;
+      be.handle = async (op, a) => { if (op === 'table' && a.table === 'user_data' && a.op === 'upsert') { nCall++; if (nCall === 1) { await new Promise(r => { release = r; }); return origHandle(op, a); } return { data: null, error: { message: 'TypeError: Failed to fetch' } }; } return origHandle(op, a); };
+      await O.E(() => { SyncManager.isSyncing = false; SyncManager.pendingChanges = [{ type: 'storage', key: 'company', id: 'rv3', timestamp: 1 }]; window.__sp = SyncManager.syncPending(); });
+      await O.p.waitForTimeout(300);
+      await O.E(() => { Storage.set('company', { ...Storage.get('company', {}), name: 'Écrite pendant le rejeu' }); }); await O.p.waitForTimeout(400);
+      release(); await O.E(() => window.__sp); await O.p.waitForTimeout(200);
+      check('REVUE écriture faite pendant le rejeu de la file puis échec réseau : l\'entrée reste en attente (pas de perte)', (await pend()).includes('company'), 'file=' + (await pend()).join() + ' appels=' + nCall);
+      be.handle = origHandle; await O.E(() => { SyncManager.isSyncing = false; SyncManager.isOnline = true; return SyncManager.syncPending(); }); await O.p.waitForTimeout(300);
+      const cur = (await legacyVal(ORD, 'company')).value;
+      check('REVUE  … rejeu suivant : la valeur la plus récente arrive au serveur, file vide', cur && cur.name === 'Écrite pendant le rejeu' && (await pend()).length === 0, JSON.stringify(cur && cur.name) + ' file=' + (await pend()).join()); }
+    be.handle = origHandle;
 
     // indicateur local « documents » alors que le serveur dit legacy
     await flipTo(T, 'legacy');
