@@ -124,7 +124,7 @@ exports.run = async function run(h) {
     const mo = await O.E(() => ({ mode: DocStoreGlue.mode, reason: DocStoreGlue.store && DocStoreGlue.store.status().reason }));
     const askedMode = O.log.filter((x) => x.rel === '/rest/v1/rpc/get_doc_mode').length;
     await setCompany(O, 'B5-ordinaire'); await sleep(2500);
-    rec('B5', 'compte ORDINAIRE sur le build de préproduction : ancien stockage, get_doc_mode jamais appelé, écriture user_data normale', 'legacy / compte_non_test, 0 appel, écriture acceptée', `${jstr(mo)} ; appels get_doc_mode ${askedMode} ; base ${(await company(oUid)).n}`, mo.mode === 'legacy' && mo.reason === 'compte_non_test' && askedMode === 0 && (await company(oUid)).n === 'B5-ordinaire', { fatal: true });
+    rec('B5', 'compte ORDINAIRE sur le build de préproduction : ancien stockage (le serveur répond legacy : compte non listé testeur), écriture user_data normale', 'legacy / serveur, get_doc_mode appelé, écriture acceptée', `${jstr(mo)} ; appels get_doc_mode ${askedMode} ; base ${(await company(oUid)).n}`, mo.mode === 'legacy' && mo.reason === 'serveur' && askedMode >= 1 && (await company(oUid)).n === 'B5-ordinaire', { fatal: true });
 
     // =================================================================== U : NOUVEAU STOCKAGE (compte f, basculé)
     const F = await newDev('F'); await login(F, 'f'); const fUid = await uidOf('f');

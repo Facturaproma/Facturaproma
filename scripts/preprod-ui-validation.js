@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // VALIDATION RÉELLE (Supabase PRÉPRODUCTION uniquement, jamais la production) du commit « intégration du nouveau stockage ».
 //   guardtests : refus de la production (aucune connexion)
-//   test       : comptes jetables ui-*@facturapro-test.invalid (+ 1 compte « ordinaire » ui-o@facturapro-ordinary.invalid, jamais basculé) :
+//   test       : comptes jetables ui-*@facturapro-test.invalid (dont ui-o, compte « ordinaire » : absent de doc_store_testers, jamais basculé) :
 //                  N1…N10 : protocole réel (PostgREST + GoTrue + RPC) avec docstore.js et un vrai client supabase-js
 //                  B1…B5  : navigateur réel (Chromium) sur le build de préproduction, ancien stockage (compte l)
 //                  U1…U4  : navigateur réel, nouveau stockage (compte f)
@@ -16,7 +16,7 @@ const T = require('./preprod-target.json');
 const DRY = process.env.UI_DRYRUN === '1';
 const DOMAIN = '@facturapro-test.invalid';
 const KEYS = ['l', 'd', 'e', 'f', 'g', 'o'];
-const EMAIL = (k) => k === 'o' ? 'ui-o@facturapro-ordinary.invalid' : `ui-${k}${DOMAIN}`;
+const EMAIL = (k) => `ui-${k}${DOMAIN}`;
 const EMAILS = KEYS.map(EMAIL);
 const Y = new Date().getFullYear();
 const NATURE = DRY ? 'SIMULÉ (répétition locale du script)' : 'RÉEL';
@@ -418,7 +418,7 @@ async function test() {
     await checkForeign('avant les tests', 'P3');
   }
   await createAccounts();
-  rec('P4', '6 comptes jetables créés (5 en @facturapro-test.invalid, 1 « ordinaire » @facturapro-ordinary.invalid)', '6', String((await q('SELECT 1 FROM auth.users WHERE email = ANY($1)', [EMAILS])).length), (await q('SELECT 1 FROM auth.users WHERE email = ANY($1)', [EMAILS])).length === 6, { fatal: true });
+  rec('P4', '6 comptes jetables @facturapro-test.invalid créés (dont ui-o, ordinaire, non listé testeur)', '6', String((await q('SELECT 1 FROM auth.users WHERE email = ANY($1)', [EMAILS])).length), (await q('SELECT 1 FROM auth.users WHERE email = ANY($1)', [EMAILS])).length === 6, { fatal: true });
   // licences d'essai (comme à la première connexion), puis bascule des seuls comptes jetables prévus
   for (const k of KEYS) { const S = await signIn(k); const r = await S.c.rpc('my_license'); if (r.error) throw new Error('my_license ' + k + ' : ' + rpcErr(r)); }
   const fl = {};
