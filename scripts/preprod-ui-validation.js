@@ -537,6 +537,15 @@ async function inspect() {
   rec('I4', 'aucune ligne orpheline (sans compte propriétaire)', 'tout à 0', jstr(orph), Object.values(orph).every((v) => v === 0));
   const mr = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
   rec('I5', '_mig_runs vide (aucune migration de données exécutée)', '0', String(mr), mr === 0);
+  out('\n### III bis. Lignes de `_mig_runs` : à qui appartiennent-elles ? (table exclue de l\'empreinte, référence 0)');
+  const first = us.reduce((m, r) => (!m || new Date(r.created_at) < new Date(m) ? r.created_at : m), null);
+  const runsList = await q('SELECT run_id::text run_id, mode, status, started_at, finished_at, report::text rep FROM public._mig_runs ORDER BY started_at');
+  const pref = us.map((r) => ({ p: r.id.slice(0, 8), n: r.email.split('@')[0] }));
+  const runsInfo = runsList.map((r) => ({ ...r, who: pref.filter((x) => r.rep && r.rep.includes(x.p)).map((x) => x.n), after: first && new Date(r.started_at) >= new Date(first) }));
+  out('| run | mode | statut | début (UTC) | fin | comptes de la campagne cités | postérieur à la création des comptes |\n|---|---|---|---|---|---|---|\n' +
+    runsInfo.map((r) => `| ${r.run_id.slice(0, 8)} | ${r.mode} | ${r.status} | ${new Date(r.started_at).toISOString()} | ${r.finished_at ? new Date(r.finished_at).toISOString() : '—'} | ${r.who.join(', ') || '(aucun)'} | ${r.after ? 'oui' : 'NON'} |`).join('\n'));
+  out('\nContenu résumé de chaque rapport (identifiants tronqués) :\n' + runsInfo.map((r) => `- ${r.run_id.slice(0, 8)} : ${clip(r.rep, 380)}`).join('\n'));
+  rec('I7', 'chaque ligne de `_mig_runs` a été créée APRÈS la création des comptes de la campagne et cite au moins un compte de la campagne', 'toutes les lignes attribuées à la campagne', `${runsInfo.filter((r) => r.after && r.who.length).length}/${runsInfo.length} lignes attribuées${runsInfo.some((r) => !(r.after && r.who.length)) ? ' ; NON attribuées : ' + runsInfo.filter((r) => !(r.after && r.who.length)).map((r) => r.run_id.slice(0, 8)).join(',') : ''}`, runsInfo.every((r) => r.after && r.who.length), { proof: 'dates de début comparées à la création des comptes ; comptes cités dans le rapport' });
   out('\n### IV. Empreinte des données préexistantes');
   await checkForeign('inspection en lecture seule', 'I6');
   out('\n**Lecture seule : rien n\'a été supprimé, basculé ni modifié.**');
