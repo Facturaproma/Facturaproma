@@ -1924,19 +1924,40 @@
         <section class="page" id="page-audit">
             <div class="topbar">
                 <h1>📜 Journal</h1>
-                <button class="btn btn-secondary btn-sm" onclick="renderAudit()">🔄 Rafraîchir</button>
+                <div class="actions">
+                    <button class="btn btn-secondary btn-sm" onclick="renderAudit()">🔄 Rafraîchir</button>
+                    <button class="btn btn-primary btn-sm" onclick="exportAuditCSV()">📥 Exporter CSV</button>
+                </div>
             </div>
             <div class="alert">
-                <strong>Traçabilité</strong> — Chaque changement de licence fait depuis l'admin (prolongation, changement d'offre, suspension) est enregistré ici avec l'administrateur concerné. Les 100 dernières actions sont affichées.
+                <strong>Traçabilité</strong> — Chaque action faite depuis l'administration (licences, paiements saisis, assistants, suppressions de compte) est enregistrée avec le login de son auteur. Les 500 dernières actions sont chargées ; les filtres s'appliquent dessus.
+            </div>
+            <div class="report-filter-bar">
+                <select id="auditActor" class="search-input" style="width: 230px;" onchange="applyAuditFilters()" aria-label="Login (administrateur ou assistant)"><option value="">Tous les logins</option></select>
+                <select id="auditAction" class="search-input" style="width: 200px;" onchange="applyAuditFilters()" aria-label="Type d'action"><option value="">Toutes actions</option></select>
+                <select id="auditPeriod" class="search-input" style="width: 170px;" onchange="onAuditPeriodChange()" aria-label="Période">
+                    <option value="all">Toute la période</option>
+                    <option value="today">Aujourd'hui</option>
+                    <option value="week">7 derniers jours</option>
+                    <option value="month">Ce mois</option>
+                    <option value="lastmonth">Mois dernier</option>
+                    <option value="custom">Dates personnalisées…</option>
+                </select>
+                <span id="auditCustomDates" style="display:none; gap:6px; align-items:center;">
+                    <input type="date" id="auditFrom" class="search-input" style="width: 150px;" onchange="applyAuditFilters()" aria-label="Du">
+                    <span>→</span>
+                    <input type="date" id="auditTo" class="search-input" style="width: 150px;" onchange="applyAuditFilters()" aria-label="Au">
+                </span>
+                <span class="period-label" id="auditCount"></span>
             </div>
             <div class="card">
                 <div style="overflow-x: auto;">
                 <table>
                     <thead>
-                        <tr><th>Date</th><th>Administrateur</th><th>Compte</th><th>Avant</th><th>Après</th><th>Note</th></tr>
+                        <tr><th>Date</th><th>Login</th><th>Action</th><th>Compte concerné</th><th>Détail</th></tr>
                     </thead>
                     <tbody id="auditTable">
-                        <tr><td colspan="6" class="empty">Chargement...</td></tr>
+                        <tr><td colspan="5" class="empty">Chargement...</td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -5184,34 +5205,112 @@ function renderTiers() {
         </tr>`).join('');
 }
 
+let auditRows = [];
+let auditStaffEmails = new Set();
+const AUDIT_ACTION_LABELS = {
+    set_license: '🎫 Licence modifiée',
+    delete_account: '🗑️ Compte supprimé',
+    staff_payment: '💶 Paiement saisi (assistant)',
+    staff_payment_cancel: '↩️ Paiement annulé (assistant)',
+    add_staff: '➕ Assistant ajouté',
+    remove_staff: '➖ Assistant retiré'
+};
+const auditActionLabel = (a) => AUDIT_ACTION_LABELS[a] || ('• ' + a);
+
+// Libellé du rôle d'un login : owner (Master), assistant (table staff) ou administrateur
+function auditRoleOf(email) {
+    const e = (email || '').toLowerCase();
+    if (typeof MASTER_EMAIL !== 'undefined' && e === MASTER_EMAIL.toLowerCase()) return 'owner';
+    if (auditStaffEmails.has(e)) return 'assistant';
+    return 'administrateur';
+}
+
+// Texte de détail selon l'action (pure : testable)
+function auditDetailText(r) {
+    const d = r.details || {};
+    const planTxt = (o) => {
+        if (!o) return '—';
+        const t = (typeof PLAN_LABEL !== 'undefined' && PLAN_LABEL[o.type]) || o.type || '';
+        const exp = o.expires_at ? ' · ' + new Date(o.expires_at).toLocaleDateString('fr-FR') : (o.type === 'lifetime' ? ' · à vie' : '');
+        return t + (o.status === 'suspended' ? ' (suspendu)' : '') + exp;
+    };
+    switch (r.action) {
+        case 'set_license': return planTxt(d.before) + ' → ' + planTxt(d.after) + (d.note ? ' — ' + d.note : '');
+        case 'staff_payment': return `${d.amount != null ? d.amount + ' DH' : ''}${d.type ? ' · ' + d.type : ''}${d.mode ? ' · ' + d.mode : ''}${d.note ? ' — ' + d.note : ''}`.trim() || '—';
+        case 'staff_payment_cancel': return `${d.amount != null ? d.amount + ' DH' : ''}${d.type ? ' · ' + d.type : ''}${d.note ? ' — ' + d.note : ''}`.trim() || '—';
+        case 'delete_account': return `Supprimés : ${d.data_rows || 0} données, ${d.licenses || 0} licence(s), ${d.codes || 0} code(s), ${d.payments || 0} paiement(s), ${d.requests || 0} demande(s)`;
+        default: return d.note || '—';
+    }
+}
+
+// Filtre pur : login, action, période (range = null pour tout)
+function filterAuditRows(rows, actor, action, range) {
+    return rows.filter(r => (!actor || (r.admin_email || '').toLowerCase() === actor.toLowerCase()) && (!action || r.action === action) && isInRange(r.at, range));
+}
+
+function fillAuditSelects() {
+    const actors = [...new Set(auditRows.map(r => (r.admin_email || '').toLowerCase()).filter(Boolean))].sort();
+    const actions = [...new Set(auditRows.map(r => r.action).filter(Boolean))].sort();
+    const aSel = document.getElementById('auditActor'), cSel = document.getElementById('auditAction');
+    const cur = [aSel.value, cSel.value];
+    aSel.innerHTML = '<option value="">Tous les logins</option>' + actors.map(e => `<option value="${esc(e)}">${esc(e)} (${auditRoleOf(e)})</option>`).join('');
+    cSel.innerHTML = '<option value="">Toutes actions</option>' + actions.map(a => `<option value="${esc(a)}">${esc(auditActionLabel(a))}</option>`).join('');
+    if (actors.includes(cur[0])) aSel.value = cur[0];
+    if (actions.includes(cur[1])) cSel.value = cur[1];
+}
+
+function onAuditPeriodChange() {
+    document.getElementById('auditCustomDates').style.display = document.getElementById('auditPeriod').value === 'custom' ? 'inline-flex' : 'none';
+    applyAuditFilters();
+}
+
+function currentAuditView() {
+    const range = getDateRange(document.getElementById('auditPeriod').value, { from: 'auditFrom', to: 'auditTo' });
+    return filterAuditRows(auditRows, document.getElementById('auditActor').value, document.getElementById('auditAction').value, range);
+}
+
+function applyAuditFilters() {
+    const tbody = document.getElementById('auditTable');
+    const rows = currentAuditView();
+    document.getElementById('auditCount').textContent = `${rows.length} action${rows.length > 1 ? 's' : ''} sur ${auditRows.length} chargée${auditRows.length > 1 ? 's' : ''}`;
+    tbody.innerHTML = rows.length ? rows.map(r => `
+        <tr>
+            <td>${formatDate(r.at)}</td>
+            <td>${esc(r.admin_email || '—')}<br><small style="color: var(--ink-mute);">${auditRoleOf(r.admin_email)}</small></td>
+            <td>${esc(auditActionLabel(r.action))}</td>
+            <td><strong>${esc(r.target_email || '—')}</strong></td>
+            <td style="font-size:12px;">${esc(auditDetailText(r))}</td>
+        </tr>`).join('') : '<tr><td colspan="5" class="empty"><div class="empty-icon">📜</div>Aucune action pour ces filtres</td></tr>';
+}
+
+function exportAuditCSV() {
+    const rows = currentAuditView();
+    const q = v => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
+    const lines = [['date', 'login', 'role', 'action', 'compte', 'detail'].join(';')].concat(rows.map(r =>
+        [r.at, r.admin_email, auditRoleOf(r.admin_email), r.action, r.target_email, auditDetailText(r)].map(q).join(';')));
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'journal-actions.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
 async function renderAudit() {
     const tbody = document.getElementById('auditTable');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Chargement...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Chargement...</td></tr>';
     try {
-        const { data, error } = await supaClient.from('admin_audit').select('*').order('at', { ascending: false }).limit(100);
+        const { data, error } = await supaClient.from('admin_audit').select('*').order('at', { ascending: false }).limit(500);
         if (error) throw error;
-        if (!data || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="empty-icon">📜</div>Aucune action enregistrée</td></tr>';
+        auditRows = data || [];
+        try { const st = await supaClient.from('staff').select('email'); auditStaffEmails = new Set((st.data || []).map(x => (x.email || '').toLowerCase())); } catch { auditStaffEmails = new Set(); }
+        if (auditRows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty"><div class="empty-icon">📜</div>Aucune action enregistrée</td></tr>';
             return;
         }
-        const fmt = o => {
-            if (!o) return '—';
-            const t = PLAN_LABEL[o.type] || o.type || '';
-            const exp = o.expires_at ? ' · ' + formatDate(o.expires_at) : (o.type === 'lifetime' ? ' · à vie' : '');
-            return esc(t) + (o.status === 'suspended' ? ' (suspendu)' : '') + esc(exp);
-        };
-        tbody.innerHTML = data.map(r => `
-            <tr>
-                <td>${formatDate(r.at)}</td>
-                <td>${esc(r.admin_email || '—')}</td>
-                <td><strong>${esc(r.target_email || '—')}</strong></td>
-                <td style="font-size:12px;">${fmt(r.details && r.details.before)}</td>
-                <td style="font-size:12px;">${fmt(r.details && r.details.after)}</td>
-                <td style="font-size:12px;">${esc((r.details && r.details.note) || '')}</td>
-            </tr>`).join('');
+        fillAuditSelects();
+        applyAuditFilters();
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">Journal indisponible : exécute sql/08_admin_comptes.sql.<br><small>${esc(err.message || err)}</small></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="empty">Journal indisponible : exécute sql/08_admin_comptes.sql.<br><small>${esc(err.message || err)}</small></td></tr>`;
     }
 }
 
@@ -5236,7 +5335,7 @@ const TIER_LABELS = {
     business: '👔 Business'
 };
 
-function getDateRange(period) {
+function getDateRange(period, ids) {
     const now = new Date();
     const start = new Date(now);
     
@@ -5266,7 +5365,8 @@ function getDateRange(period) {
             start.setHours(0, 0, 0, 0);
             break;
         case 'custom': {
-            const f = document.getElementById('reportFrom')?.value, t = document.getElementById('reportTo')?.value;
+            const fromId = (ids && ids.from) || 'reportFrom', toId = (ids && ids.to) || 'reportTo';
+            const f = document.getElementById(fromId)?.value, t = document.getElementById(toId)?.value;
             const s1 = f ? new Date(f + 'T00:00:00') : new Date(0);
             const e1 = t ? new Date(t + 'T23:59:59.999') : now;
             return { start: s1, end: e1 };

@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
 const cut = (from, to) => { const a = html.indexOf(from), b = html.indexOf(to, a); assert(a > 0 && b > a, 'bloc introuvable : ' + from); return html.slice(a, b); };
-const src = cut('function getDateRange(period) {', 'function onReportPeriodChange') + cut('function isInRange(dateStr, range) {', 'function renderReports()') +
+const src = cut('function getDateRange(period, ids) {', 'function onReportPeriodChange') + cut('function isInRange(dateStr, range) {', 'function renderReports()') +
   cut('function codeOfferKey(c)', 'function renderReconciliation(range)');
 const make = (inputs) => new Function('document', 'allCodes', 'allPayments', 'TIER_PRICES', src + '\nreturn { getDateRange, isInRange, computeReconciliation };');
 const t = (n, c) => { assert(c, n); console.log('PASS ' + n); };
