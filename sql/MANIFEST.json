@@ -81,6 +81,14 @@
       ]
     },
     {
+      "file": "19_journal_sans_doublons.sql",
+      "role": "Journal serveur sans doublons lors des sauvegardes par upsert (corrige guard_issued_invoices)",
+      "reexecutable": true,
+      "depend": [
+        "14"
+      ]
+    },
+    {
       "file": "18_contact_public.sql",
       "role": "Fonction get_contact_info : WhatsApp et e-mail de support lisibles par les comptes connectés (jamais le RIB)",
       "reexecutable": true,

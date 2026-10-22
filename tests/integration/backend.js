@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SQL_FILES = ['00_setup_complet', '05_admins', '06_securite_rls', '07_licence_serveur', '08_admin_comptes',
-  '09_periode_de_grace', '10_anti_abus', '12_admin_supprimer_compte', '13_profil_assistant', '14_numerotation_et_verrouillage', '18_contact_public'];
+  '09_periode_de_grace', '10_anti_abus', '12_admin_supprimer_compte', '13_profil_assistant', '14_numerotation_et_verrouillage', '19_journal_sans_doublons', '18_contact_public'];
 
 function psql(db, args) { return execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-q', '-d', db, ...args], { stdio: ['ignore', 'pipe', 'pipe'] }).toString(); }
 
