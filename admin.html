@@ -1254,6 +1254,28 @@
                 <strong>📋 Offres en vente</strong> — Essai gratuit 14 jours, Mensuel 49 DH, Annuel 449 DH, et l'offre Fondateur (299 DH/an, 30 places). Les chiffres ci-dessous viennent des vrais comptes.
             </div>
 
+            <div class="card master-only" id="plansCard" style="margin-bottom: 20px;">
+                <div class="card-header">
+                    <h2>🧩 Formules d'abonnement personnalisées <small style="color: var(--ink-mute); font-weight: 400;">(Master)</small></h2>
+                </div>
+                <div style="padding: 16px 20px;">
+                    <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Créez d'autres formules (libellé, prix, durée). Une formule active est <strong>proposée automatiquement</strong> sur la page Abonnement des clients, dans la génération de codes, les paiements et les rapports. Elle donne <strong>exactement les mêmes fonctionnalités</strong> que Mensuel et Annuel : seuls le prix et la durée changent. Une formule ne se supprime pas (les codes déjà vendus restent valables) : on la désactive.</p>
+                    <div style="overflow-x: auto;">
+                    <table>
+                        <thead><tr><th>Formule</th><th>Prix</th><th>Durée</th><th>Statut</th><th></th></tr></thead>
+                        <tbody id="plansTable"><tr><td colspan="5" class="empty">Chargement...</td></tr></tbody>
+                    </table>
+                    </div>
+                    <div id="planForm" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; align-items: end;">
+                        <div class="form-group" style="margin:0;"><label>Nom de la formule</label><input type="text" id="planLabel" maxlength="40" placeholder="ex. Trimestriel"></div>
+                        <div class="form-group" style="margin:0;"><label>Prix (DH)</label><input type="number" id="planPrice" min="1" max="100000" step="1" placeholder="ex. 129"></div>
+                        <div class="form-group" style="margin:0;"><label>Durée (jours)</label><input type="number" id="planDays" min="1" max="3660" step="1" placeholder="ex. 91" list="planDaysList"><datalist id="planDaysList"><option value="30"><option value="91"><option value="183"><option value="365"><option value="730"></datalist></div>
+                        <div class="form-group" style="margin:0;"><label>Accroche (facultatif)</label><input type="text" id="planTagline" maxlength="80" placeholder="ex. Pour tester 3 mois"></div>
+                        <div class="form-group" style="margin:0;"><button class="btn btn-primary" id="planSaveBtn" onclick="savePlan()">+ Ajouter la formule</button> <button class="btn btn-secondary btn-sm" id="planCancelBtn" style="display:none;" onclick="resetPlanForm()">Annuler</button></div>
+                    </div>
+                </div>
+            </div>
+
             <div class="stats-grid">
                 <div class="stat-card warning">
                     <div class="stat-label">🆓 Essai (14 jours)</div>
@@ -2631,7 +2653,7 @@ function renderStaffRequests() {
     const box = document.getElementById('staffRequestsBody');
     if (!box) return;
     if (!staffRequests.length) { box.innerHTML = '<div class="empty" style="padding:16px;">Aucune demande en attente</div>'; return; }
-    const lbl = { monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur' };
+    const lbl = { ...planLabelMap(), monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur' };
     box.innerHTML = '<table><thead><tr><th>Date</th><th>Client</th><th>Offre</th><th>Montant attendu</th><th></th></tr></thead><tbody>' +
         staffRequests.map(r => `<tr>
             <td>${formatDate(r.created_at)}</td>
@@ -2679,6 +2701,8 @@ async function loadAllData() {
         allCodes = [];
     }
     
+    await loadCustomPlans();
+
     // Load payments
     try {
         const { data: payments, error: payErr } = await supaClient
@@ -3033,7 +3057,7 @@ function renderRequests() {
         return;
     }
     
-    const tierLabels = {
+    const tierLabels = { ...planLabelMap(),
         lifetime: '🎁 À vie',
         monthly: '⭐ Mensuel',
         annual: '🏆 Annuel',
@@ -3179,7 +3203,7 @@ async function reopenRequest(requestId) {
 }
 
 async function contactByWhatsApp(email, tier, price) {
-    const tierLabels = {
+    const tierLabels = { ...planLabelMap(),
         lifetime: 'À vie (offert)',
         monthly: 'Mensuel (49 DH/mois)',
         annual: 'Annuel (449 DH/an)',
@@ -3831,7 +3855,7 @@ function renderTreasury() {
     document.getElementById('trBilledCount').textContent = `${invoicesEmitted.length} facture${invoicesEmitted.length > 1 ? 's' : ''}`;
     
     // En attente = codes pending
-    const TIER_PRICES_TR = { lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
+    const TIER_PRICES_TR = { ...planPriceMap(), lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
     const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
     const pendingAmount = pendingCodes.reduce((s, c) => s + (TIER_PRICES_TR[c.type] || 0), 0);
     document.getElementById('trPending').textContent = formatCurrency(pendingAmount);
@@ -3912,7 +3936,7 @@ function renderTreasuryReconciled() {
     const tbody = document.getElementById('trReconciledTable');
     if (!tbody) return;
     
-    const TIER_LABELS_TR = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
     
     // Grouper les docs par payment_db_id
     const reconciliations = {};
@@ -3972,8 +3996,8 @@ function renderTreasuryPending() {
     const tbody = document.getElementById('trPendingTable');
     if (!tbody) return;
     
-    const TIER_LABELS_TR = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
-    const TIER_PRICES_TR = { lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
+    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const TIER_PRICES_TR = { ...planPriceMap(), lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
     
     const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
     const sorted = pendingCodes.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -4017,7 +4041,7 @@ function renderTreasuryPending() {
 // ONGLET 3 : ANOMALIES
 // ============================================
 function renderTreasuryOrphan() {
-    const TIER_LABELS_TR = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
     
     // === Paiements orphelins ===
     const linkedPaymentIds = new Set();
@@ -4554,7 +4578,7 @@ function renderFpDocuments() {
             ? '<span class="badge" style="background: var(--primary); color: white;">📋 Facture</span>'
             : '<span class="badge" style="background: var(--accent); color: var(--ink);">📄 Reçu</span>';
         
-        const tierLabels = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+        const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
         const tierLabel = tierLabels[d.tier] || d.tier || '—';
         
         return `
@@ -4732,7 +4756,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     yPos += 40;
     
     // === ITEMS TABLE ===
-    const tierLabels = { 
+    const tierLabels = { ...planLabelMap(), 
         lifetime: 'Licence FacturaPro - Accès à vie', 
         monthly: 'Licence FacturaPro Mensuelle', 
         annual: 'Licence FacturaPro Annuelle', 
@@ -4906,7 +4930,7 @@ async function sendFpDoc(docId) {
     if (!doc) return showToast('Document introuvable', 'error');
     
     const docTypeLabel = doc.docType === 'invoice' ? 'facture' : 'reçu';
-    const tierLabels = { lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
+    const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
     
     const msg = `Bonjour ${doc.client_name || ''} 🇲🇦,\n\n` +
         `Merci pour votre confiance !\n\n` +
@@ -5073,7 +5097,7 @@ async function renderFpStats() {
         byType[t].ttc += d.totalTTC || 0;
     });
     
-    const tierLabels = { lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
     const sorted = Object.values(byType).sort((a, b) => b.ttc - a.ttc);
     const tbody = document.getElementById('fpStatsByType');
     if (sorted.length === 0) {
@@ -5132,7 +5156,7 @@ function exportFpDocuments() {
     }
     
     const headers = ['Type', 'Numéro', 'Date', 'Client Email', 'Client Nom', 'Type Licence', 'Total HT', 'TVA', 'Total TTC'];
-    const tierLabels = { lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
+    const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
     
     const rows = fpDocuments.map(d => [
         d.docType === 'invoice' ? 'Facture' : 'Reçu',
@@ -5160,6 +5184,149 @@ function exportFpDocuments() {
     a.click();
     URL.revokeObjectURL(url);
     showToast('CSV téléchargé ✓', 'success');
+}
+
+// ============================================
+// FORMULES PERSONNALISÉES (configurées par l'owner / Master)
+// ============================================
+let customPlans = [];
+let BASE_PLAN_LABEL = null, BASE_TIER_PRICES = null, BASE_TIER_LABELS = null; // copies des offres historiques, prises au premier usage
+const planLabelMap = () => Object.fromEntries(customPlans.map(p => [p.key, '🧩 ' + p.label]));
+const planPriceMap = () => Object.fromEntries(customPlans.map(p => [p.key, Number(p.price_dh) || 0]));
+
+function planKeyFromLabel(label) {
+    const base = (label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || 'formule';
+    let key = 'p_' + base, i = 2;
+    while (customPlans.some(p => p.key === key)) key = 'p_' + base.slice(0, 22) + '_' + (i++);
+    return key;
+}
+
+function planPeriodText(days) {
+    const d = Number(days);
+    if (d === 30) return '30 jours (1 mois)';
+    if (d === 365) return '365 jours (1 an)';
+    return d + ' jours' + (d % 30 === 0 ? ` (${d / 30} mois)` : '');
+}
+
+// Reflète les formules dans les libellés, prix et listes déroulantes (appelé après chaque chargement)
+function applyCustomPlans() {
+    if (!BASE_PLAN_LABEL) { BASE_PLAN_LABEL = { ...PLAN_LABEL }; BASE_TIER_PRICES = { ...TIER_PRICES }; BASE_TIER_LABELS = { ...TIER_LABELS }; }
+    Object.keys(PLAN_LABEL).forEach(k => { if (!(k in BASE_PLAN_LABEL)) delete PLAN_LABEL[k]; });
+    Object.keys(TIER_PRICES).forEach(k => { if (!(k in BASE_TIER_PRICES)) delete TIER_PRICES[k]; });
+    Object.keys(TIER_LABELS).forEach(k => { if (!(k in BASE_TIER_LABELS)) delete TIER_LABELS[k]; });
+    customPlans.forEach(p => { PLAN_LABEL[p.key] = p.label; TIER_PRICES[p.key] = Number(p.price_dh) || 0; TIER_LABELS[p.key] = '🧩 ' + p.label; });
+    const active = customPlans.filter(p => p.active);
+    const fill = (id, withDays) => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        [...sel.querySelectorAll('option[data-custom]')].forEach(o => o.remove());
+        active.forEach(p => {
+            const o = document.createElement('option');
+            o.value = p.key; o.dataset.custom = '1';
+            o.textContent = `🧩 ${p.label} (${Number(p.price_dh)} DH${withDays ? ' / ' + p.duration_days + ' j' : ''})`;
+            sel.appendChild(o);
+        });
+    };
+    fill('codeType', true);
+    fill('paymentType', false);
+}
+
+async function loadCustomPlans() {
+    try {
+        const { data, error } = await supaClient.from('plans').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: true });
+        if (error) throw error;
+        customPlans = data || [];
+    } catch (err) {
+        console.warn('Formules indisponibles (sql/20 non appliqué ?)', err.message || err);
+        customPlans = [];
+    }
+    applyCustomPlans();
+}
+
+let editingPlanKey = null;
+function renderPlans() {
+    const card = document.getElementById('plansCard');
+    if (!card) return;
+    card.style.display = currentAdmin?.isMaster ? '' : 'none';
+    const tb = document.getElementById('plansTable');
+    tb.innerHTML = customPlans.length ? customPlans.map(p => `
+        <tr>
+            <td><strong>🧩 ${esc(p.label)}</strong>${p.tagline ? `<br><small style="color: var(--ink-mute);">${esc(p.tagline)}</small>` : ''}</td>
+            <td>${Number(p.price_dh).toLocaleString('fr-FR')} DH</td>
+            <td>${esc(planPeriodText(p.duration_days))}</td>
+            <td>${p.active ? '<span class="badge badge-success">En vente</span>' : '<span class="badge">Désactivée</span>'}</td>
+            <td style="white-space: nowrap;">
+                <button class="btn btn-secondary btn-sm" onclick="editPlan('${esc(p.key)}')">✏️ Modifier</button>
+                <button class="btn btn-secondary btn-sm" onclick="togglePlan('${esc(p.key)}')">${p.active ? '⏸️ Désactiver' : '▶️ Réactiver'}</button>
+            </td>
+        </tr>`).join('') : '<tr><td colspan="5" class="empty">Aucune formule personnalisée. Les offres Mensuel, Annuel et Fondateur restent disponibles.</td></tr>';
+}
+
+function resetPlanForm() {
+    editingPlanKey = null;
+    ['planLabel', 'planPrice', 'planDays', 'planTagline'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('planSaveBtn').textContent = '+ Ajouter la formule';
+    document.getElementById('planCancelBtn').style.display = 'none';
+}
+
+function editPlan(key) {
+    const p = customPlans.find(x => x.key === key);
+    if (!p) return;
+    editingPlanKey = key;
+    document.getElementById('planLabel').value = p.label;
+    document.getElementById('planPrice').value = p.price_dh;
+    document.getElementById('planDays').value = p.duration_days;
+    document.getElementById('planTagline').value = p.tagline || '';
+    document.getElementById('planSaveBtn').textContent = '💾 Enregistrer les modifications';
+    document.getElementById('planCancelBtn').style.display = '';
+    document.getElementById('planForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Validation pure (testable) : renvoie un message d'erreur ou null
+function validatePlanInput(label, price, days) {
+    if (!label || label.trim().length < 2 || label.trim().length > 40) return 'Nom de formule : 2 à 40 caractères';
+    if (!(price > 0) || price > 100000) return 'Prix : un montant en DH supérieur à 0';
+    if (!Number.isInteger(days) || days < 1 || days > 3660) return 'Durée : un nombre entier de jours entre 1 et 3660';
+    return null;
+}
+
+async function persistPlan(key, label, price, days, tagline, active, sort) {
+    const { data, error } = await supaClient.rpc('owner_save_plan', { p_key: key, p_label: label, p_price: price, p_days: days, p_tagline: tagline || null, p_active: active, p_sort: sort });
+    if (error) throw error;
+    if (!data || !data.ok) throw new Error('Refusé : ' + ((data && data.reason) || 'erreur'));
+}
+
+async function savePlan() {
+    if (!currentAdmin?.isMaster) { showToast('Réservé au Master', 'error'); return; }
+    const label = document.getElementById('planLabel').value.trim();
+    const price = parseFloat(document.getElementById('planPrice').value);
+    const days = parseInt(document.getElementById('planDays').value, 10);
+    const tagline = document.getElementById('planTagline').value.trim();
+    const err = validatePlanInput(label, price, days);
+    if (err) { showToast(err, 'error'); return; }
+    const existing = editingPlanKey ? customPlans.find(p => p.key === editingPlanKey) : null;
+    const key = existing ? existing.key : planKeyFromLabel(label);
+    try {
+        await persistPlan(key, label, price, days, tagline, existing ? existing.active : true, existing ? existing.sort_order : 100 + customPlans.length);
+        showToast(existing ? 'Formule modifiée' : 'Formule ajoutée : elle est déjà proposée à la vente', 'success');
+        resetPlanForm();
+        await loadCustomPlans();
+        renderPlans();
+    } catch (e) {
+        showToast('Erreur : ' + (e.message || e) + ((String(e.message || e).includes('plans') || String(e.message || e).includes('owner_save_plan')) ? ' — exécute sql/20_formules_configurables.sql' : ''), 'error');
+    }
+}
+
+async function togglePlan(key) {
+    const p = customPlans.find(x => x.key === key);
+    if (!p || !currentAdmin?.isMaster) return;
+    if (p.active && !confirm(`Désactiver « ${p.label} » ? Elle ne sera plus proposée aux clients. Les codes déjà vendus restent valables.`)) return;
+    try {
+        await persistPlan(p.key, p.label, p.price_dh, p.duration_days, p.tagline, !p.active, p.sort_order);
+        showToast(p.active ? 'Formule désactivée' : 'Formule réactivée', 'success');
+        await loadCustomPlans();
+        renderPlans();
+    } catch (e) { showToast('Erreur : ' + (e.message || e), 'error'); }
 }
 
 function renderTiers() {
@@ -5960,7 +6127,7 @@ function navTo(page) {
     if (page === 'admins') renderAdmins();
     if (page === 'settings') loadSettings();
     if (page === 'reports') renderReports();
-    if (page === 'tiers') renderTiers();
+    if (page === 'tiers') { renderTiers(); renderPlans(); }
     if (page === 'users') renderUsers();
     if (page === 'audit') renderAudit();
     if (page === 'myinvoicing') initMyInvoicing();
