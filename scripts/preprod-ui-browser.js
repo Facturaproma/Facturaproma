@@ -33,8 +33,13 @@ exports.run = async function run(h) {
       let body = ''; if (!rel.startsWith('/auth')) { try { body = (await r.text()).slice(0, 400); } catch {} }
       log.push({ m: r.request().method(), rel, status: r.status(), body });
     });
+    const net = [], cons = [], relOf = (u) => u.startsWith(CTX.url) ? u.slice(CTX.url.length).split('?')[0] : null;
+    p.on('request', (r) => { const rel = relOf(r.url()); if (rel) net.push({ k: r.method() + ' ' + rel, s: 'en attente' }); });
+    p.on('response', (r) => { const rel = relOf(r.url()); if (!rel) return; const e = net.find((x) => x.k === r.request().method() + ' ' + rel && x.s === 'en attente'); if (e) e.s = String(r.status()); });
+    p.on('requestfailed', (r) => { const rel = relOf(r.url()); if (!rel) return; const e = net.find((x) => x.k === r.method() + ' ' + rel && x.s === 'en attente'); if (e) e.s = 'ÉCHEC ' + clip((r.failure() || {}).errorText, 60); });
+    p.on('console', (m) => { if (['error', 'warning'].includes(m.type())) cons.push(clip(m.text(), 180)); });
     p.on('requestfailed', (r) => { const u = r.url(); if (u.startsWith(CTX.url)) log.push({ m: r.method(), rel: u.slice(CTX.url.length).split('?')[0], status: 0, body: 'requête interrompue côté navigateur' }); });
-    return { ctx, p, log, label, E: (fn, arg) => p.evaluate(fn, arg) };
+    return { ctx, p, log, net, cons, label, E: (fn, arg) => p.evaluate(fn, arg) };
   }
   async function login(dv, k) {
     const { p } = dv;
@@ -44,7 +49,8 @@ exports.run = async function run(h) {
     const shown = await until(async () => (await p.isVisible('#mainApp')) || (await p.isVisible('#onbStep1')), 45000);
     if (!shown) {
       const seen = await p.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 300));
-      throw new Error('connexion par l\'interface : ni application ni intégration visibles après 45 s ; texte visible : « ' + seen + ' »');
+      const bt = await p.evaluate(() => (document.getElementById('loginBtn') || {}).textContent || '').catch(() => '?');
+      throw new Error('connexion par l\'interface : ni application ni intégration visibles après 45 s ; texte visible : « ' + seen + ' » ; bouton : « ' + clip(bt, 40) + ' » ; requêtes vers Supabase : ' + (dv.net.map((x) => x.k + ' → ' + x.s).join(' | ') || 'AUCUNE') + ' ; console (erreurs) : ' + (dv.cons.slice(0, 8).join(' | ') || 'aucune') + ' ; erreurs de page : ' + (errors.slice(-3).join(' | ') || 'aucune'));
     }
     await p.waitForTimeout(800);
     if (!(await p.isVisible('#mainApp'))) {
