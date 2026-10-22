@@ -1,0 +1,5 @@
+{
+  "_comment": "Pousser une modification de CE fichier sur dev/fondations déclenche « preprod-mode » (PRÉPRODUCTION uniquement). phase = install (cible, référence, sauvegarde restaurée, application de sql/17, contrôles du catalogue réel) | test (sauvegarde, comptes jetables mode-*, essais réels) | cleanup (supprime uniquement les comptes de test). Aucune écriture en production, aucun déploiement.",
+  "phase": "install",
+  "nonce": "1"
+}
