@@ -2721,6 +2721,9 @@
 
         <div class="auth-error" id="authError"></div>
         <div class="auth-success" id="authSuccess"></div>
+        <div class="auth-footer" id="authResend" style="display:none; margin-top:8px;">
+            <a id="authResendLink" onclick="resendConfirmationMail()">📧 Renvoyer l'e-mail de confirmation</a>
+        </div>
 
         <!-- Login Form -->
         <form class="auth-form active" id="loginForm" onsubmit="handleLogin(event)">
@@ -5867,7 +5870,12 @@ const Auth = {
                 }
                 throw new Error(error.message);
             }
-            return { id: data.user.id, email };
+            // Adresse déjà inscrite : Supabase ne renvoie pas d'erreur (anti-énumération) mais un utilisateur sans identité
+            if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+                throw new Error('Cet email est déjà utilisé. Connectez-vous, ou utilisez « Mot de passe oublié ».');
+            }
+            // Confirmation d'e-mail exigée : aucune session tant que le lien n'a pas été cliqué
+            return { id: data.user.id, email, needsConfirmation: !data.session };
         } else {
             // Local mode
             const users = this._getLocalUsers();
@@ -5883,6 +5891,22 @@ const Auth = {
         }
     },
     
+    async resendConfirmation(email) {
+        email = (email || '').trim().toLowerCase();
+        if (!USE_SUPABASE || !email) return;
+        if (!ensureSupabase()) throw new Error('Service indisponible. Vérifiez votre connexion.');
+        const captchaToken = await getCaptchaToken();
+        const { error } = await supaClient.auth.resend({
+            type: 'signup', email,
+            options: { emailRedirectTo: new URL('app.html', window.location.href).href, captchaToken }
+        });
+        if (error) {
+            if (/captcha/i.test(error.message)) throw new Error('Vérification anti-robot échouée. Rechargez la page et réessayez.');
+            if (/rate limit|too many|seconds/i.test(error.message || '')) throw new Error('Trop de demandes : patientez une minute avant de renvoyer l\'e-mail.');
+            throw new Error(error.message);
+        }
+    },
+
     async login(email, password) {
         email = email.trim().toLowerCase();
         
@@ -5896,6 +5920,11 @@ const Auth = {
             });
             if (error) {
                 if (/captcha/i.test(error.message)) throw new Error('Vérification anti-robot échouée. Rechargez la page et réessayez.');
+                if (error.code === 'email_not_confirmed' || /email not confirmed/i.test(error.message || '')) {
+                    const e = new Error('Votre adresse e-mail n\'est pas encore confirmée. Ouvrez l\'e-mail reçu (pensez aux spams) et cliquez sur le lien de confirmation.');
+                    e.code = 'email_not_confirmed';
+                    throw e;
+                }
                 throw new Error('Email ou mot de passe incorrect');
             }
             return { id: data.user.id, email: data.user.email };
@@ -6632,7 +6661,30 @@ function switchAuthTab(tab) {
     clearAuthMessages();
 }
 
+let pendingConfirmEmail = '';
+function showResendLink(email) {
+    pendingConfirmEmail = (email || '').trim().toLowerCase();
+    document.getElementById('authResend').style.display = pendingConfirmEmail ? '' : 'none';
+}
+let resendLockedUntil = 0;
+async function resendConfirmationMail() {
+    if (!pendingConfirmEmail) return;
+    if (Date.now() < resendLockedUntil) { showAuthError('Patientez un instant avant de renvoyer l\'e-mail.'); return; }
+    const link = document.getElementById('authResendLink');
+    resendLockedUntil = Date.now() + 60000;
+    link.style.opacity = '0.5';
+    try {
+        await Auth.resendConfirmation(pendingConfirmEmail);
+        showAuthSuccess('E-mail de confirmation renvoyé à ' + pendingConfirmEmail + '. Vérifiez aussi vos spams.');
+    } catch (err) {
+        resendLockedUntil = 0;
+        showAuthError(err.message);
+    }
+    setTimeout(() => { link.style.opacity = ''; }, 60000);
+}
+
 function clearAuthMessages() {
+    const rs = document.getElementById('authResend'); if (rs) rs.style.display = 'none';
     document.getElementById('authError').classList.remove('show');
     document.getElementById('authSuccess').classList.remove('show');
 }
@@ -6675,6 +6727,7 @@ async function handleLogin(event) {
         }, 600);
     } catch (err) {
         showAuthError(err.message);
+        if (err.code === 'email_not_confirmed') showResendLink(email);
         btn.disabled = false;
         btn.textContent = 'Se connecter';
     }
@@ -6708,7 +6761,20 @@ async function handleSignup(event) {
     btn.textContent = 'Création du compte...';
     
     try {
-        await Auth.signup(email, password);
+        const res = await Auth.signup(email, password);
+        if (res && res.needsConfirmation) {
+            // Pas de session avant la confirmation : on explique clairement la suite, sans « redirection »
+            const mail = email.trim().toLowerCase();
+            switchAuthTab('login');
+            document.getElementById('loginEmail').value = mail;
+            document.getElementById('signupPassword').value = '';
+            document.getElementById('signupConfirm').value = '';
+            showAuthSuccess('✅ Compte créé. Un e-mail de confirmation vient d\'être envoyé à ' + mail + '. Ouvrez-le (vérifiez aussi les spams) et cliquez sur le lien pour activer votre compte, puis connectez-vous ici.');
+            showResendLink(mail);
+            btn.disabled = false;
+            btn.textContent = 'Créer mon compte';
+            return;
+        }
         showAuthSuccess('Compte créé avec succès ! Redirection...');
         setTimeout(() => {
             checkOnboarding();
