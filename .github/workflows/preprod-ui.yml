@@ -37,7 +37,8 @@ jobs:
           PHASE="$(node -p "require('./ops/preprod-ui.json').phase")"
           case "$PHASE" in idle|test|cleanup) ;; *) echo "::error::Phase inconnue."; exit 1;; esac
           echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
-          echo "Phase demandée : $PHASE"
+          echo "Phase demandée : $PHASE ; Node $(node -v)"
+          case "$(node -v)" in v22.*|v24.*) ;; *) echo "::error::Node 22 ou plus requis."; exit 1;; esac
       - name: Dépendances (pg, supabase-js, playwright-core)
         if: steps.phase.outputs.phase != 'idle'
         run: npm install --no-save --ignore-scripts pg@8 @supabase/supabase-js@2.118.0 playwright-core@1.64.1
