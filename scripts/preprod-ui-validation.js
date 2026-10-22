@@ -45,6 +45,7 @@ async function makeCtx() {
     const dbName = createDb({ docs: true }); const be = makeBackend(dbName);
     const q = async (s, p) => { const rows_ = await be.sql(s, p); return { rows: rows_, rowCount: rows_.length }; };
     const adm = { query: q, end: async () => {} };
+    if (process.env.UI_DRY_KNOWNROW === '1') await q('INSERT INTO public._mig_runs(run_id, mode, status, started_at, report) VALUES ($1::uuid,$2,$3,$4::timestamptz,$5::jsonb)', ['cff4cac4-0000-4000-8000-000000000001', 'apply', 'applied', '2026-10-22 11:58:03.125123+00', '{"dry_run": {"accounts": []}}']);   // répétition locale : ligne historique connue présente dès le départ
     return { dry: true, adm, be, dropDb: () => { try { be.close(); } catch {} dropDb(dbName); }, url: 'https://' + T.preprodRef + '.supabase.co', key: T.anonKey };
   }
   const { connect } = require('./preprod-db');
@@ -101,6 +102,17 @@ async function signIn(k) {
   const r = await c.auth.signInWithPassword({ email: EMAIL(k), password: CTX.dry ? 'x' : pw(k) });
   if (r.error || !r.data.user || r.data.user.email !== EMAIL(k)) throw new Error('connexion impossible pour ' + EMAIL(k) + ' : ' + clip(r.error && r.error.message));
   return { c, uid: r.data.user.id, email: EMAIL(k), k };
+}
+
+// ---------------------------------------------------------------- EXCEPTION DOCUMENTÉE : une seule ligne historique de `_mig_runs`
+// La ligne cff4cac4… (bascule de ui-g, campagne du run 39774301049, 2026-10-22 11:58:03.125 UTC) a été CONSERVÉE au nettoyage : son rattachement n'est qu'une inférence (horodatage et séquence de transactions), pas une preuve.
+// Elle n'est ni supprimée ni modifiée. Les contrôles de départ la TOLÈRENT, elle seule, et seulement si TOUS ses traits correspondent (préfixe d'identifiant, mode, statut, instant à la milliseconde, rapport sans compte à migrer).
+// Toute autre ligne de `_mig_runs`, ou une ligne qui ressemble à celle-ci mais dont un trait diffère, fait ÉCHOUER le contrôle.
+const KNOWN_RUN = { prefix: 'cff4cac4', mode: 'apply', status: 'applied', ms: Date.parse('2026-10-22T11:58:03.125Z') };
+const isKnownRun = (r) => String(r.run_id).startsWith(KNOWN_RUN.prefix) && r.mode === KNOWN_RUN.mode && r.status === KNOWN_RUN.status && Math.floor(new Date(r.started_at).getTime()) === KNOWN_RUN.ms && /"accounts":\s*\[\s*\]/.test(r.rep || '');
+async function migRuns() {
+  const rows_ = await q('SELECT run_id::text run_id, mode, status, started_at, finished_at, xmin::text::bigint x, report::text rep FROM public._mig_runs ORDER BY started_at');
+  return { known: rows_.filter(isKnownRun), others: rows_.filter((r) => !isKnownRun(r)) };
 }
 
 // ---------------------------------------------------------------- empreinte des données préexistantes (identique à la campagne précédente)
@@ -403,16 +415,120 @@ async function guardtests() {
   }
 }
 
+// ================================================================ SECTION F : règles fonctionnelles côté serveur (factures, devis, paiements, licence, session)
+// Réel : appels RPC / PostgREST authentifiés sur la préproduction. Simulé (répétition locale) : même code contre PostgreSQL local avec faux client.
+// Données : uniquement des documents « f-* » du compte jetable ui-e (mode documents).
+async function sectionF() {
+  out('\n### F. Règles fonctionnelles (factures, devis, paiements, licence, session)');
+  const E = await signIn('e');
+  const call = (fn, args) => E.c.rpc(fn, args);
+  const up = (doc, v, op) => call('upsert_document', { p_doc: doc, p_expected_version: v, p_op_id: op });
+  const msg = (r) => (r && r.error ? `${r.error.code || ''} ${r.error.message || ''}` : jstr(r && r.data)).trim();
+  const row = async (type, id) => (await q('SELECT version, status, number, body FROM public.documents WHERE user_id=$1::uuid AND doc_type=$2 AND id=$3', [E.uid, type, id]))[0];
+  const numStr = async () => { const n = (await call('next_doc_number', { p_type: 'invoice', p_floor: 0 })).data; return `FAC-${Y}-${String(n).padStart(3, '0')}`; };
+  const events = (id) => q('SELECT action, detail FROM public.doc_events WHERE user_id=$1::uuid AND doc_id=$2', [E.uid, id]);
+
+  // ---- F1 factures : brouillon, modification, émission, verrouillage
+  const d1 = await up(inv('f-d1', { clientName: 'Brouillon A' }), 0, 'f:d1:1');
+  const d1b = await up(inv('f-d1', { clientName: 'Brouillon B', totalHT: 20, totalTVA: 4, totalTTC: 24 }), 1, 'f:d1:2');
+  const r1 = await row('invoice', 'f-d1');
+  rec('F1a', 'brouillon créé puis modifié librement (versions 1 puis 2)', 'v1 puis v2, contenu modifié', `${msg(d1).slice(0, 60)} ; ${msg(d1b).slice(0, 60)} ; base v${r1.version} ${r1.body.clientName}`, d1.data && d1.data.ok && d1b.data && d1b.data.ok && r1.version === 2 && r1.body.clientName === 'Brouillon B', { fatal: true, sqlstate: sqlst(d1b) });
+  const nF = await numStr();
+  const em = await up({ ...inv('f-d1', { clientName: 'Brouillon B', totalHT: 20, totalTVA: 4, totalTTC: 24 }), status: 'sent', number: nF }, 2, 'f:d1:3');
+  const ev = await events('f-d1');
+  rec('F1b', 'émission avec un numéro attribué par le serveur : acceptée, événement « emission » consigné', `statut sent, numéro ${nF}, événement emission`, `${msg(em).slice(0, 70)} ; événements : ${ev.map((x) => x.action).join(',')}`, em.data && em.data.ok && (await row('invoice', 'f-d1')).status === 'sent' && ev.some((x) => x.action === 'emission'), { fatal: true, sqlstate: sqlst(em) });
+  const mod = await up({ ...inv('f-d1', { clientName: 'Brouillon B', totalHT: 20, totalTVA: 4, totalTTC: 24, items: [{ description: 'Autre', quantity: 9, price: 1 }] }), status: 'sent', number: nF }, 3, 'f:d1:4');
+  rec('F1c', 'facture émise : modification des lignes REFUSÉE', 'FACTURE_VERROUILLEE', msg(mod).slice(0, 120), /FACTURE_VERROUILLEE/.test(msg(mod)) && (await row('invoice', 'f-d1')).version === 3, { fatal: true, sqlstate: sqlst(mod), proof: 'version inchangée (3)' });
+  const back = await up({ ...inv('f-d1', { clientName: 'Brouillon B', totalHT: 20, totalTVA: 4, totalTTC: 24 }), status: 'draft', number: nF }, 3, 'f:d1:5');
+  rec('F1d', 'facture émise : retour au brouillon REFUSÉ', 'FACTURE_VERROUILLEE', msg(back).slice(0, 120), /FACTURE_VERROUILLEE/.test(msg(back)), { fatal: true, sqlstate: sqlst(back) });
+  const delI = await call('delete_document', { p_type: 'invoice', p_id: 'f-d1', p_expected_version: 3, p_op_id: 'f:d1:6' });
+  rec('F1e', 'facture émise : suppression REFUSÉE ; la facture existe toujours', 'FACTURE_VERROUILLEE', `${msg(delI).slice(0, 100)} ; présente : ${!!(await row('invoice', 'f-d1'))}`, /FACTURE_VERROUILLEE/.test(msg(delI)) && !!(await row('invoice', 'f-d1')), { fatal: true, sqlstate: sqlst(delI) });
+  await up(inv('f-d2', { clientName: 'À supprimer' }), 0, 'f:d2:1');
+  const delD = await call('delete_document', { p_type: 'invoice', p_id: 'f-d2', p_expected_version: 1, p_op_id: 'f:d2:2' });
+  rec('F1f', 'brouillon : suppression acceptée (trace dans doc_deleted)', 'ok, absent, tracé', `${msg(delD).slice(0, 60)} ; absent : ${!(await row('invoice', 'f-d2'))}`, delD.data && delD.data.ok && !(await row('invoice', 'f-d2')) && (await q('SELECT 1 FROM public.doc_deleted WHERE user_id=$1::uuid AND id=$2', [E.uid, 'f-d2'])).length === 1, { fatal: true });
+
+  // ---- F2 devis et conversion en facture (deux écritures : brouillon de facture + devis marqué converti, comme app.html convertQuoteToInvoice)
+  const qd = { id: 'f-q1', type: 'quote', number: 'DEV-F-001', status: 'draft', date: `${Y}-03-02`, clientId: 'c1', clientName: 'Client Devis', items: [{ description: 'Étude', quantity: 2, price: 50 }], totalHT: 100, totalTVA: 20, totalTTC: 120 };
+  const q1r = await up(qd, 0, 'f:q1:1'), q2r = await up({ ...qd, status: 'accepted' }, 1, 'f:q1:2');
+  rec('F2a', 'devis créé puis accepté (le devis reste modifiable, hors numérotation fiscale)', 'v1 puis v2 accepted', `${msg(q1r).slice(0, 40)} ; ${msg(q2r).slice(0, 40)} ; statut ${(await row('quote', 'f-q1')).status}`, q2r.data && q2r.data.ok && (await row('quote', 'f-q1')).status === 'accepted', { fatal: true });
+  const conv = inv('f-c1', { clientName: 'Client Devis', items: qd.items, totalHT: 100, totalTVA: 20, totalTTC: 120, sourceQuote: 'f-q1', sourceQuoteNumber: 'DEV-F-001' });
+  const c1 = await up(conv, 0, 'f:c1:1'), qc = await up({ ...qd, status: 'accepted', convertedTo: 'f-c1', convertedInvoiceNumber: 'brouillon' }, 2, 'f:c1:2');
+  rec('F2b', 'conversion : brouillon de facture créé et devis marqué converti, les deux relus', 'facture f-c1 (brouillon, sourceQuote) + devis convertedTo', `${msg(c1).slice(0, 40)} ; ${msg(qc).slice(0, 40)} ; devis→${(await row('quote', 'f-q1')).body.convertedTo} ; facture←${(await row('invoice', 'f-c1')).body.sourceQuote}`, c1.data && c1.data.ok && qc.data && qc.data.ok && (await row('quote', 'f-q1')).body.convertedTo === 'f-c1' && (await row('invoice', 'f-c1')).body.sourceQuote === 'f-q1', { fatal: true });
+  const c1r = await up(conv, 0, 'f:c1:1');
+  const nConv = (await q("SELECT count(*)::int n FROM public.documents WHERE user_id=$1::uuid AND body->>'sourceQuote'='f-q1'", [E.uid]))[0].n;
+  rec('F2c', 'conversion rejouée (même op_id) : aucune seconde facture', '1 facture issue du devis', `rejeu : ${msg(c1r).slice(0, 80)} ; factures issues du devis : ${nConv}`, nConv === 1, { fatal: true });
+  const nC = await numStr();
+  const emC = await up({ ...conv, status: 'sent', number: nC }, 1, 'f:c1:3');
+  rec('F2d', 'émission de la facture issue du devis : numéro serveur, lien vers le devis conservé', `numéro ${nC}, sourceQuote f-q1`, `${msg(emC).slice(0, 60)} ; ${(await row('invoice', 'f-c1')).number} ; ${(await row('invoice', 'f-c1')).body.sourceQuote}`, emC.data && emC.data.ok && (await row('invoice', 'f-c1')).number === nC && (await row('invoice', 'f-c1')).body.sourceQuote === 'f-q1', { fatal: true });
+  const delQ = await call('delete_document', { p_type: 'quote', p_id: 'f-q1', p_expected_version: (await row('quote', 'f-q1')).version, p_op_id: 'f:q1:9' });
+  rec('F2e', 'devis (non fiscal) : suppression acceptée, la facture issue du devis est intacte', 'devis absent, facture présente', `${msg(delQ).slice(0, 50)} ; devis absent : ${!(await row('quote', 'f-q1'))} ; facture présente : ${!!(await row('invoice', 'f-c1'))}`, delQ.data && delQ.data.ok && !(await row('quote', 'f-q1')) && !!(await row('invoice', 'f-c1')), { fatal: true });
+
+  // ---- F3 paiements
+  await up(inv('f-p0', { clientName: 'Paiement brouillon' }), 0, 'f:p0:1');
+  const pay = (id, inv_, amount, op) => call('record_payment', { p_invoice_id: inv_, p_payment: { id, invoiceId: inv_, amount, date: `${Y}-03-03`, method: 'cash' }, p_op_id: op });
+  const pDraft = await pay('f-pay-0', 'f-p0', 5, 'f:pay0');
+  rec('F3a', 'paiement sur un BROUILLON refusé', 'PAIEMENT_SUR_BROUILLON', msg(pDraft).slice(0, 110), /PAIEMENT_SUR_BROUILLON/.test(msg(pDraft)) && (await q('SELECT 1 FROM public.doc_payments WHERE user_id=$1::uuid AND id=$2', [E.uid, 'f-pay-0'])).length === 0, { fatal: true, sqlstate: sqlst(pDraft) });
+  const nP = await numStr();
+  await up(inv('f-p1', { clientName: 'Paiements', status: 'sent', number: nP, totalHT: 10, totalTVA: 2, totalTTC: 12 }), 0, 'f:p1:1');
+  const pa = await pay('f-pay-a', 'f-p1', 5, 'f:pay-a');
+  const afterA = await row('invoice', 'f-p1');
+  rec('F3b', 'paiement partiel (5 sur 12) : enregistré, facture NON soldée', 'paidAmount 5, statut sent', `${msg(pa).slice(0, 60)} ; paidAmount ${afterA.body.paidAmount}, statut ${afterA.status}`, pa.data && pa.data.ok && Number(afterA.body.paidAmount) === 5 && afterA.status === 'sent', { fatal: true });
+  const paR = await pay('f-pay-a', 'f-p1', 5, 'f:pay-a');
+  const nPay = (await q('SELECT count(*)::int n FROM public.doc_payments WHERE user_id=$1::uuid AND invoice_id=$2', [E.uid, 'f-p1']))[0].n;
+  rec('F3c', 'même paiement rejoué : une seule ligne, montant payé inchangé (5)', '1 paiement, paidAmount 5', `${msg(paR).slice(0, 60)} ; ${nPay} paiement(s) ; paidAmount ${(await row('invoice', 'f-p1')).body.paidAmount}`, nPay === 1 && Number((await row('invoice', 'f-p1')).body.paidAmount) === 5, { fatal: true });
+  const pb = await pay('f-pay-b', 'f-p1', 7, 'f:pay-b');
+  const afterB = await row('invoice', 'f-p1');
+  rec('F3d', 'second paiement qui solde (5 + 7 = 12) : facture « paid »', 'paidAmount 12, statut paid', `${msg(pb).slice(0, 50)} ; paidAmount ${afterB.body.paidAmount}, statut ${afterB.status}`, Number(afterB.body.paidAmount) === 12 && afterB.status === 'paid', { fatal: true });
+  const pBad0 = await pay('f-pay-z', 'f-p1', 0, 'f:pay-z');
+  const pBadId = await call('record_payment', { p_invoice_id: 'f-p1', p_payment: { invoiceId: 'f-p1', amount: 3, date: `${Y}-03-04`, method: 'cash' }, p_op_id: 'f:pay-y' });
+  const pGhost = await pay('f-pay-g', 'f-inexistante', 3, 'f:pay-x');
+  rec('F3e', 'paiements invalides refusés : montant nul, identifiant absent, facture inexistante', 'PAIEMENT_INVALIDE ×2, FACTURE_INTROUVABLE', `${msg(pBad0).slice(0, 40)} | ${msg(pBadId).slice(0, 40)} | ${msg(pGhost).slice(0, 40)}`, /PAIEMENT_INVALIDE/.test(msg(pBad0)) && /PAIEMENT_INVALIDE/.test(msg(pBadId)) && /FACTURE_INTROUVABLE/.test(msg(pGhost)), { fatal: true });
+  const amountA = async () => (await q("SELECT body->>'amount' a FROM public.doc_payments WHERE user_id=$1::uuid AND id=$2", [E.uid, 'f-pay-a']))[0].a;
+  const wr = await E.c.from('doc_payments').update({ body: { amount: 999 } }).eq('user_id', E.uid).eq('id', 'f-pay-a');
+  const wd = await E.c.from('doc_payments').delete().eq('user_id', E.uid).eq('id', 'f-pay-a');
+  rec('F3f', 'un paiement enregistré ne se modifie ni ne se supprime par l\'API (écriture directe refusée)', 'refus, paiement intact (5)', `update : ${msg(wr).slice(0, 50)} | delete : ${msg(wd).slice(0, 50)} ; montant ${await amountA()}`, !!wr.error && !!wd.error && (await amountA()) === '5', { fatal: true, sqlstate: sqlst(wr) });
+
+  // ---- F4 licence inactive : TOUTES les écritures refusées, la lecture reste possible
+  await q("UPDATE public.licenses SET status='suspended', expires_at = now() - interval '60 days', updated_at = now() WHERE user_id=$1::uuid", [E.uid]);
+  const lu = await up(inv('f-lic', { clientName: 'Sans licence' }), 0, 'f:lic:1');
+  const lp = await pay('f-pay-l', 'f-p1', 1, 'f:pay-l');
+  const ld = await call('delete_document', { p_type: 'invoice', p_id: 'f-p0', p_expected_version: 1, p_op_id: 'f:lic:2' });
+  const lh = await call('append_history', { p_entries: [{ ts: new Date().toISOString(), action: 'x' }], p_op_id: 'f:lic:3' });
+  const lr = await E.c.from('documents').select('id').eq('user_id', E.uid).limit(1);
+  await q("UPDATE public.licenses SET status='active', expires_at = now() + interval '30 days', updated_at = now() WHERE user_id=$1::uuid", [E.uid]);
+  rec('F4a', 'licence inactive : upsert, paiement, suppression et journal refusés (LICENCE_INACTIVE) ; aucune ligne créée', 'LICENCE_INACTIVE ×4', [lu, lp, ld, lh].map((r) => (/LICENCE_INACTIVE/.test(msg(r)) ? 'LICENCE_INACTIVE' : msg(r).slice(0, 30))).join(' | ') + ` ; f-lic créé : ${!!(await row('invoice', 'f-lic'))}`, [lu, lp, ld, lh].every((r) => /LICENCE_INACTIVE/.test(msg(r))) && !(await row('invoice', 'f-lic')), { fatal: true, sqlstate: sqlst(lu) });
+  rec('F4b', 'licence inactive : la LECTURE de ses propres documents reste possible (aucune perte d\'accès aux données)', 'lecture sans erreur', lr.error ? msg(lr) : `${(lr.data || []).length} ligne(s) lue(s)`, !lr.error && (lr.data || []).length >= 1);
+  const lback = await up(inv('f-lic', { clientName: 'Après rétablissement' }), 0, 'f:lic:4');
+  rec('F4c', 'licence rétablie : l\'écriture refusée plus haut peut être rejouée', 'ok', msg(lback).slice(0, 80), lback.data && lback.data.ok && !!(await row('invoice', 'f-lic')), { fatal: true });
+
+  // ---- F5 session (réel uniquement : GoTrue n'existe pas dans la répétition locale)
+  if (CTX.dry) { rec('F5', 'sessions : connexion, renouvellement, déconnexion, jeton invalide', 'non applicable en répétition locale', 'ignoré (GoTrue réel requis)', true); return; }
+  const c2 = mkClient(); const si = await c2.auth.signInWithPassword({ email: EMAIL('e'), password: pw('e') });
+  const ok1 = await c2.rpc('get_doc_mode');
+  rec('F5a', 'connexion GoTrue réelle : session ouverte, appel authentifié accepté', 'session + get_doc_mode = documents', `${si.error ? clip(si.error.message) : 'session ok'} ; ${ok1.error ? msg(ok1) : ok1.data}`, !si.error && ok1.data === 'documents', { fatal: true });
+  const rf = await c2.auth.refreshSession();
+  const ok2 = await c2.rpc('get_doc_mode');
+  rec('F5b', 'renouvellement de session (refresh token) : nouveau jeton d\'accès valide', 'nouveau jeton, appel accepté', `${rf.error ? clip(rf.error.message) : 'jeton renouvelé'} ; ${ok2.error ? msg(ok2) : ok2.data}`, !rf.error && rf.data.session.access_token !== si.data.session.access_token && ok2.data === 'documents', { fatal: true });
+  const oldRefresh = rf.data.session.refresh_token;
+  await c2.auth.signOut({ scope: 'local' });
+  const c3 = mkClient(); const reuse = await c3.auth.refreshSession({ refresh_token: oldRefresh });
+  rec('F5c', 'après déconnexion, l\'ancien refresh token ne rouvre pas la session', 'erreur de refresh', reuse.error ? clip(reuse.error.message) : 'SESSION RÉOUVERTE', !!reuse.error && !(reuse.data && reuse.data.session), { fatal: true });
+  const bad = mkClient(); const wp = await bad.auth.signInWithPassword({ email: EMAIL('e'), password: 'mot-de-passe-faux-0000' });
+  rec('F5d', 'mauvais mot de passe : refus, aucune session', 'erreur invalid_credentials', wp.error ? `${wp.error.status || ''} ${clip(wp.error.code || wp.error.message)}` : 'SESSION OUVERTE', !!wp.error && !(wp.data && wp.data.session), { fatal: true });
+  const forged = await fetch(`${CTX.url}/rest/v1/rpc/get_doc_mode`, { method: 'POST', headers: { apikey: CTX.key, Authorization: 'Bearer ' + 'x'.repeat(20) + '.' + 'y'.repeat(20) + '.' + 'z'.repeat(20), 'content-type': 'application/json' }, body: '{}' });
+  rec('F5e', 'jeton falsifié : refusé par l\'API (401)', '401', `HTTP ${forged.status}`, forged.status === 401, { fatal: true, sqlstate: 'HTTP 401 (PGRST301)' });
+}
+
 async function test() {
   CTX = await makeCtx();
   out(`### 2. Préparation (${NATURE})`);
+  const mr0 = await migRuns();
+  rec('P1', 'aucune ligne _mig_runs inattendue (seule exception documentée et tolérée : la ligne historique cff4cac4, jamais supprimée ni modifiée)', '0 ligne inattendue (la ligne connue est tolérée)', `${mr0.others.length} ligne(s) inattendue(s)${mr0.others.length ? ' : ' + mr0.others.map((r) => r.run_id.slice(0, 8)).join(',') : ''} ; ligne connue présente : ${mr0.known.length ? 'oui' : 'non'}`, mr0.others.length === 0 && mr0.known.length <= 1, { fatal: true });
   if (!CTX.dry) {
     const hasMode = await q1("SELECT to_regclass('public.doc_store_mode') t");
     if (!hasMode.t) throw new Error('REFUS : sql/17 non installé.');
     const pre = await q('SELECT email FROM auth.users WHERE email = ANY($1)', [EMAILS]);
     if (pre.length) throw new Error('REFUS : comptes de test déjà présents (' + pre.length + ') : nettoyer d\'abord.');
-    const runs0 = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
-    rec('P1', 'aucune ligne _mig_runs préexistante (le nettoyage final peut la vider sans risque)', '0', String(runs0), runs0 === 0, { fatal: true });
     const foreign = await q1(`SELECT (SELECT count(*) FROM public.documents)::int d, (SELECT count(*) FROM public.doc_store_mode)::int m, (SELECT count(*) FROM public.doc_store_testers)::int t`);
     rec('P2', 'état initial : tables du nouveau stockage vides, tous les comptes en legacy', 'documents=0, modes=0, testeurs=0', jstr(foreign), foreign.d === 0 && foreign.m === 0 && foreign.t === 0, { fatal: true });
     await checkForeign('avant les tests', 'P3');
@@ -427,6 +543,7 @@ async function test() {
   const modesDb = await q("SELECT u.email, COALESCE((SELECT mode FROM public.doc_store_mode m WHERE m.user_id=u.id),'legacy') mode FROM auth.users u WHERE u.email = ANY($1) ORDER BY 1", [EMAILS]);
   rec('P6', 'seuls les comptes jetables prévus sont en « documents »', 'd,e,f,g = documents', modesDb.map((r) => r.email.split('@')[0] + '=' + r.mode).join(' '), modesDb.every((r) => (/ui-[defg]@/.test(r.email)) === (r.mode === 'documents')), { fatal: true });
   await sectionN();
+  await sectionF();
   if (!CTX.dry) await sectionBrowser();
   await checkForeign('après les tests, avant nettoyage', 'F1');
   if (CTX.dry) CTX.dropDb();
@@ -452,7 +569,8 @@ async function cleanup() {
   const firstCreated = idRows.reduce((m, r) => (!m || new Date(r.created_at) < m ? new Date(r.created_at) : m), null);
   // _mig_runs (référence 0 avant la campagne ; table GLOBALE) : on ne supprime QUE les lignes dont le rattachement est PROUVÉ — A : le rapport cite un compte de la campagne ; B : écrite dans la même transaction (xmin identique) qu'une ligne d'un compte de la campagne.
   // Une ligne rattachée par la seule proximité d'horodatage (C) est CONSERVÉE et signalée.
-  const runsList = await q('SELECT run_id::text run_id, started_at, xmin::text::bigint x, report::text rep FROM public._mig_runs ORDER BY started_at');
+  const mrC = await migRuns(); const runsList = mrC.others;   // la ligne historique connue est EXCLUE du périmètre : ni supprimée, ni modifiée
+  if (mrC.known.length) out('- Ligne `_mig_runs` historique connue (cff4cac4, exception documentée) : présente, hors périmètre, NON touchée.');
   const anchors = await q(`SELECT u.email, 'mode' src, m.xmin::text::bigint x FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1)
       UNION ALL SELECT u.email, 'testeur', t.xmin::text::bigint FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)
       UNION ALL SELECT u.email, 'evenement', e.xmin::text::bigint FROM public.doc_events e JOIN auth.users u ON u.id=e.user_id WHERE u.email = ANY($1)
@@ -489,7 +607,7 @@ async function cleanup() {
   rec('C1', 'les tables du nouveau stockage ne contiennent AUCUNE ligne étrangère aux comptes de cette campagne', 'toutes à 0', jstr(strange), Object.values(strange).every((v) => v === 0), { fatal: true });
   await checkForeign('avant nettoyage', 'C2');
   const base = CTX.dry ? { sha256: '0' } : await q1("SELECT sha256 FROM public._fp_rehearsal WHERE name='mode_mig_runs'");
-  const runs = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
+  const runs = (await migRuns()).others.length;
   rec('C3', '_mig_runs : référence 0 avant la campagne ; lignes actuelles = lignes prouvées + lignes conservées', 'référence 0', `référence ${base && base.sha256}, actuel ${runs} (à supprimer ${delRuns.length}, conservées ${keptRuns.length})`, base && Number(base.sha256) === 0 && runs === delRuns.length + keptRuns.length, { fatal: true });
   await CTX.adm.query('BEGIN');
   let del;
@@ -508,7 +626,7 @@ async function cleanup() {
       (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_dc, (SELECT count(*) FROM public.doc_events WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ev,
       (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_lic, (SELECT count(*) FROM public.code_attempts WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_att`, [EMAILS]);
   rec('C5', 'plus aucun compte de test ni ligne résiduelle ou orpheline', 'tout à 0', jstr(left), Object.values(left).every((v) => v === 0), { fatal: true });
-  const runsAfter = (await q('SELECT run_id::text run_id FROM public._mig_runs')).map((r) => r.run_id);
+  const runsAfter = (await migRuns()).others.map((r) => r.run_id);
   rec('C5b', `_mig_runs : seules les lignes prouvées ont été supprimées ; ${keptRuns.length} ligne(s) CONSERVÉE(S) : ${attrib.filter((a) => !a.del).map((a) => a.run + ' (classe ' + a.cls + ')').join(', ') || 'aucune'}`, `${keptRuns.length} ligne(s) restantes, identiques aux lignes conservées`, `${runsAfter.length} ligne(s) restantes : ${runsAfter.map((r) => r.slice(0, 8)).join(', ') || 'aucune'}`, runsAfter.length === keptRuns.length && runsAfter.every((r) => keptRuns.includes(r)), { fatal: true });
   const structAfter = await struct();
   rec('C5c', 'structure inchangée : tables, RLS, politiques, fonctions publiques, déclencheurs, contraintes', jstr(structBefore), jstr(structAfter), jstr(structBefore) === jstr(structAfter), { fatal: true });
@@ -578,12 +696,12 @@ async function inspect() {
   rec('I3', 'les lignes qui ne sont pas à la campagne correspondent EXACTEMENT à l\'état préexistant (sauvegarde : 101 lignes)', 'aucune différence', unexplained.length ? 'différences : ' + unexplained.join(' ; ') : 'aucune différence', unexplained.length === 0);
   const orph = await q1(`SELECT (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int user_data, (SELECT count(*) FROM public.documents WHERE user_id NOT IN (SELECT id FROM auth.users))::int documents, (SELECT count(*) FROM public.doc_payments WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_payments, (SELECT count(*) FROM public.doc_history WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_history, (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int licenses, (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_counters`);
   rec('I4', 'aucune ligne orpheline (sans compte propriétaire)', 'tout à 0', jstr(orph), Object.values(orph).every((v) => v === 0));
-  const mr = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
-  out(`- Information : ${mr} ligne(s) dans _mig_runs (référence avant campagne : 0) — leur attribution est jugée par I7.`);
+  const mrI = await migRuns();
+  out(`- Information : ${mrI.others.length} ligne(s) dans _mig_runs hors exception documentée (référence avant campagne : 0) — leur attribution est jugée par I7. Ligne historique connue cff4cac4 : ${mrI.known.length ? 'présente (tolérée, non touchée)' : 'absente'}.`);
   out('\n### III bis. Lignes de `_mig_runs` : preuves de rattachement (référence 0 avant la campagne ; table exclue de l\'empreinte)');
   out('Méthode : une bascule (fp_doc_mode_set) écrit la ligne de mode ET la ligne `_mig_runs` dans UNE SEULE transaction ; deux lignes écrites par la même transaction portent le même `xmin`. Preuves, de la plus forte à la plus faible : (A) le rapport de la ligne cite un compte de la campagne ; (B) même transaction qu\'une ligne de mode / testeur / événement d\'un compte de la campagne (xmin identique) ; (C) simple proximité d\'horodatage — jamais considérée comme une preuve suffisante.');
   const first = us.reduce((m, r) => (!m || new Date(r.created_at) < new Date(m) ? r.created_at : m), null);
-  const runsList = await q('SELECT run_id::text run_id, mode, status, started_at, finished_at, xmin::text::bigint x, report::text rep FROM public._mig_runs ORDER BY started_at');
+  const runsList = mrI.others;
   const anchors = await q(`SELECT 'users' src, u.email, u.xmin::text::bigint x FROM auth.users u WHERE u.email = ANY($1)
       UNION ALL SELECT 'licence', u.email, l.xmin::text::bigint FROM public.licenses l JOIN auth.users u ON u.id=l.user_id WHERE u.email = ANY($1)
       UNION ALL SELECT 'testeur', u.email, t.xmin::text::bigint FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)
@@ -611,7 +729,31 @@ async function inspect() {
   out('\n**Lecture seule : rien n\'a été supprimé, basculé ni modifié.**');
 }
 
-const CMDS = { guardtests, test, cleanup, inspect };
+// ---------------------------------------------------------------- tests locaux de l'exception « ligne historique » (base LOCALE jetable uniquement, jamais Supabase)
+async function knownrun() {
+  if (!DRY) throw new Error('knownrun : répétition locale uniquement (UI_DRYRUN=1).');
+  CTX = await makeCtx();
+  const ins = (id, mode, status, at, rep) => CTX.adm.query('INSERT INTO public._mig_runs(run_id, mode, status, started_at, report) VALUES ($1::uuid,$2,$3,$4::timestamptz,$5::jsonb)', [id, mode, status, at, rep]);
+  const KNOWN = ['cff4cac4-0000-4000-8000-000000000001', 'apply', 'applied', '2026-10-22 11:58:03.125123+00', '{"dry_run": {"ok": true, "accounts": []}}'];
+  let m = await migRuns();
+  rec('K1', 'aucune ligne : rien d\'inattendu', '0 inattendue, 0 connue', `${m.others.length} / ${m.known.length}`, m.others.length === 0 && m.known.length === 0);
+  await ins(...KNOWN); m = await migRuns();
+  rec('K2', 'la ligne historique exacte est tolérée (et elle seule)', '0 inattendue, 1 connue', `${m.others.length} / ${m.known.length}`, m.others.length === 0 && m.known.length === 1);
+  await ins('11111111-0000-4000-8000-000000000002', 'apply', 'applied', '2026-10-22 12:30:00+00', '{"dry_run": {"accounts": []}}'); m = await migRuns();
+  rec('K3', 'toute AUTRE ligne en plus de la ligne connue fait échouer le contrôle', '1 inattendue', `${m.others.length} inattendue(s), ${m.known.length} connue(s)`, m.others.length === 1 && m.known.length === 1);
+  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text LIKE $1', ['11111111%']);
+  await ins('cff4cac4-0000-4000-8000-000000000003', 'apply', 'applied', '2026-10-22 11:58:03.200+00', '{"dry_run": {"accounts": []}}'); m = await migRuns();
+  rec('K4', 'même préfixe mais instant différent : NON toléré', '1 inattendue', `${m.others.length} inattendue(s)`, m.others.length === 1 && m.known.length === 1);
+  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text LIKE $1', ['cff4cac4-0000-4000-8000-000000000003']);
+  await ins('cff4cac4-0000-4000-8000-000000000004', 'apply', 'applied', '2026-10-22 11:58:03.125+00', '{"dry_run": {"accounts": [{"user": "abcd1234"}]}}'); m = await migRuns();
+  rec('K5', 'même préfixe et même instant mais rapport avec compte à migrer : NON toléré', '1 inattendue', `${m.others.length} inattendue(s)`, m.others.length === 1);
+  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text LIKE $1', ['cff4cac4-0000-4000-8000-000000000004']);
+  await ins('cff4cac4-0000-4000-8000-000000000005', 'rollback', 'rollback_applied', '2026-10-22 11:58:03.125+00', '{"dry_run": {"accounts": []}}'); m = await migRuns();
+  rec('K6', 'même préfixe et instant mais mode/statut différents : NON toléré', '1 inattendue', `${m.others.length} inattendue(s)`, m.others.length === 1);
+  CTX.dropDb();
+}
+
+const CMDS = { guardtests, test, cleanup, inspect, knownrun };
 (async () => {
   const cmd = process.argv[2];
   if (!CMDS[cmd]) { console.error('Commande : ' + Object.keys(CMDS).join(' | ')); process.exit(2); }

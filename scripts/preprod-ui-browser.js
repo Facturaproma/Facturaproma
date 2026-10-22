@@ -25,6 +25,10 @@ exports.run = async function run(h) {
   async function newDev(label) {
     const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
     const p = await ctx.newPage(); const log = [];
+    // hCaptcha : Auth.login() attend d'abord getCaptchaToken() ; un navigateur automatisé ne peut pas résoudre un défi hCaptcha, et signInWithPassword n'était alors JAMAIS appelé (reproduit en local : tests/integration/login-captcha.test.js).
+    // On bloque donc le script hCaptcha (l'application continue sans jeton). PRÉMISSE vérifiée en réel par le protocole : la préproduction accepte les connexions sans jeton captcha (« Captcha protection » non exigée). Les polices externes sont bloquées comme dans les tests locaux.
+    await p.route(/hcaptcha\.com/, (r) => r.abort());
+    await p.route(/googleapis|gstatic/, (r) => r.abort());
     p.on('pageerror', (e) => errors.push(label + ' : ' + clip(e.message, 200)));
     p.on('dialog', (d) => d.accept());
     p.on('response', async (r) => {

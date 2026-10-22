@@ -6,9 +6,9 @@
   "scripts": {
     "test": "node tests/app.test.js && node tests/regression.test.js && node tests/docstore.unit.test.js",
     "test:sql": "bash tests/sql/run.sh",
-    "test:integration": "node tests/integration/cloud.test.js && node tests/integration/concurrence.test.js && node tests/integration/migration.test.js && node tests/integration/mode.test.js && node tests/integration/docstore.browser.test.js",
+    "test:integration": "node tests/integration/cloud.test.js && node tests/integration/concurrence.test.js && node tests/integration/migration.test.js && node tests/integration/mode.test.js && node tests/integration/docstore.browser.test.js && node tests/integration/login-captcha.test.js",
     "test:all": "npm test && npm run test:sql && npm run test:integration && npm run test:preprod-local",
-    "test:preprod-local": "node tests/preprod/apply.local.test.js && node tests/preprod/check.mock.test.js && node tests/preprod/backup.local.test.js && node tests/preprod/scan.test.js && node tests/preprod-build.test.js"
+    "test:preprod-local": "node tests/preprod/apply.local.test.js && node tests/preprod/check.mock.test.js && node tests/preprod/backup.local.test.js && node tests/preprod/scan.test.js && node tests/preprod-build.test.js && UI_DRYRUN=1 node scripts/preprod-ui-validation.js knownrun && UI_DRYRUN=1 node scripts/preprod-ui-validation.js guardtests && UI_DRYRUN=1 UI_DRY_KNOWNROW=1 node scripts/preprod-ui-validation.js test && UI_DRYRUN=1 UI_DRY_KNOWNROW=1 node scripts/preprod-ui-validation.js cleanup"
   },
   "devDependencies": {
     "jspdf": "2.5.1",
