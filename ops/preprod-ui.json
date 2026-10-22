@@ -1,5 +1,5 @@
 {
   "_comment": "Pousser une modification de CE fichier sur la branche validation/integration-documents déclenche « preprod-ui » (PRÉPRODUCTION uniquement). phase = idle (rien) | test (cible, sauvegarde restaurée et vérifiée, comptes jetables ui-*, essais réels protocole + navigateur) | cleanup (supprime uniquement les comptes de cette campagne). Aucune écriture en production, aucun déploiement, aucun nettoyage automatique.",
-  "phase": "idle",
-  "nonce": "15"
+  "phase": "journey",
+  "nonce": "16"
 }
