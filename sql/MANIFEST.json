@@ -96,6 +96,16 @@
         "00",
         "06"
       ]
+    },
+    {
+      "file": "20_formules_configurables.sql",
+      "role": "Formules d'abonnement configurables par l'owner (table plans, owner_save_plan) ; durée appliquée à l'activation",
+      "reexecutable": true,
+      "depend": [
+        "06",
+        "09",
+        "10"
+      ]
     }
   ],
   "exclus": [

@@ -10622,6 +10622,7 @@ const License = {
         return {
             type: r.type, status: 'active', tier: r.type,
             startedAt: r.started_at, expiresAt: expires, graceUntil: graceUntil,
+            planKey: r.plan_key || null, planLabel: r.plan_label || null,
             promoCodeUsed: null
         };
     },
@@ -10917,7 +10918,49 @@ function updateTrialUI() {
     if (daysEl) daysEl.textContent = daysLeft;
 }
 
+// ═══ Formules configurées par l'owner (table plans) : proposées automatiquement, mêmes fonctionnalités que les autres ═══
+let CUSTOM_PLANS = [];
+function planPeriodLabel(days) {
+    const d = Number(days);
+    if (d === 30) return 'mois';
+    if (d === 365) return 'an';
+    if (d % 30 === 0) return (d / 30) + ' mois';
+    return d + ' jours';
+}
+function planRank(days) { return days >= 365 ? 3 : days >= 183 ? 2 : 1; }
+function renderCustomPlanCards() {
+    const grid = document.getElementById('pricingCards');
+    if (!grid) return;
+    grid.querySelectorAll('[data-custom-plan]').forEach(n => n.remove());
+    CUSTOM_PLANS.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'pricing-tier';
+        card.setAttribute('data-custom-plan', p.key);
+        const per = planPeriodLabel(p.duration_days);
+        card.innerHTML = `<h3>🧩 ${escapeHtml(p.label)}</h3>` +
+            `<div class="tier-tagline">${escapeHtml(p.tagline || '')}</div>` +
+            `<div class="tier-price"><span>${escapeHtml(String(Number(p.price_dh)))}</span><span class="tier-price-period"> DH/${escapeHtml(per)}</span></div>` +
+            `<ul><li>Tout illimité pendant ${escapeHtml(String(p.duration_days))} jours</li><li>Sync cloud multi-appareils</li><li>Module CNSS + Impôts</li><li>Export comptable (Sage, EBP, FEC)</li><li>Mises à jour incluses</li></ul>` +
+            `<button class="btn btn-secondary" style="width: 100%;">Choisir ${escapeHtml(p.label)}</button>`;
+        card.querySelector('button').addEventListener('click', () => purchaseLicense(p.key));
+        grid.appendChild(card);
+    });
+}
+async function loadCustomPlans() {
+    if (!USE_SUPABASE || !ensureSupabase()) return;
+    try {
+        const { data, error } = await supaClient.from('plans').select('key,label,price_dh,duration_days,tagline,sort_order').eq('active', true).order('sort_order', { ascending: true });
+        if (error) throw error;
+        CUSTOM_PLANS = data || [];
+    } catch (e) {
+        console.warn('Formules indisponibles', e && e.message);
+        CUSTOM_PLANS = [];
+    }
+    renderCustomPlanCards();
+}
+
 function renderLicensePage() {
+    loadCustomPlans();   // asynchrone : ajoute les formules de l'owner à la page
     loadContactInfo();   // asynchrone : met à jour le bloc « Besoin d'aide ? » dès que les coordonnées sont lues
     const info = License.get();
     const isLicensed = isUserLicensed();
@@ -10996,7 +11039,7 @@ function renderLicensePage() {
             annual:     { label: '🏆 Annuel',     upgradeMsg: '🎉 Vous bénéficiez de notre meilleur tarif' },
             business:   { label: '👔 Business (legacy)', upgradeMsg: '' }
         };
-        const t = TIER_DISPLAY[info.type] || { label: info.type, upgradeMsg: '' };
+        const t = info.planLabel ? { label: '🧩 ' + info.planLabel, upgradeMsg: '' } : (TIER_DISPLAY[info.type] || { label: info.type, upgradeMsg: '' });
         
         document.getElementById('licenseStatusLabel').textContent = `${t.label} actif`;
         heroTitle.textContent = `${t.label} actif`;
@@ -11182,6 +11225,7 @@ async function purchaseLicense(tier) {
         lifetime:   { price: 0,   label: '🎁 À vie (offert)', period: 'à vie' },
         business:   { price: 199, label: '👔 Business',  period: 'mois' }
     };
+    CUSTOM_PLANS.forEach(p => { TIER_CONFIG[p.key] = { price: Number(p.price_dh), label: '🧩 ' + p.label, period: planPeriodLabel(p.duration_days), rank: planRank(p.duration_days) }; });
     
     const config = TIER_CONFIG[tier];
     if (!config) {
@@ -11205,8 +11249,8 @@ async function purchaseLicense(tier) {
         currentLicense.status === 'active' && !License.isExpired()) {
         // Abonnement actif → autoriser uniquement upgrade vers tier supérieur
         const tierOrder = { monthly: 1, semestrial: 2, annual: 3, business: 1 };
-        const currentRank = tierOrder[currentLicense.type] || 0;
-        const newRank = tierOrder[tier] || 0;
+        const currentRank = (currentLicense.planKey && TIER_CONFIG[currentLicense.planKey] && TIER_CONFIG[currentLicense.planKey].rank) || tierOrder[currentLicense.type] || 0;
+        const newRank = (TIER_CONFIG[tier] && TIER_CONFIG[tier].rank) || tierOrder[tier] || 0;
         
         if (newRank <= currentRank) {
             showToast(`Vous avez déjà un abonnement actif (${TIER_CONFIG[currentLicense.type]?.label || currentLicense.type})`, 'info');
