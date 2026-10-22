@@ -91,9 +91,12 @@
             border-right: 1px solid var(--border);
             padding: 20px 16px;
             position: fixed;
+            top: 0;          /* sans cela, le menu se place sous le bandeau d'essai (sticky) et dépasse en bas de l'écran */
+            left: 0;
             height: 100vh;
             height: 100dvh;
             overflow-y: auto;
+            overscroll-behavior: contain;
             padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
             display: flex;
             flex-direction: column;
@@ -1589,6 +1592,12 @@
             cursor: pointer;
             transition: all 0.2s;
         }
+
+        /* Lisibilité : texte foncé sur le fond doré (le texte doré sur doré était invisible) */
+        .trial-badge .trial-badge-label { color: var(--ink-soft); }
+        .trial-badge .trial-badge-value { color: var(--ink); }
+        .trial-badge.urgent .trial-badge-value { color: var(--danger); }
+        .trial-badge .trial-badge-cta { color: var(--ink); }
 
         .trial-badge:hover {
             transform: translateY(-1px);
