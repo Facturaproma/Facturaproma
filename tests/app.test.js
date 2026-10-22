@@ -171,6 +171,37 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   check('PDF facture téléchargé (FAC-' + yr + '-001.pdf)', f && f.suggestedFilename() === `FAC-${yr}-001.pdf`, f && f.suggestedFilename());
   if (f) { const pth = await f.path(); const txt = fs.readFileSync(pth).toString('latin1'); check('PDF valide (en-tête %PDF)', txt.startsWith('%PDF')); }
 
+  // --- 7 bis. WhatsApp : PDF en pièce jointe via le partage du téléphone, sinon repli ; brouillon non présenté comme facture définitive ---
+  const shared = await E(async (id) => {
+    window.__shared = null; window.__opened = null;
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: async (d) => { window.__shared = { n: d.files.length, name: d.files[0].name, type: d.files[0].type, size: d.files[0].size, text: d.text }; }, configurable: true });
+    window.open = (u) => { window.__opened = u; };
+    await sendDocWhatsApp(id, 'invoice');
+    return { shared: window.__shared, opened: window.__opened };
+  }, i1.id);
+  check('WhatsApp : le PDF est partagé en pièce jointe (type PDF, non vide, nom FAC-…)', shared.shared && shared.shared.n === 1 && shared.shared.type === 'application/pdf' && shared.shared.size > 1000 && /^FAC-.*\.pdf$/.test(shared.shared.name), JSON.stringify(shared.shared));
+  check('WhatsApp : le message accompagne le PDF, sans ouvrir de lien wa.me', shared.shared && /Montant TTC/.test(shared.shared.text) && shared.opened === null);
+  const fb = await E(async (id) => {
+    window.__opened = null;
+    Object.defineProperty(navigator, 'canShare', { value: () => false, configurable: true });
+    await sendDocWhatsApp(id, 'invoice'); await new Promise(r => setTimeout(r, 900));
+    return window.__opened;
+  }, i1.id);
+  check('WhatsApp sans partage de fichier : repli wa.me avec le message', typeof fb === 'string' && /^https:\/\/wa\.me\//.test(fb));
+  const ab = await E(async (id) => {
+    window.__opened = null;
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: async () => { const e = new Error('x'); e.name = 'AbortError'; throw e; }, configurable: true });
+    await sendDocWhatsApp(id, 'invoice'); await new Promise(r => setTimeout(r, 900));
+    return window.__opened;
+  }, i1.id);
+  check('partage annulé par l\'utilisateur : aucun repli intempestif', ab === null);
+  const msgs = await E(() => ({ draft: whatsappDocMessage({ number: 'BRO-R8KQJI', totalTTC: 120, date: '2026-10-22', dueDate: '2026-11-21' }, false, { name: 'Nawal SA', rib: '123' }),
+    issued: whatsappDocMessage({ number: 'FAC-2026-0001', totalTTC: 120, date: '2026-10-22' }, false, { name: 'Nawal SA', rib: '123' }) }));
+  check('brouillon : pas de numéro BRO-… ni de RIB, mention « numéro définitif attribué à l\'émission »', !/BRO-/.test(msgs.draft) && /brouillon de facture/.test(msgs.draft) && /attribué à l'émission/.test(msgs.draft) && !/RIB/.test(msgs.draft));
+  check('facture émise : numéro réel et RIB conservés', /FAC-2026-0001/.test(msgs.issued) && /RIB : 123/.test(msgs.issued));
+
   // --- 8. Persistance après rechargement ---
   const before = await E(() => Storage.get('invoices', []).map(i => i.number).sort().join(','));
   await p.reload(); await p.waitForTimeout(1500);
