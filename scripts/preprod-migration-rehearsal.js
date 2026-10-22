@@ -293,6 +293,23 @@ async function rehearse() {
   if (!(await q1("SELECT to_regclass('public.documents') t")).t) throw new Error('REFUS : sql/15 non installé.');
   await createAccounts(c);                                   // nouveaux mots de passe aléatoires pour cette session
   await checkForeign(c, 'avant la répétition');
+  // Réentrance : si une exécution précédente s'est arrêtée en cours de route, on remet à zéro le NOUVEAU stockage des seuls comptes de test,
+  // à condition que leur ancien stockage soit exactement celui créé par « seed » (sinon : arrêt, nettoyer puis refaire « prepare »).
+  {
+    const sd = (await q1("SELECT detail->'hashes' hs FROM public._fp_rehearsal WHERE name='legacy_seed'")).hs;
+    const cur = async (e) => (await q1("SELECT md5(coalesce(string_agg(key||value::text||updated_at::text,'|' ORDER BY key COLLATE \"C\"),'')) h FROM public.user_data WHERE user_id=(SELECT id FROM auth.users WHERE email=$1)", [e])).h;
+    for (const k of ['a', 'b', 'd', 'e']) if ((await cur(`mig-${k}${DOMAIN}`)) !== sd[`mig-${k}${DOMAIN}`].h) throw new Error('REFUS : l\'ancien stockage de mig-' + k + ' a changé depuis « seed » (exécution précédente avancée) : lancer cleanup puis prepare.');
+    const ids = Object.values(us);
+    const had = await q1('SELECT (SELECT count(*) FROM public.documents WHERE user_id::text = ANY($1))::int d', [ids]);
+    await c.query('BEGIN');
+    await c.query('ALTER TABLE public.documents DISABLE TRIGGER trg_guard_documents; ALTER TABLE public.doc_payments DISABLE TRIGGER trg_guard_doc_payments');
+    for (const t of ['doc_payments', 'doc_history', 'doc_deleted', 'documents', '_mig_source_backup', '_mig_conflicts']) await c.query(`DELETE FROM public.${t} WHERE user_id::text = ANY($1)`, [ids]);
+    await c.query('DELETE FROM public._mig_runs');
+    await c.query('ALTER TABLE public.documents ENABLE TRIGGER trg_guard_documents; ALTER TABLE public.doc_payments ENABLE TRIGGER trg_guard_doc_payments');
+    await c.query('COMMIT');
+    const tg = await q("SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('trg_guard_documents','trg_guard_doc_payments')");
+    ck(`remise à zéro du nouveau stockage des 5 comptes de test (${had.d} document(s) retiré(s)) ; ancien stockage de mig-a, b, d, e identique à « seed » ; déclencheurs de garde de nouveau actifs`, tg.length === 2 && tg.every((t) => t.tgenabled === 'O'), jstr(tg));
+  }
   const udHash = async (uid) => (await q1("SELECT md5(coalesce(string_agg(key||value::text||updated_at::text,'|' ORDER BY key COLLATE \"C\"),'')) h FROM public.user_data WHERE user_id=$1::uuid", [uid])).h;
   const cnt = async (uid) => q1(`SELECT (SELECT count(*) FROM public.documents WHERE user_id=$1::uuid)::int d, (SELECT count(*) FROM public.doc_payments WHERE user_id=$1::uuid)::int p, (SELECT count(*) FROM public.doc_history WHERE user_id=$1::uuid)::int h`, [uid]);
 
@@ -319,7 +336,15 @@ async function rehearse() {
   ck('mig-c : migration ARRÊTÉE avant toute copie (bloquants) — aucune ligne copiée, aucune sauvegarde faite, ancien stockage intact',
     r.status === 'stopped' && r.stage === 'dry_run' && (await cnt(us.c)).d === 0 && (await q1('SELECT count(*)::int n FROM public._mig_source_backup WHERE user_id=$1::uuid', [us.c])).n === 0 && (await udHash(us.c)) === hC, jstr(r).slice(0, 250));
   // décision humaine simulée : corriger les anomalies (supprimer les doublons/éléments invalides) puis relancer
+  // (le verrou serveur interdit de renuméroter une facture émise par l'API : la correction est une intervention d'administration, dans une transaction, sur ce seul compte de test)
+  await c.query('BEGIN');
+  await c.query('ALTER TABLE public.user_data DISABLE TRIGGER USER');
   await c.query(`UPDATE public.user_data SET value = $2::jsonb WHERE user_id=$1::uuid AND key='invoices'`, [us.c, jstr([{ id: 'd1', type: 'invoice', number: FN('FAC', 1), status: 'sent', totalTTC: 10 }, { id: 'd2', type: 'invoice', number: FN('FAC', 2), status: 'sent', totalTTC: 20 }])]);
+  await c.query(`UPDATE public.user_data SET value = '[]'::jsonb WHERE user_id=$1::uuid AND key='payments'`, [us.c]);
+  await c.query('ALTER TABLE public.user_data ENABLE TRIGGER USER');
+  await c.query(`INSERT INTO public.doc_counters(user_id, doc_type, last_value) VALUES ($1::uuid,'invoice',2) ON CONFLICT (user_id, doc_type) DO UPDATE SET last_value = GREATEST(public.doc_counters.last_value, 2)`, [us.c]);
+  await c.query('COMMIT');
+  ck('mig-c : correction d\'administration appliquée ; déclencheurs utilisateur de user_data de nouveau actifs', (await q1("SELECT count(*)::int n FROM pg_trigger WHERE tgrelid='public.user_data'::regclass AND NOT tgisinternal AND tgenabled <> 'O'")).n === 0);
   r = await run(us.c, true); ck('mig-c : après correction des doublons par décision humaine, la migration réussit (2 documents)', r.status === 'applied' && (await cnt(us.c)).d === 2, jstr(r).slice(0, 250));
   // mig-d : collisions
   r = await run(us.d, true); n = await cnt(us.d);
