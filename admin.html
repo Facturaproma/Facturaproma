@@ -845,6 +845,11 @@
                         <option value="expired">Expirés</option>
                         <option value="suspended">Suspendus</option>
                     </select>
+                    <select id="filterConnected" class="search-input" onchange="renderUsers()" style="max-width: 210px;">
+                        <option value="real">Comptes connectés</option>
+                        <option value="unconfirmed">Jamais connectés (non confirmés)</option>
+                        <option value="everyone">Tous (confirmés ou non)</option>
+                    </select>
                     <input type="text" class="search-input" id="searchUsers" placeholder="🔍 Rechercher par email..." oninput="renderUsers()">
                     <button class="btn btn-secondary btn-sm" onclick="exportAccountsCSV()">⬇️ CSV</button>
                 </div>
@@ -2718,6 +2723,10 @@ const PAID_TYPES = ['monthly', 'semestrial', 'annual', 'business', 'lifetime'];
 const DAY_MS = 86400000;
 const PLAN_LABEL = { trial: 'Essai', monthly: 'Mensuel', semestrial: 'Semestriel', annual: 'Annuel', business: 'Business', lifetime: 'À vie', founder: 'Fondateur' };
 
+// Compte « réel » : s'est déjà connecté (lien de confirmation cliqué), ou possède une offre payante, ou fait partie de l'équipe.
+// Les inscriptions jamais confirmées (adresses bidon) ne comptent pas et sont masquées par défaut.
+function isRealAccount(a) { return !!(a.last_sign_in || a.is_staff || PAID_TYPES.includes(a.type)); }
+
 function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -2867,7 +2876,7 @@ function renderActionCenter() {
     }
 
     if (accountsAvailable) {
-        const accts = allAccounts.filter(a => !a.is_staff);
+        const accts = allAccounts.filter(a => !a.is_staff && isRealAccount(a));
         const group = (title, list, kind, detailFn) => {
             if (!list.length) return;
             blocks.push(`<div style="margin-top:14px;"><div style="font-weight:700; font-size:13px; margin-bottom:2px;">${title} <span class="badge badge-mute">${list.length}</span></div>` +
@@ -2902,7 +2911,7 @@ function renderDashboard() {
     document.getElementById('statRevenueNote').textContent = `${Math.round(monthRevenue).toLocaleString('fr-FR')} DH ce mois-ci`;
 
     if (accountsAvailable) {
-        const accts = allAccounts.filter(a => !a.is_staff);
+        const accts = allAccounts.filter(a => !a.is_staff && isRealAccount(a));
         const by = st => accts.filter(a => acctState(a) === st);
         const trials = by('trial'), trialsExp = by('trial_expired'), paid = by('paid');
         const everPaid = accts.filter(a => PAID_TYPES.includes(a.type)).length;
@@ -3179,8 +3188,12 @@ function renderUsers() {
 
     const search = (document.getElementById('searchUsers')?.value || '').toLowerCase();
     const filter = document.getElementById('filterUsers')?.value || 'all';
+    const scope = document.getElementById('filterConnected')?.value || 'real';
+    const hidden = allAccounts.filter(a => !isRealAccount(a)).length;
     const rows = allAccounts.filter(a => {
         if (search && !(a.email || '').toLowerCase().includes(search)) return false;
+        if (scope === 'real' && !isRealAccount(a)) return false;
+        if (scope === 'unconfirmed' && isRealAccount(a)) return false;
         const st = acctState(a);
         if (filter === 'trial') return st === 'trial';
         if (filter === 'paid') return st === 'paid';
@@ -3195,7 +3208,7 @@ function renderUsers() {
         return;
     }
 
-    tbody.innerHTML = rows.map(a => {
+    tbody.innerHTML = (scope === 'real' && hidden ? `<tr><td colspan="8" class="empty" style="padding:8px;"><small>${hidden} inscription(s) jamais connectée(s) masquée(s) — voir « Jamais connectés ».</small></td></tr>` : '') + rows.map(a => {
         const st = acctState(a);
         const d = acctDaysLeft(a);
         const plan = PLAN_LABEL[acctPlanKey(a)] || a.type;
@@ -5122,7 +5135,7 @@ function renderTiers() {
 
     let trials = 0, trialsExp = 0, mActive = 0, aActive = 0, fActive = 0;
     if (accountsAvailable) {
-        const accts = allAccounts.filter(a => !a.is_staff);
+        const accts = allAccounts.filter(a => !a.is_staff && isRealAccount(a));
         trials = accts.filter(a => acctState(a) === 'trial').length;
         trialsExp = accts.filter(a => acctState(a) === 'trial_expired').length;
         const paid = accts.filter(a => acctState(a) === 'paid');
