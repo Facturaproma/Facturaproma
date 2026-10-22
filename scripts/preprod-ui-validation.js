@@ -442,8 +442,13 @@ async function cleanup() {
   const totalUsers = (await q1('SELECT count(*)::int n FROM auth.users')).n;
   out('- Comptes ciblés (adresse exacte) : ' + idRows.map((r) => `${r.email} / ${r.id} / créé ${new Date(r.created_at).toISOString()}`).join(' ; ') + `. Comptes totaux dans la base : ${totalUsers}.`);
   const inWin = scope && Array.isArray(scope.created_between) && idRows.every((r) => new Date(r.created_at) >= new Date(scope.created_between[0]) && new Date(r.created_at) <= new Date(scope.created_between[1]));
-  const runsNow = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
-  rec('C0', `identité : exactement ${EMAILS.length} comptes aux adresses prévues, tous créés pendant le run ${scope && scope.run} (${scope && scope.created_between && scope.created_between.join(' → ')}), aucune ligne _mig_runs`, `${EMAILS.length} comptes, fenêtre respectée, _mig_runs = 0`, `${idRows.length} comptes, fenêtre ${inWin ? 'respectée' : 'NON respectée'}, _mig_runs = ${runsNow}`, idRows.length === EMAILS.length && !!inWin && runsNow === 0, { fatal: true, proof: 'adresses exactes, UUID et dates affichés ci-dessus' });
+  // _mig_runs : référence 0 avant la campagne ; les bascules de comptes jetables en créent (une par bascule / retour arrière). On ne supprime QUE celles créées dans la fenêtre de la campagne, après la création des comptes.
+  const runsAll = await q('SELECT run_id::text run_id, started_at FROM public._mig_runs ORDER BY started_at');
+  const winEnd = scope && scope.created_between ? scope.created_between[1] : null, winRuns = scope && scope.runs_until ? scope.runs_until : winEnd;
+  const firstCreated = idRows.reduce((m, r) => (!m || new Date(r.created_at) < m ? new Date(r.created_at) : m), null);
+  const runsInWin = runsAll.filter((r) => firstCreated && winRuns && new Date(r.started_at) >= firstCreated && new Date(r.started_at) <= new Date(winRuns));
+  out(`- Lignes \`_mig_runs\` : ${runsAll.length} au total, ${runsInWin.length} dans la fenêtre de la campagne (${runsAll.map((r) => r.run_id.slice(0, 8) + '@' + new Date(r.started_at).toISOString()).join(', ') || 'aucune'}).`);
+  rec('C0', `identité : exactement ${EMAILS.length} comptes aux adresses prévues, tous créés pendant le run ${scope && scope.run} (${scope && scope.created_between && scope.created_between.join(' → ')}), et toutes les lignes _mig_runs sont postérieures à leur création et dans la fenêtre`, `${EMAILS.length} comptes, fenêtre respectée, toutes les lignes _mig_runs dans la fenêtre`, `${idRows.length} comptes, fenêtre ${inWin ? 'respectée' : 'NON respectée'}, _mig_runs ${runsInWin.length}/${runsAll.length} dans la fenêtre`, idRows.length === EMAILS.length && !!inWin && runsInWin.length === runsAll.length, { fatal: true, proof: 'adresses exactes, UUID, dates et lignes _mig_runs affichés ci-dessus' });
   const st = await q(`SELECT u.email, COALESCE((SELECT mode FROM public.doc_store_mode m WHERE m.user_id=u.id),'legacy') mode, (SELECT count(*) FROM public.documents d WHERE d.user_id=u.id)::int docs, (SELECT count(*) FROM public.doc_payments d WHERE d.user_id=u.id)::int pays,
       (SELECT count(*) FROM public.doc_history d WHERE d.user_id=u.id)::int hist, (SELECT count(*) FROM public.user_data d WHERE d.user_id=u.id)::int ud FROM auth.users u WHERE u.id::text = ANY($1) ORDER BY 1`, [uids]);
   out('| Compte | mode | documents | paiements | journal | lignes user_data |\n|---|---|---|---|---|---|\n' + st.map((r) => `| ${r.email.split('@')[0]} | ${r.mode} | ${r.docs} | ${r.pays} | ${r.hist} | ${r.ud} |`).join('\n'));
@@ -459,13 +464,13 @@ async function cleanup() {
   await CTX.adm.query('DELETE FROM public._mig_source_backup WHERE user_id::text = ANY($1)', [uids]);
   await CTX.adm.query('DELETE FROM public._mig_conflicts WHERE user_id::text = ANY($1)', [uids]);
   await CTX.adm.query('DELETE FROM public.code_attempts WHERE user_id::text = ANY($1)', [uids]);
-  await CTX.adm.query('DELETE FROM public._mig_runs');
+  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text = ANY($1)', [runsInWin.map((r) => r.run_id)]);   // uniquement les lignes de la campagne (identifiées en C0)
   const del = await CTX.adm.query('DELETE FROM auth.users WHERE id::text = ANY($1) AND email = ANY($2)', [uids, EMAILS]);
   await CTX.adm.query('COMMIT');
   rec('C4', 'comptes de test supprimés (par adresse exacte, eux seuls)', `${us.length}`, `${del.rowCount}`, del.rowCount === us.length, { fatal: true });
   const left = await q1(`SELECT (SELECT count(*) FROM auth.users WHERE email = ANY($1))::int u, (SELECT count(*) FROM public.documents)::int d, (SELECT count(*) FROM public.doc_payments)::int p, (SELECT count(*) FROM public.doc_history)::int h,
       (SELECT count(*) FROM public.doc_deleted)::int g, (SELECT count(*) FROM public.doc_store_mode)::int m, (SELECT count(*) FROM public.doc_store_testers)::int t, (SELECT count(*) FROM public._mig_source_backup)::int b,
-      (SELECT count(*) FROM public._mig_conflicts)::int cf, (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ud,
+      (SELECT count(*) FROM public._mig_conflicts)::int cf, (SELECT count(*) FROM public._mig_runs)::int runs, (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ud,
       (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_dc, (SELECT count(*) FROM public.doc_events WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ev,
       (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_lic, (SELECT count(*) FROM public.code_attempts WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_att`, [EMAILS]);
   rec('C5', 'plus aucun compte de test ni ligne résiduelle ou orpheline', 'tout à 0', jstr(left), Object.values(left).every((v) => v === 0), { fatal: true });
