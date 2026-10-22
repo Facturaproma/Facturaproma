@@ -422,7 +422,7 @@ async function test() {
 
   // ---------- concurrence réelle : bascules pendant des écritures ----------
   out('\n### 14. Concurrence réelle sur Supabase : bascules pendant des écritures');
-  const flipRetry = async (uid, mode) => { for (let i = 0; i < 6; i++) { const x = await flip(uid, mode); if (!x.error || !/deadlock/i.test(x.error)) return x; } return { error: 'trop de blocages' }; };
+  const flipRetry = async (uid, mode) => { for (let i = 0; i < 8; i++) { const x = await flip(uid, mode); if (x.reason === 'ACTIVITE_RECENTE_ANCIEN_APPAREIL') { await sleep(150); continue; } if (!x.error || !/deadlock/i.test(x.error)) return x; } return { error: 'trop de blocages ou activité récente persistante' }; };   // reprises légitimes uniquement
   const W = 24;
   // x : legacy → documents pendant des écritures concurrentes d'un ancien appareil. Chaque écrivain garde UNE connexion (limite du pooleur) ; SQLSTATE et message de chaque erreur sont enregistrés.
   const INFRA_RE = /max clients|pool|too many|terminat|timeout|timed out|ECONN|EMAXCONN|connection|reset|socket/i;

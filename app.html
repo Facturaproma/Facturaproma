@@ -26,6 +26,8 @@
     
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+    <!-- Nouveau stockage « une ligne par document » : PRÉPARATION, préproduction + comptes de test + mode décidé par le serveur (voir docstore.js). Absent/en échec => comportement historique inchangé. -->
+    <script src="docstore.js"></script>
     
     <!-- Service Worker Registration -->
     <script>
@@ -5330,9 +5332,15 @@ const SyncManager = {
                 // Le sync se fait via Storage.set qui appelle déjà Supabase
                 // Pour les anciennes modifications, juste re-déclencher la sauvegarde
                 if (change.type === 'storage' && change.key) {
+                    if (DocStoreGlue.active() && DOC_KEYS.indexOf(change.key) >= 0) {
+                        // nouveau stockage : ces clés ne passent plus par user_data (file propre à docstore.js)
+                        console.warn('[Sync] changement ancien format ignoré (nouveau stockage actif) :', change.key);
+                        this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id);
+                        continue;
+                    }
                     const value = Storage.get(change.key);
                     if (window._supabaseClient && Storage._currentUserId) {
-                        await window._supabaseClient
+                        const { error: upErr } = await window._supabaseClient
                             .from('user_data')
                             .upsert({
                                 user_id: Storage._currentUserId,
@@ -5340,6 +5348,18 @@ const SyncManager = {
                                 value: value,
                                 updated_at: new Date().toISOString()
                             }, { onConflict: 'user_id,key' });
+                        if (upErr) {
+                            // l'erreur n'est plus masquée : refus de mode / licence / verrouillage = retirés avec message ; réseau = conservé en file
+                            if (DocStoreGlue.handleLegacyRefusal(upErr, change.key)) { continue; }
+                            if (upErr.code === '42501' || /row-level security/i.test(upErr.message || '')) { try { License.refresh(); } catch {} console.warn('[Sync] écriture refusée (licence) :', change.key); }
+                            else if (/FACTURE_VERROUILLEE|NUMERO_EN_DOUBLE|NUMERO_NON_ATTRIBUE/.test(upErr.message || '')) {
+                                console.warn('[Sync] écriture refusée (facture émise verrouillée) :', change.key);
+                                try { showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error'); } catch {}
+                                this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id);
+                                try { await Storage.loadFromCloud(); renderInvoices(); } catch {}
+                                continue;
+                            } else { throw upErr; }
+                        }
                     }
                 }
                 synced++;
@@ -5697,6 +5717,7 @@ async function forceLogout(reason) {
     try { localStorage.setItem(SessionPolicy.K_MSG, reason); } catch {}
     Storage._cache = {};
     Storage._currentUserId = null;
+    DocStoreGlue.reset();
     SessionPolicy._hideWarning();
     try { document.getElementById('loginForm').reset(); document.getElementById('signupForm').reset(); } catch {}
     try { switchAuthTab('login'); } catch {}
@@ -5871,6 +5892,145 @@ const Auth = {
 };
 
 // ============================================
+// NOUVEAU STOCKAGE (préparation, préproduction uniquement) — glue entre Storage et docstore.js
+// Une seule source de vérité par compte : legacy (user_data) OU documents. Le mode est décidé par le SERVEUR (get_doc_mode) ;
+// ce code ne l'active jamais sur la seule foi d'un indicateur local, ni hors build de préproduction, ni hors compte de test.
+// ============================================
+const DOC_KEYS = ['invoices', 'quotes', 'payments', 'docLog'];
+const DocStoreGlue = {
+    store: null,
+    mode: 'legacy',            // legacy | documents | blocked
+    refused: null,             // 'nouveau' : l'ancien chemin a reçu MODE_NOUVEAU_STOCKAGE (le compte est passé au nouveau stockage)
+    _listeners: false,
+    _lastReload: 0,
+    usesDocuments() { return this.mode === 'documents'; },
+    active() { return this.mode === 'documents' || this.mode === 'blocked'; },
+    // Les 4 clés ne s'écrivent que par UN chemin. 'refused' : écriture refusée localement, avec message (jamais silencieuse).
+    route(baseKey) {
+        if (DOC_KEYS.indexOf(baseKey) < 0) return null;
+        if (this.refused) return 'refused';
+        if (this.mode === 'blocked') return 'refused';
+        if (this.mode === 'documents') { const st = this.store && this.store.status(); return (!st || st.halted) ? 'refused' : 'documents'; }
+        return null;
+    },
+    refusedToast() {
+        const t = Date.now();
+        if (this._toastAt && t - this._toastAt < 4000) return;
+        this._toastAt = t;
+        try { showToast(this.refused ? '🔒 Ce compte utilise le nouveau stockage (MODE_NOUVEAU_STOCKAGE) : rechargez l\'application. Modification non enregistrée.' : '🔒 Nouveau stockage indisponible ou arrêté : modification non enregistrée. Voir le bandeau en bas de page.', 'error'); } catch {}
+    },
+    reset() {
+        try { if (this.store) this.store.reset(); } catch {}
+        this.store = null; this.mode = 'legacy'; this.refused = null;
+        this.renderBanner();
+    },
+    async start(userId) {
+        this.reset();
+        if (typeof DocStore === 'undefined' || typeof supaClient === 'undefined' || !supaClient) return { active: false };
+        try {
+            let email = ''; try { const u = await Auth.getCurrentUser(); email = (u && u.email) || ''; } catch {}
+            const self = this;
+            this.store = DocStore.createStore({
+                client: supaClient, userId, email, url: SUPABASE_URL, storage: localStorage,
+                uuid: uuid,
+                notify: (lvl, msg) => { try { showToast(msg, lvl === 'error' ? 'error' : lvl === 'warning' ? 'warning' : 'success'); } catch {} },
+                onChange: () => self.renderBanner(),
+                onReload: (state) => { self.install(state); self.rerender(); },
+                onApply: (key, doc, op, id) => self.apply(key, doc, op, id)
+            });
+            const r = await this.store.start();
+            this.mode = r.mode === 'documents' ? 'documents' : (r.mode === 'blocked' ? 'blocked' : 'legacy');
+            if (this.mode === 'documents') { this.listen(); setTimeout(() => { try { this.store.flushSoon(); } catch {} }, 300); }   // reprise : envoie la file persistée (rejouable grâce aux op_id)
+            this.renderBanner();
+            return { active: this.active(), state: r.state || null };
+        } catch (err) {
+            // jamais de repli silencieux sur l'écriture ancien format : le compte reste en lecture seule pour ces 4 clés
+            console.error('[DocStore] démarrage impossible', err);
+            this.mode = 'blocked'; this.renderBanner();
+            return { active: true, state: null };
+        }
+    },
+    install(state) {
+        DOC_KEYS.forEach(k => {
+            if (!state || !Array.isArray(state[k])) return;
+            Storage._cache[k] = state[k];
+            try { localStorage.setItem(this.store.cacheKey(k), JSON.stringify(state[k])); } catch {}
+        });
+    },
+    apply(key, doc, op, id) {   // résolution de conflit : met à jour le cache local SANS repasser par Storage.set (pas de nouvelle opération)
+        const arr = (Storage.get(key, []) || []).slice();
+        const i = arr.findIndex(d => d.id === (doc ? doc.id : id));
+        if (op === 'remove') { if (i >= 0) arr.splice(i, 1); }
+        else if (i >= 0) arr[i] = doc; else arr.push(doc);
+        Storage._cache[key] = arr;
+        try { localStorage.setItem(this.store.cacheKey(key), JSON.stringify(arr)); } catch {}
+        this.rerender();
+    },
+    commit(baseKey, val) {
+        try { this.store.commit(baseKey, val); }
+        catch (e) { console.error('[DocStore] commit', e); try { showToast('❌ Enregistrement impossible (' + (e && e.message || e) + ')', 'error'); } catch {} }
+    },
+    rerender() { try { const a = document.querySelector('.page.active'); if (a && a.id.indexOf('page-') === 0 && a.id !== 'page-invoice-editor') navTo(a.id.slice(5)); } catch {} },
+    listen() {
+        if (this._listeners) return; this._listeners = true;
+        window.addEventListener('online', () => { if (this.store) this.store.flushSoon(); });
+        document.addEventListener('visibilitychange', async () => {
+            if (document.hidden || !this.store || this.mode !== 'documents') return;
+            this.store.flushSoon();
+            if (Date.now() - this._lastReload > 30000 && !this.store.status().pending) {
+                this._lastReload = Date.now();
+                try { await this.store.reload(); } catch (e) { console.warn('[DocStore] reload', e); }
+            }
+        });
+    },
+    // Refus de l'ancien chemin par le serveur : explicite, sans nouvelle tentative, sans le confondre avec une licence expirée (42501).
+    handleLegacyRefusal(error, key) {
+        const t = String((error && (error.message || '')) || '') + ' ' + String((error && error.hint) || '');
+        if (!/MODE_NOUVEAU_STOCKAGE/.test(t)) return false;
+        this.refused = 'nouveau';
+        try { SyncManager.pendingChanges = SyncManager.pendingChanges.filter(c => DOC_KEYS.indexOf(c.key) < 0); SyncManager.savePendingChanges(); SyncManager.updateUI(); } catch {}
+        console.warn('[DocStore] MODE_NOUVEAU_STOCKAGE sur', key, '— plus aucune écriture sur ces clés avant rechargement.');
+        this.refusedToast(); this.renderBanner();
+        return true;
+    },
+    showConflicts() {
+        if (!this.store) return;
+        [...this.store.conflicts].forEach(c => {
+            const label = (c.mine && c.mine.number && !String(c.mine.number).startsWith('BRO-')) ? c.mine.number : (c.type + ' ' + c.id.slice(0, 8));
+            if (c.server_doc) {
+                const mine = confirm('Conflit sur ' + label + ' : modifié sur un autre appareil.\n\nOK = garder MA version (elle sera réappliquée sur la version du serveur)\nAnnuler = garder la version du SERVEUR (ma version locale est abandonnée)');
+                this.store.resolveConflict(c.id, mine ? 'keep-mine' : 'keep-server', Storage.get(c.key, []));
+            } else {
+                const recreate = confirm('Conflit sur ' + label + ' : supprimé sur un autre appareil.\n\nOK = le RECRÉER avec ma version\nAnnuler = l\'ABANDONNER (le supprimer ici aussi)');
+                this.store.resolveConflict(c.id, recreate ? 'keep-mine' : 'keep-server', Storage.get(c.key, []));
+            }
+        });
+        this.renderBanner();
+    },
+    renderBanner() {
+        let el = document.getElementById('docstoreBanner');
+        const st = this.store ? this.store.status() : null;
+        let msg = '', btn = '', act = null;
+        if (this.refused) { msg = '🔒 Ce compte utilise le nouveau stockage (MODE_NOUVEAU_STOCKAGE) : rechargez l\'application.'; btn = 'Recharger'; act = () => location.reload(); }
+        else if (this.mode === 'blocked') { msg = '🔒 Nouveau stockage : lecture seule (' + ((st && st.reason) || 'mode inconnu') + ').'; btn = 'Recharger'; act = () => location.reload(); }
+        else if (this.mode === 'documents' && st) {
+            if (st.halted === 'mode_ancien') { msg = '⚠️ MODE_ANCIEN_STOCKAGE : ce compte est repassé à l\'ancien stockage. Vos modifications en attente (' + st.pending + ') sont conservées sur cet appareil. Rechargez.'; btn = 'Recharger'; act = () => location.reload(); }
+            else if (st.halted) { msg = '⚠️ Écriture refusée par le serveur (' + (st.lastError || st.halted) + '). ' + st.pending + ' modification(s) en attente, aucune nouvelle tentative automatique.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+            else if (st.conflicts) { msg = '⚠️ ' + st.conflicts + ' conflit(s) entre appareils à résoudre.'; btn = 'Résoudre'; act = () => this.showConflicts(); }
+            else if (st.pending) { msg = '🔄 ' + st.pending + ' modification(s) en attente d\'envoi' + (st.lastError ? ' — ' + st.lastError : '') + '.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+        }
+        if (!msg) { if (el) el.remove(); return; }
+        if (!el) {
+            el = document.createElement('div'); el.id = 'docstoreBanner';
+            el.setAttribute('style', 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#7c2d12;color:#fff;padding:10px 16px;font-size:14px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap');
+            document.body.appendChild(el);
+        }
+        el.innerHTML = ''; const sp = document.createElement('span'); sp.textContent = msg; el.appendChild(sp);
+        if (btn) { const b = document.createElement('button'); b.textContent = btn; b.setAttribute('style', 'padding:4px 12px;border-radius:6px;border:0;cursor:pointer'); b.onclick = act; el.appendChild(b); }
+    }
+};
+
+// ============================================
 // STORAGE LAYER (Hybrid: Supabase OR Local)
 // ============================================
 const Storage = {
@@ -5897,6 +6057,8 @@ const Storage = {
     
     _buildLocalKey(key, userId) {
         const baseKey = this.keys[key] || key;
+        // nouveau stockage : copie locale SÉPARÉE de l'ancienne (jamais de mélange des deux sources)
+        if (DocStoreGlue.active() && DOC_KEYS.indexOf(baseKey) >= 0) return `fpd_${userId}_${baseKey}`;
         return `fp_${userId}_${baseKey}`;
     },
     
@@ -5944,6 +6106,9 @@ const Storage = {
         }
         // En mode cloud, la licence n'est jamais écrite par le navigateur
         if (USE_SUPABASE && baseKey === 'licenseInfo') return;
+        // Nouveau stockage : un seul chemin d'écriture par compte ; refus local explicite si le compte n'y est pas autorisé à écrire
+        const docRoute = DocStoreGlue.route(baseKey);
+        if (docRoute === 'refused') { delete this._cache[baseKey]; DocStoreGlue.refusedToast(); return; }
         this._cache[baseKey] = val;
         
         // Save locally always (offline-first)
@@ -5951,6 +6116,9 @@ const Storage = {
             localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(val));
         }
         
+        // Mode « documents » : opérations par document (upsert_document, record_payment, …) ; AUCUNE écriture dans user_data pour ces clés
+        if (docRoute === 'documents') { DocStoreGlue.commit(baseKey, val); return; }
+
         // Sync to Supabase if configured (async, non-blocking)
         // Licence expirée : la base refuse l'écriture, inutile d'essayer (copie locale seulement)
         let expiredNow = false;
@@ -6000,6 +6168,8 @@ const Storage = {
             }, { onConflict: 'user_id,key' });
             
             if (error) {
+                // MODE_NOUVEAU_STOCKAGE (SQLSTATE 42501 aussi !) : le compte est passé au nouveau stockage — ce n'est PAS une licence expirée, et on ne réessaie pas
+                if (DocStoreGlue.handleLegacyRefusal(error, key)) return;
                 // 42501 = refus RLS : licence expirée côté serveur
                 if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
                     console.warn('Écriture refusée par le serveur (licence).');
@@ -6050,6 +6220,9 @@ const Storage = {
         
         this._currentUserId = userId;
         
+        // Nouveau stockage : le SERVEUR dit si ce compte est en mode « documents » (jamais un indicateur local)
+        const doc = await DocStoreGlue.start(userId);
+        
         try {
             const { data, error } = await supaClient
                 .from('user_data')
@@ -6060,9 +6233,12 @@ const Storage = {
             
             // Hydrate cache and localStorage
             (data || []).forEach(row => {
+                // en mode documents (ou bloqué) l'ancien tableau est FIGÉ : il ne doit jamais redevenir la source de ces 4 clés
+                if (DocStoreGlue.active() && DOC_KEYS.indexOf(row.key) >= 0) return;
                 this._cache[row.key] = row.value;
                 localStorage.setItem(this._buildLocalKey(row.key, userId), JSON.stringify(row.value));
             });
+            if (doc && doc.active && doc.state) DocStoreGlue.install(doc.state);
             
             console.log(`✓ Loaded ${data?.length || 0} records from cloud`);
         } catch (err) {
@@ -6073,6 +6249,7 @@ const Storage = {
     async setCurrentUser(userId) {
         this._currentUserId = userId;
         this._cache = {};
+        DocStoreGlue.reset();
         
         // Try to load from cloud first
         if (USE_SUPABASE) {
@@ -6083,6 +6260,7 @@ const Storage = {
     // Clear current user data
     async clearAll() {
         if (!this._currentUserId) return;
+        if (DocStoreGlue.active()) { console.warn('[DocStore] clearAll refusé : nouveau stockage actif.'); return; }
         
         this._cache = {};
         
@@ -6681,6 +6859,7 @@ async function handleLogout() {
     SessionPolicy.clear();
     Storage._cache = {};
     Storage._currentUserId = null;
+    DocStoreGlue.reset();
     showToast('Déconnexion réussie', 'success');
     
     setTimeout(() => {
@@ -9948,6 +10127,10 @@ function showAccountingExportMenu() {
 }
 
 async function resetApp() {
+    if (DocStoreGlue.active()) {
+        alert('Réinitialisation indisponible : ce compte utilise le nouveau stockage (test). Aucune donnée n\'a été modifiée.');
+        return;
+    }
     if ((Storage.get('invoices', []) || []).some(i => isLockedDoc(i))) {
         alert('Réinitialisation impossible : votre compte contient des factures émises, qui doivent être conservées. Pour supprimer votre compte et vos données, contactez le support.');
         return;
@@ -10527,6 +10710,7 @@ async function logoutFromLicense() {
     await Auth.logout();
     Storage._cache = {};
     Storage._currentUserId = null;
+    DocStoreGlue.reset();
     document.getElementById('licenseScreen')?.classList.add('hidden');
     location.reload();
 }

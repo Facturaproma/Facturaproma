@@ -11,12 +11,19 @@ const SQL_FILES = ['00_setup_complet', '05_admins', '06_securite_rls', '07_licen
 
 function psql(db, args) { return execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-q', '-d', db, ...args], { stdio: ['ignore', 'pipe', 'pipe'] }).toString(); }
 
-function createDb() {
-  const db = 'fp_it_' + process.pid;
+// opts.docs : charge aussi sql/15, 16 et 17 (nouveau stockage) — base LOCALE jetable, jamais Supabase
+function createDb(opts = {}) {
+  const db = (opts.docs ? 'fp_itd_' : 'fp_it_') + process.pid;
   psql('postgres', ['-c', `DROP DATABASE IF EXISTS ${db}`, '-c', `CREATE DATABASE ${db}`]);
   psql(db, ['-f', path.join(ROOT, 'tests/sql/stub_supabase.sql')]);
   for (const f of SQL_FILES) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   psql(db, ['-c', 'GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated; REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.doc_counters, public.doc_events FROM authenticated;']);
+  if (opts.docs) {
+    // comme Supabase : privilèges par défaut larges, puis les scripts 15/16/17 retirent ce qui doit l'être
+    psql(db, ['-c', 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated']);
+    for (const f of ['15_documents', '16_migration_donnees', '17_mode_stockage']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
+    psql(db, ['-c', 'GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated']);
+  }
   return db;
 }
 function dropDb(db) { try { psql('postgres', ['-c', `DROP DATABASE IF EXISTS ${db}`]); } catch (e) {} }
@@ -37,9 +44,14 @@ function makeBackend(db) {
     finally { c.release(); }
   };
   const uidOf = (token) => (token && token.startsWith('tok_')) ? token.slice(4) : null;
-  const err = (e) => ({ data: null, error: { message: e.message, code: e.code } });
+  const err = (e) => ({ data: null, error: { message: e.message, code: e.code, hint: e.hint } });
   const session = (id, email) => ({ access_token: 'tok_' + id, user: { id, email }, expires_at: Math.floor(Date.now() / 1000) + 3600 });
-  const RPC = { my_license: [], activate_license: ['p_code'], next_doc_number: ['p_type', 'p_floor'] };
+  const RPC = { my_license: [], activate_license: ['p_code'], next_doc_number: ['p_type', 'p_floor'],
+    get_doc_mode: [], upsert_document: ['p_doc', 'p_expected_version', 'p_op_id'], delete_document: ['p_type', 'p_id', 'p_expected_version', 'p_op_id'],
+    record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'] };
+  const JSONB_PARAMS = ['p_doc', 'p_payment', 'p_entries'];
+  const DOC_TABLES = { documents: 'doc_type, id, version, body, created_at', doc_payments: 'id, body, created_at', doc_history: 'seq, ts, body' };
+  const DOC_ORDER = { documents: 'created_at, id', doc_payments: 'created_at, id', doc_history: 'seq' };
 
   async function handle(op, a) {
     log.push({ op, fn: a.fn, table: a.table && a.table, tableOp: a.op });
@@ -59,12 +71,18 @@ function makeBackend(db) {
       if (op === 'rpc') {
         const names = RPC[a.fn];
         if (!names) return { data: null, error: { message: 'fonction non autorisée dans le test', code: 'PGRST202' } };
-        const vals = names.map(n => (a.args || {})[n]);
-        const placeholders = names.map((n, i) => `${n} => $${i + 1}`).join(', ');
+        const vals = names.map(n => JSONB_PARAMS.includes(n) ? JSON.stringify((a.args || {})[n]) : (a.args || {})[n]);
+        const placeholders = names.map((n, i) => `${n} => $${i + 1}${JSONB_PARAMS.includes(n) ? '::jsonb' : ''}`).join(', ');
         const r = await asUser(uid, c => c.query(`SELECT public.${a.fn}(${placeholders}) AS r`, vals));
         return { data: r.rows[0].r, error: null };
       }
       if (op === 'table') {
+        if (DOC_TABLES[a.table]) {
+          if (a.op !== 'select') return { data: null, error: { message: 'écriture directe non gérée (et refusée par les droits)', code: '42501' } };
+          const [from, to] = a.range || [0, 999];
+          const r = await asUser(uid, c => c.query(`SELECT ${DOC_TABLES[a.table]} FROM public.${a.table} WHERE user_id = $1 ORDER BY ${DOC_ORDER[a.table]} OFFSET $2 LIMIT $3`, [a.filters.user_id, from, to - from + 1]));
+          return { data: r.rows, error: null };
+        }
         if (a.table !== 'user_data') return { data: null, error: { message: 'table non gérée dans le test' } };
         if (a.op === 'select') {
           const r = await asUser(uid, c => c.query('SELECT key, value FROM public.user_data WHERE user_id = $1', [a.filters.user_id]));

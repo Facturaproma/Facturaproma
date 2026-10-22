@@ -2,7 +2,7 @@
 // Il relaie chaque appel vers window.__srv (fonction exposée par le test), qui parle à une
 // vraie base PostgreSQL locale (RLS, déclencheurs et fonctions SQL réels du dépôt).
 (function () {
-  window.__net = { down: false, missingRpc: [] };
+  window.__net = { down: !!window.__startDown, missingRpc: [], dropAfter: [] };
   window.__rpcLog = [];
   function makeClient() {
     let session = null;
@@ -37,13 +37,18 @@
         window.__rpcLog.push({ fn, args });
         if (window.__net.down) return netErr();
         if (window.__net.missingRpc.includes(fn)) return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.' + fn } };
-        return call('rpc', { fn, args });
+        const out = await call('rpc', { fn, args });
+        // simulation d'une réponse perdue : le serveur a appliqué l'opération mais le client ne le sait pas (une seule fois)
+        if (window.__net.dropAfter.includes(fn)) { window.__net.dropAfter = window.__net.dropAfter.filter(x => x !== fn); return netErr(); }
+        return out;
       },
       from(table) {
         const st = { table, op: 'select', filters: {} };
         const b = {
-          select() { st.op = 'select'; return b; },
+          select(cols) { st.op = 'select'; st.cols = cols; return b; },
           eq(k, v) { st.filters[k] = v; return b; },
+          order() { return b; },
+          range(a, z) { st.range = [a, z]; return b; },
           upsert(row) { st.op = 'upsert'; st.row = row; return b; },
           delete() { st.op = 'delete'; return b; },
           then(res, rej) {

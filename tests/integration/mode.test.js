@@ -19,14 +19,16 @@ const up = (uid, doc, ver, op) => as(uid, async (c) => (await c.query('SELECT pu
 const del = (uid, id, ver, op) => as(uid, async (c) => (await c.query('SELECT public.delete_document($1,$2,$3,$4) r', ['invoice', id, ver, op])).rows[0].r);
 const pay = (uid, inv, p, op) => as(uid, async (c) => (await c.query('SELECT public.record_payment($1,$2::jsonb,$3) r', [inv, JSON.stringify(p), op])).rows[0].r);
 const flip = (uid, mode, resol = null) => pool.query('SELECT public.fp_doc_mode_set($1,$2,$3,0) r', [uid, mode, resol]).then((x) => x.rows[0].r);
-const flipRetry = async (uid, mode, resol = null) => { for (let i = 0; i < 6; i++) { try { return await flip(uid, mode, resol); } catch (e) { if (!/deadlock/i.test(e.message)) throw e; } } throw new Error('trop de blocages'); };
+// Reprises légitimes : interblocage, ou « activité récente » (avec p_min_idle = 0 le seuil est l'heure de début de la transaction de bascule ;
+// une écriture concurrente démarrée après elle est « récente » — la bascule s'arrête sans rien perdre et se rejoue, comme le ferait un opérateur).
+const flipRetry = async (uid, mode, resol = null) => { for (let i = 0; i < 8; i++) { try { const r = await flip(uid, mode, resol); if (r.reason === 'ACTIVITE_RECENTE_ANCIEN_APPAREIL') { await new Promise((z) => setTimeout(z, 150)); continue; } return r; } catch (e) { if (!/deadlock/i.test(e.message)) throw e; } } throw new Error('trop de blocages'); };
 const sel = async (sql, p = []) => (await pool.query(sql, p)).rows;
 const settle = (ps_) => Promise.allSettled(ps_);
 (async () => {
   const T0 = Date.now();
   // --- prérequis : sql/17 sans sql/15/16 doit s'arrêter sans rien créer ---
   ps('postgres', ['-c', `CREATE DATABASE ${DB0}`]); ps(DB0, ['-f', path.join(R, 'tests/sql/stub_supabase.sql')]);
-  for (const f of ['00_setup_complet', '14_numerotation_et_verrouillage']) { try { ps(DB0, ['-f', path.join(R, 'sql', f + '.sql')]); } catch {} }
+  for (const f of ['00_setup_complet', '14_numerotation_et_verrouillage']) ps(DB0, ['-f', path.join(R, 'sql', f + '.sql')]);   // doivent réussir : l'échec attendu est celui de sql/17 seul
   let pre = ''; try { ps(DB0, ['-f', path.join(R, 'sql/17_mode_stockage.sql')]); } catch (e) { pre = String(e.stderr); }
   ck('sql/17 sans sql/15 + sql/16 : arrêt net (PREREQUIS_MANQUANT) et aucun objet créé', /PREREQUIS_MANQUANT/.test(pre) && ps(DB0, ['-At', '-c', "SELECT count(*) FROM pg_class WHERE relname IN ('doc_store_mode','doc_store_testers')"]).toString().trim() === '0', pre.slice(0, 200));
   ps('postgres', ['-c', `DROP DATABASE IF EXISTS ${DB0} WITH (FORCE)`]);
@@ -102,7 +104,7 @@ const settle = (ps_) => Promise.allSettled(ps_);
     const inDocs = new Set((await sel('SELECT id FROM public.documents WHERE user_id=$1', [u])).map((r) => r.id));
     tot1.ok += okW.length; tot1.refused += refused.length; tot1.lost += okW.filter((id) => !inDocs.has(id)).length;
     tot1.badRefusal += refused.filter((r) => !(r.reason.code === '42501' || /deadlock/i.test(r.reason.message))).length;
-    if (fr.ok) tot1.flips++; else tot1.stopped++;
+    if (fr.ok) tot1.flips++; else { tot1.stopped++; (tot1.why = tot1.why || []).push(JSON.stringify(fr).slice(0, 400)); }   // cause conservée dans le rapport d'échec
   }
   ck(`bascule vers documents pendant des écritures concurrentes (${ROUNDS} courses × ${W} écritures) : ${tot1.ok} acceptées avant le verrou, ${tot1.refused} refusées après ; ${tot1.flips} bascules faites, ${tot1.stopped} arrêtées`,
     tot1.lost === 0 && tot1.ok > 0 && tot1.refused > 0 && tot1.flips === ROUNDS, JSON.stringify(tot1));
