@@ -204,13 +204,18 @@ function classifyErrors(stderr) {
     }
     ck('compteurs de facturation (doc_counters) identiques : ' + JSON.stringify(S1.counters), JSON.stringify(S1.counters) === JSON.stringify(S2.counters));
     ck('numéros de factures identiques, sans perte ni ajout : ' + JSON.stringify(Object.fromEntries(Object.entries(S1.invoices).map(([u, v]) => [u, v.numbers]))), JSON.stringify(S1.invoices) === JSON.stringify(S2.invoices));
-    const dupes = Object.entries(S2.invoices).filter(([, v]) => new Set(v.numbers).size !== v.numbers.length).map(([u]) => u);
-    ck('aucun numéro de facture en double après restauration', dupes.length === 0, dupes.join(','));
+    // Comptes de TEST volontairement défectueux (anomalies historiques fabriquées pour la répétition de migration) : déclarés explicitement par e-mail exact.
+    const expEmails = (process.env.BACKUP_EXPECTED_DEFECTIVE_EMAILS || '').split(',').map((x) => x.trim()).filter((x) => /@facturapro-test\.invalid$/.test(x));
+    const expU = new Set((await rc.query('SELECT left(id::text, 8) u FROM auth.users WHERE email = ANY($1)', [expEmails])).rows.map((r) => r.u));
+    const dupesAll = Object.entries(S2.invoices).filter(([, v]) => new Set(v.numbers).size !== v.numbers.length).map(([u]) => u);
+    const dupes = dupesAll.filter((u) => !expU.has(u));
+    if (expU.size) ck(`anomalies ATTENDUES : seuls les comptes de test déclarés défectueux (${expEmails.length}) portent des numéros en double, et ils sont restaurés à l'identique`, dupesAll.filter((u) => expU.has(u)).length === expU.size && dupes.length === 0, dupesAll.join(','));
+    ck('aucun numéro de facture en double après restauration (comptes non déclarés défectueux)', dupes.length === 0, dupes.join(','));
     const nInv = Object.values(S2.invoices).reduce((a, v) => a + v.numbers.length, 0);
     if (ALLOW_EMPTY && nInv === 0) out('- (base de référence sans compte ni facture : le contrôle « des factures sont présentes » ne s\'applique pas à cette sauvegarde)');
     else ck(`le test contient bien des factures (${nInv}) — sinon la preuve serait vide`, nInv > 0);
     const low = [];
-    for (const [u, v] of Object.entries(S2.invoices)) for (const n of v.numbers) {
+    for (const [u, v] of Object.entries(S2.invoices)) if (!expU.has(u)) for (const n of v.numbers) {
       const m = /^(FAC|DEV|AVR)-\d{4}-(\d+)$/.exec(n || ''); if (!m) continue;
       const ty = { FAC: 'invoice', DEV: 'quote', AVR: 'credit' }[m[1]]; const c = S2.counters.find((x) => x.u === u && x.t === ty);
       if (!c || c.v < Number(m[2])) low.push(`${u}:${n}`);

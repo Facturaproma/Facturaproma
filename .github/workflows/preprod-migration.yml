@@ -78,6 +78,7 @@ jobs:
           LOCAL_PGPASSWORD: local-throwaway-not-a-secret
           REPORT_PATH: reports/migration.md
           BACKUP_ALLOW_EMPTY: ${{ steps.init.outputs.phase == 'prepare' && '1' || '' }}
+          BACKUP_EXPECTED_DEFECTIVE_EMAILS: mig-c@facturapro-test.invalid
         run: |
           printf '\n### Sauvegarde préalable (phase %s)\n\n' "${{ steps.init.outputs.phase }}" >> reports/migration.md
           node scripts/preprod-backup.js
@@ -96,6 +97,7 @@ jobs:
           LOCAL_PGUSER: postgres
           LOCAL_PGPASSWORD: local-throwaway-not-a-secret
           REPORT_PATH: reports/migration.md
+          BACKUP_EXPECTED_DEFECTIVE_EMAILS: mig-c@facturapro-test.invalid
         run: |
           printf '\n### Sauvegarde #2, comptes de test inclus\n\n' >> reports/migration.md
           node scripts/preprod-backup.js

@@ -188,6 +188,11 @@ async function seed() {
   REST = restCfg();
   const { c } = await db();
   out('### 3. Comptes de test et données « ancien format » (clé user_data, comme l\'application actuelle)');
+  await ensureRehearsalTable(c);
+  if ((await c.query("SELECT 1 FROM public._fp_rehearsal WHERE name='legacy_seed'")).rows[0]) {
+    ck('données de test déjà créées lors d\'une exécution précédente : conservées telles quelles (les factures émises sont verrouillées, on ne les recrée pas)', (await uidsOf(c)).length === 5);
+    await c.end(); return;
+  }
   await createAccounts(c);
   const u = Object.fromEntries((await uidsOf(c)).map((r) => [r.email, r.id]));
   ck('5 comptes de test créés (mig-a … mig-e), identifiables par le domaine .invalid', Object.keys(u).length === 5);
