@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
     
     <!-- jsPDF for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -927,7 +927,7 @@
                             <select id="codeType">
                                 <option value="monthly">📅 Mensuel (49 DH/mois)</option>
                                 <option value="annual">🏆 Annuel (449 DH/an)</option>
-                                <option value="founder">🎁 Fondateur annuel (299 DH/an, 20 max)</option>
+                                <option value="founder">🎁 Fondateur annuel (299 DH/an, 30 max)</option>
                             </select>
                             <small id="founderCounter" style="color: var(--ink-mute);"></small>
                         </div>
@@ -1003,7 +1003,7 @@
             </div>
 
             <div class="alert staff-hide">
-                <strong>💰 Suivi des revenus :</strong> Enregistre ici chaque paiement reçu (virement, CMI, espèces). Ça t'aide à suivre ton revenu réel et à associer paiements ↔ codes générés.
+                <strong>💰 Suivi des revenus :</strong> Enregistre ici chaque paiement reçu (virement, CMI). Ça t'aide à suivre ton revenu réel et à associer paiements ↔ codes générés.
             </div>
 
             <div class="stats-grid">
@@ -1231,7 +1231,7 @@
             </div>
 
             <div class="alert">
-                <strong>📋 Offres en vente</strong> — Essai gratuit 14 jours, Mensuel 49 DH, Annuel 449 DH, et l'offre Fondateur (299 DH/an, 20 places). Les chiffres ci-dessous viennent des vrais comptes.
+                <strong>📋 Offres en vente</strong> — Essai gratuit 14 jours, Mensuel 49 DH, Annuel 449 DH, et l'offre Fondateur (299 DH/an, 30 places). Les chiffres ci-dessous viennent des vrais comptes.
             </div>
 
             <div class="stats-grid">
@@ -1288,7 +1288,7 @@
                 <div class="card-header"><h2>🧭 Règles de l'offre</h2></div>
                 <ul style="margin: 0; padding: 4px 24px 20px 40px; font-size: 14px; line-height: 1.7;">
                     <li><strong>Essai :</strong> 14 jours dès la création du compte, accès complet avec filigrane sur les PDF. Prolongeable depuis « Clients > Licence ».</li>
-                    <li><strong>Fondateur :</strong> 20 codes maximum, chacun à usage unique et lié à l'e-mail du client. Ils s'ajoutent à l'offre annuelle (365 jours).</li>
+                    <li><strong>Fondateur :</strong> 30 codes maximum, chacun à usage unique et lié à l'e-mail du client. Ils s'ajoutent à l'offre annuelle (365 jours).</li>
                     <li><strong>Renouvellement :</strong> un nouveau code prolonge à partir de la fin en cours : le client ne perd pas ses jours restants.</li>
                     <li><strong>Pas encore vendu :</strong> multi-utilisateurs, multi-sociétés, facturation électronique DGI. À ne pas promettre tant qu'ils ne sont pas livrés et testés.</li>
                 </ul>
@@ -2043,7 +2043,7 @@
             <select id="activateType">
                 <option value="monthly">📅 Mensuel (49 DH/mois)</option>
                 <option value="annual">🏆 Annuel (449 DH/an)</option>
-                <option value="founder">🎁 Fondateur (299 DH/an · 20 places)</option>
+                <option value="founder">🎁 Fondateur (299 DH/an · 30 places)</option>
                 <option value="lifetime">🎁 À vie (offert, hors vente)</option>
             </select>
         </div>
@@ -2092,7 +2092,6 @@
                 <select id="licMode">
                     <option value="virement">🏦 Virement</option>
                     <option value="cmi">💳 CMI</option>
-                    <option value="cash">💵 Espèces</option>
                     <option value="cheque">📝 Chèque</option>
                 </select>
             </div>
@@ -2146,7 +2145,6 @@
                 <select id="paymentMode">
                     <option value="virement">🏦 Virement</option>
                     <option value="cmi">💳 CMI</option>
-                    <option value="cash">💵 Espèces</option>
                     <option value="cheque">📝 Chèque</option>
                 </select>
             </div>
@@ -3135,7 +3133,7 @@ async function reopenRequest(requestId) {
     }
 }
 
-function contactByWhatsApp(email, tier, price) {
+async function contactByWhatsApp(email, tier, price) {
     const tierLabels = {
         lifetime: 'À vie (offert)',
         monthly: 'Mensuel (49 DH/mois)',
@@ -3144,7 +3142,24 @@ function contactByWhatsApp(email, tier, price) {
         business: 'Business Mensuel'
     };
     
-    const msg = `Bonjour 🇲🇦,\n\nMerci pour votre demande d'abonnement à FacturaPro !\n\n📋 Plan choisi : ${tierLabels[tier]}\n💰 Montant : ${price} DH\n📧 Email : ${email}\n\n💳 Voici les modalités de paiement :\n\n1️⃣ VIREMENT BANCAIRE\n   Bénéficiaire : FacturaPro\n   RIB : [À COMPLÉTER]\n   Référence : ${email}\n\n2️⃣ Une fois le paiement effectué, envoyez-nous le justificatif par retour de message.\n\n3️⃣ Vous recevrez votre code d'activation sous 24h.\n\nDes questions ? Je suis là !\n\n— FacturaPro`;
+    // Coordonnées bancaires lues dans Admin → Réglages (jamais de RIB factice envoyé à un client)
+    let cfg = {};
+    try {
+        const { data, error } = await supaClient.from('admin_settings').select('key, value');
+        if (error) throw error;
+        (data || []).forEach(row => cfg[row.key] = (row.value || '').trim());
+    } catch (err) {
+        showToast('Réglages illisibles : ' + err.message, 'error');
+        return;
+    }
+    if (!cfg.bank_rib) {
+        showToast('Renseignez d\'abord le RIB dans Réglages avant d\'écrire au client', 'error');
+        return;
+    }
+    const benef = cfg.bank_beneficiary || 'FacturaPro';
+    const bankLine = cfg.bank_name ? `\n   Banque : ${cfg.bank_name}` : '';
+
+    const msg = `Bonjour 🇲🇦,\n\nMerci pour votre demande d'abonnement à FacturaPro !\n\n📋 Plan choisi : ${tierLabels[tier]}\n💰 Montant : ${price} DH\n📧 Email : ${email}\n\n💳 Voici les modalités de paiement :\n\n1️⃣ VIREMENT BANCAIRE\n   Bénéficiaire : ${benef}${bankLine}\n   RIB : ${cfg.bank_rib}\n   Référence : ${email}\n\n2️⃣ Une fois le paiement effectué, envoyez-nous le justificatif par retour de message.\n\n3️⃣ Vous recevrez votre code d'activation sous 24h.\n\nDes questions ? Je suis là !\n\n— FacturaPro`;
     
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
@@ -3463,7 +3478,7 @@ function renderCodes() {
     }).join('');
 }
 
-const FOUNDER_LIMIT = 20;
+const FOUNDER_LIMIT = 30;
 function countFounderCodes() {
     // Les codes révoqués ne comptent pas : la place est libérée
     return (allCodes || []).filter(c => (c.note || '').startsWith('FONDATEUR') && c.status !== 'revoked').length;
@@ -3489,7 +3504,7 @@ async function generateCode() {
         return;
     }
 
-    // Offre fondateurs : licence annuelle, 20 codes maximum, chacun à usage unique et lié à un e-mail
+    // Offre fondateurs : licence annuelle, 30 codes maximum, chacun à usage unique et lié à un e-mail
     if (type === 'founder') {
         if (countFounderCodes() >= FOUNDER_LIMIT) {
             showToast(`Limite atteinte : ${FOUNDER_LIMIT} codes fondateurs déjà émis`, 'error');
@@ -3670,7 +3685,7 @@ async function activateLicense() {
         return;
     }
     
-    // Offre fondateurs : licence annuelle, 20 codes maximum (même règle que « Générer codes »)
+    // Offre fondateurs : licence annuelle, 30 codes maximum (même règle que « Générer codes »)
     let type = rawType, finalNote = note;
     if (rawType === 'founder') {
         if (countFounderCodes() >= FOUNDER_LIMIT) {
@@ -5130,7 +5145,7 @@ function renderTiers() {
     const rows = [
         { name: 'Mensuel', price: '49 DH / 30 jours', count: accountsAvailable ? mActive : '—', rev: sum(paidPay('monthly')), pending: pendingBy(c => c.type === 'monthly' && !isFounderCode(c)) },
         { name: 'Annuel', price: '449 DH / 365 jours', count: accountsAvailable ? aActive : '—', rev: sum(paidPay('annual')), pending: pendingBy(c => c.type === 'annual' && !isFounderCode(c)) },
-        { name: 'Fondateur', price: '299 DH / 365 jours (20 places)', count: accountsAvailable ? fActive : '—', rev: sum(paidPay('founder')), pending: pendingBy(isFounderCode) }
+        { name: 'Fondateur', price: '299 DH / 365 jours (30 places)', count: accountsAvailable ? fActive : '—', rev: sum(paidPay('founder')), pending: pendingBy(isFounderCode) }
     ];
     document.getElementById('tiersPerformanceTable').innerHTML = rows.map(r => `
         <tr>
@@ -6004,11 +6019,12 @@ async function saveSettings() {
     try {
         for (const [key, value] of Object.entries(settings)) {
             if (value) {
-                await supaClient.from('admin_settings').upsert({
+                const { error: upErr } = await supaClient.from('admin_settings').upsert({
                     key,
                     value,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'key' });
+                if (upErr) throw upErr;   // ne plus afficher « enregistré » si l'écriture a échoué
             }
         }
         

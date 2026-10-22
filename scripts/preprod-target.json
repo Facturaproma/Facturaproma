@@ -1,0 +1,7 @@
+{
+  "_comment": "Identifiants non secrets. Seul ce projet est une cible autorisée pour les scripts de préproduction.",
+  "preprodRef": "njjaomichdlnoscrnxlz",
+  "prodRef": "mdozjptoecygmpkjlohr",
+  "anonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qamFvbWljaGRsbm9zY3JueGx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2MDU3NDgsImV4cCI6MjEwODE4MTc0OH0.Z-2mOs8Z_lZr_3cfFHGBZQmbZkyVXHXE6KTZZk5wnQI",
+  "_anonKey_note": "Clé « anon » du projet de préproduction : publique par conception (elle est livrée dans le navigateur). Ce N'EST PAS une clé secrète. La clé service_role n'est jamais utilisée."
+}

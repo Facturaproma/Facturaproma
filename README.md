@@ -1,8 +1,8 @@
 # 🇲🇦 FacturaPro
 
-> Le logiciel de facturation 100% marocain pour Auto-Entrepreneurs, Freelances et SARL.
+> Logiciel de facturation pensé pour le Maroc : Auto-Entrepreneurs, Freelances et petites entreprises. FacturaPro n'est pas certifié par la DGI et ne prend pas en charge la facturation électronique DGI pour le moment.
 
-[![Status](https://img.shields.io/badge/status-production-success)]()
+[![Status](https://img.shields.io/badge/status-pré--lancement-orange)]()
 [![Made in Morocco](https://img.shields.io/badge/Made%20in-Morocco%20🇲🇦-red)]()
 [![Stack](https://img.shields.io/badge/stack-HTML%20%2B%20Supabase-blue)]()
 
@@ -18,16 +18,16 @@
 ## ✨ Fonctionnalités
 
 ### Pour les utilisateurs
-- 📄 **Factures conformes aux normes marocaines** (ICE, IF, RC, CNSS, Patente)
+- 📄 **Factures avec les mentions usuelles** (ICE, IF, RC, CNSS, Patente), numérotation attribuée par le serveur, facture émise non modifiable (correction par avoir)
 - 📋 **Devis convertibles** en facture en 1 clic
 - 👥 **Base clients** complète avec ICE et historique
 - 📦 **Catalogue produits/services** réutilisable
-- 🏥 **Calcul cotisation CNSS automatique** (1% services / 0,5% commerce)
-- 💰 **Module Impôts** : TVA, IR, Patente
+- 🏥 **Aide au calcul de la cotisation** (1% services / 0,5% commerce) : indicatif, à confirmer avec votre comptable
+- 💰 **Aide au suivi fiscal** : TVA collectée, récapitulatifs (indicatif, pas un avis fiscal)
 - 💳 **Module Paiements** avec stats et historique
-- 🔔 **Relances automatiques** en 3 niveaux (J+7, J+15, J+30)
+- 🔔 **Relances guidées** en 3 niveaux (J+7, J+15, J+30) : le texte est préparé, l'envoi est manuel (copie ou e-mail)
 - 📊 **Dashboard** avec graphique CA 12 mois
-- 📥 **Export PDF** professionnel
+- 📥 **Export PDF** (français et arabe), exports CSV / comptable et export JSON complet des données
 - 🌍 **Support multi-statuts** : AE, Freelance, SARL, Autre
 - ⏰ **Période d'essai 14 jours** (full access)
 
@@ -36,7 +36,7 @@
 - 📥 **Gestion des demandes d'abonnement**
 - 🎁 **Génération de codes de licence** en 1 clic
 - 💳 **Suivi des paiements reçus**
-- 📱 **Envoi WhatsApp/Email** automatique
+- 📱 **Messages WhatsApp / e-mail préparés** (envoi manuel)
 - 🔑 **Connexion via Supabase Auth** (e-mail confirmé, aucun mot de passe stocké dans le code ni dans la base)
 
 ---
@@ -102,8 +102,10 @@ const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 ## 📚 Documentation
 
 - 📖 [Guide de déploiement complet](docs/DEPLOY.md)
-- 🔐 [Guide admin](docs/ADMIN_GUIDE.md)
-- 🗄️ [Configuration Supabase](docs/SUPABASE_SETUP.md)
+- 🚀 [Plan de lancement](docs/PLAN_LANCEMENT.md)
+- 🧪 [Préproduction Supabase](docs/PREPRODUCTION_SUPABASE.md)
+- 💾 [Sauvegarde et restauration](docs/SAUVEGARDE_RESTAURATION.md)
+- ✅ [Plan de validation fonctionnelle](docs/PLAN_VALIDATION_FONCTIONNELLE.md)
 
 ---
 
@@ -111,11 +113,11 @@ const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
 | Plan | Prix | Description |
 |------|------|-------------|
-| 🎁 **Lifetime** | 499 DH une fois | Accès à vie, toutes mises à jour |
-| ⭐ **Pro Mensuel** | 99 DH/mois | Tout illimité, support prioritaire |
-| 👔 **Business** | 199 DH/mois | Multi-entreprises, multi-utilisateurs |
+| 📅 **Mensuel** | 49 DH / 30 jours | Toutes les fonctions |
+| 🏆 **Annuel** | 449 DH / 365 jours | Toutes les fonctions |
+| 🎁 **Fondateur** | 299 DH / 365 jours (30 places) | Sur code personnel à usage unique |
 
-**Codes promo** : `LANCEMENT2026` (-50%), `FOUNDERS` (-30%), `WELCOME10` (-10%)
+Essai gratuit de 14 jours, sans carte bancaire. Paiement par virement, puis activation par code de licence.
 
 ---
 
@@ -139,8 +141,7 @@ const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 ## 🤝 Contribution
 
 Ce projet est privé pour l'instant. Pour toute question :
-- 📧 Email : contact@facturapro.ma
-- 📱 WhatsApp : +212 6XX XX XX XX
+- Le contact de support (WhatsApp, e-mail) se configure dans **Admin → Réglages** et s'affiche dans l'application, page Abonnement.
 
 ---
 

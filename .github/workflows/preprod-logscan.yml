@@ -1,0 +1,72 @@
+# Relit les JOURNAUX BRUTS des exécutions GitHub Actions récentes de ce dépôt et y cherche un identifiant :
+# URL de connexion avec mot de passe, jetons, JWT autres que la clé publique « anon », et la valeur exacte du secret PREPROD_DB_URL
+# (GitHub la remplace normalement par *** : toute occurrence en clair signifierait que le masquage a échoué).
+# Publie sur la branche « preprod-reports » uniquement des COMPTEURS (aucune ligne de journal, aucune valeur).
+name: preprod-logscan
+on:
+  push:
+    branches: [dev/fondations]
+    paths: ['ops/preprod-logscan.json']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: preprod
+  cancel-in-progress: false
+jobs:
+  logscan:
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Télécharger et analyser les journaux des exécutions terminées
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPO: ${{ github.repository }}
+        run: |
+          set +e
+          mkdir -p /tmp/logs reports; : > reports/logscan.md
+          echo "# Analyse des journaux GitHub Actions — run $GITHUB_RUN_ID — commit $GITHUB_SHA" >> reports/logscan.md
+          IDS=$(gh api "repos/$REPO/actions/runs?per_page=50" --jq '.workflow_runs[] | select(.status=="completed") | "\(.id)\t\(.name)\t\(.conclusion)"')
+          TOTAL=0; FILES=0; BAD=0; FAILED_DL=0
+          printf '\n| Exécution | Workflow | Résultat | Fichiers de journal analysés | Découvertes |\n|---|---|---|---|---|\n' >> reports/logscan.md
+          while IFS=$'\t' read -r ID NAME CONC; do
+            [ -z "$ID" ] && continue
+            rm -rf "/tmp/logs/$ID" && mkdir -p "/tmp/logs/$ID"
+            if ! gh api "repos/$REPO/actions/runs/$ID/logs" > "/tmp/logs/$ID.zip" 2> "/tmp/logs/$ID.err" || ! unzip -q -o "/tmp/logs/$ID.zip" -d "/tmp/logs/$ID" 2>> "/tmp/logs/$ID.err"; then
+              # journal NON analysé : ce n'est jamais un succès silencieux (le job échoue plus bas) ; la cause (sans secret) est conservée dans le rapport
+              FAILED_DL=$((FAILED_DL+1)); CAUSE=$(head -c 120 "/tmp/logs/$ID.err" | tr '\n|' '  ')
+              echo "| $ID | $NAME | $CONC | journal NON analysé : ${CAUSE:-cause inconnue} | — |" >> reports/logscan.md; continue
+            fi
+            ARGS=(); N=0
+            while IFS= read -r -d '' F; do ARGS+=(--file "$F"); N=$((N+1)); done < <(find "/tmp/logs/$ID" -type f -name '*.txt' -print0)
+            node scripts/scan-secrets.js "${ARGS[@]}" > "/tmp/logs/$ID.scan" 2>&1; RC=$?
+            D=$(sed -n 's/.*, \([0-9]*\) découverte.*/\1/p' "/tmp/logs/$ID.scan" | head -1)
+            [ "$RC" -ne 0 ] && BAD=$((BAD+1))
+            TOTAL=$((TOTAL+1)); FILES=$((FILES+N))
+            echo "| $ID | $NAME | $CONC | $N | ${D:-?} |" >> reports/logscan.md
+            [ "$RC" -ne 0 ] && grep -E '^  - ' "/tmp/logs/$ID.scan" | sed -E 's/:[^:]*$//' | sort | uniq -c | head -5 >> reports/logscan.md
+          done <<< "$IDS"
+          { echo; echo "**Bilan : $TOTAL exécution(s) analysée(s), $FILES fichier(s) de journal, $BAD exécution(s) avec découverte(s), $FAILED_DL journal(aux) indisponible(s).**"; } >> reports/logscan.md
+          cat reports/logscan.md
+          echo "bad=$BAD" >> "$GITHUB_OUTPUT"
+          [ "$TOTAL" -gt 0 ] || { echo "::error::Aucun journal analysé."; exit 1; }
+          [ "$FAILED_DL" -eq 0 ] || { echo "::error::$FAILED_DL journal(aux) non analysé(s) : la recherche de secrets est INCOMPLÈTE (voir le rapport)."; exit 3; }
+          exit $BAD
+      - name: Publier les compteurs (branche preprod-reports, jamais main)
+        if: always()
+        run: |
+          [ -s reports/logscan.md ] || exit 0
+          mkdir -p /tmp/rep && cp reports/logscan.md "/tmp/rep/logscan-${GITHUB_RUN_ID}.md"
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin preprod-reports >/dev/null 2>&1; then
+            git fetch origin preprod-reports && git checkout -f -B preprod-reports origin/preprod-reports
+          else
+            git checkout --orphan preprod-reports && git rm -rf --ignore-unmatch . >/dev/null
+          fi
+          mkdir -p reports && cp /tmp/rep/* reports/ && git add "reports/logscan-${GITHUB_RUN_ID}.md" && git commit -m "Analyse des journaux run ${GITHUB_RUN_ID}" && git push origin preprod-reports

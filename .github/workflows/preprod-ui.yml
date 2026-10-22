@@ -1,0 +1,151 @@
+# VALIDATION ISOLÉE du nouveau stockage (docstore.js + app.html) sur la PRÉPRODUCTION Supabase (jamais la production), comptes de test jetables uniquement.
+# Phase pilotée par ops/preprod-ui.json : idle | inspect (LECTURE SEULE : session forcée en lecture seule, aucun essai, aucune suppression) | test | cleanup. test = contrôle de cible + sauvegarde restaurée et vérifiée + essais réels ; AUCUN nettoyage automatique
+# (le nettoyage est la phase séparée « cleanup », lancée seulement après analyse des résultats). Aucun mot de passe ni URL de connexion dans les journaux ni les rapports.
+name: preprod-ui
+on:
+  push:
+    branches: [validation/integration-documents]
+    paths: ['ops/preprod-ui.json']
+permissions:
+  contents: write   # uniquement pour publier le rapport sur la branche « preprod-reports »
+concurrency:
+  group: preprod
+  cancel-in-progress: false
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 90
+    services:
+      localpg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: local-throwaway-not-a-secret
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Phase
+        id: phase
+        run: |
+          PHASE="$(node -p "require('./ops/preprod-ui.json').phase")"
+          case "$PHASE" in idle|test|cleanup|inspect|journey|journey-cleanup) ;; *) echo "::error::Phase inconnue."; exit 1;; esac
+          echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
+          echo "Phase demandée : $PHASE ; Node $(node -v)"
+          case "$(node -v)" in v22.*|v24.*) ;; *) echo "::error::Node 22 ou plus requis."; exit 1;; esac
+      - name: Dépendances (pg, supabase-js, playwright-core)
+        if: steps.phase.outputs.phase != 'idle'
+        run: npm install --no-save --ignore-scripts pg@8 @supabase/supabase-js@2.118.0 playwright-core@1.64.1
+      - name: Chromium (phase test)
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
+        run: npx playwright-core install --with-deps chromium
+      - name: Client PostgreSQL 17
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      - name: Secret présent, masquage, mots de passe aléatoires
+        id: init
+        if: steps.phase.outputs.phase != 'idle'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+        run: |
+          if [ -z "$PREPROD_DB_URL" ]; then echo "::error::Secret PREPROD_DB_URL absent."; exit 1; fi
+          node -e "const p=require('./scripts/preprod-db').parseDbUrl(process.env.PREPROD_DB_URL); console.log('Cible autorisée :', p.ref); for (const v of [p.password, encodeURIComponent(p.password), p.user, p.host]) if (v) console.log('::add-mask::' + v)"
+          J='{'; for k in l d e f g o; do P="$(openssl rand -hex 16)Aa1!"; echo "::add-mask::$P"; J="$J\"$k\":\"$P\","; done
+          J="${J%,}}"; echo "::add-mask::$J"
+          { echo "UI_PASSWORDS<<EOFPW"; echo "$J"; echo "EOFPW"; } >> "$GITHUB_ENV"
+          mkdir -p reports; printf '# Validation isolée du nouveau stockage (préproduction) — phase %s — run %s — commit %s\n\n' "${{ steps.phase.outputs.phase }}" "$GITHUB_RUN_ID" "$GITHUB_SHA" > reports/ui.md
+          echo "PREPROD_URL=https://$(node -p "require('./scripts/preprod-target.json').preprodRef").supabase.co" >> "$GITHUB_ENV"
+          echo "PREPROD_ANON_KEY=$(node -p "require('./scripts/preprod-target.json').anonKey")" >> "$GITHUB_ENV"
+      - name: 1. Contrôles de cible (refus de la production)
+        if: steps.phase.outputs.phase != 'idle'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-ui-validation.js guardtests
+      - name: 2. Sauvegarde AVANT les essais, restaurée et vérifiée (test)
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          LOCAL_PGHOST: 127.0.0.1
+          LOCAL_PGPORT: '5432'
+          LOCAL_PGUSER: postgres
+          LOCAL_PGPASSWORD: local-throwaway-not-a-secret
+          REPORT_PATH: reports/ui.md
+          BACKUP_ALLOW_EMPTY: '1'
+        run: |
+          printf '\n### Sauvegarde préalable\n\n' >> reports/ui.md
+          node scripts/preprod-backup.js
+      - name: 3. Build de préproduction (copie locale, jamais déployée)
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
+        run: node scripts/make-preprod-build.js
+      - name: 4. Essais réels sur comptes jetables (test) — aucun nettoyage automatique
+        if: steps.phase.outputs.phase == 'test'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-ui-validation.js test
+      - name: 4c. Parcours du premier client (journey) — SQL 18 + comptes jetables ui-j* + navigateur réel — AUCUN nettoyage automatique
+        if: steps.phase.outputs.phase == 'journey'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-journey.js journey
+      - name: 5b. Nettoyage du parcours client uniquement (journey-cleanup)
+        if: steps.phase.outputs.phase == 'journey-cleanup'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-journey.js journey-cleanup
+      - name: 4b. Inspection en LECTURE SEULE (inspect) — rien n'est écrit, supprimé ni basculé
+        if: steps.phase.outputs.phase == 'inspect'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-ui-validation.js inspect
+      - name: 5. Nettoyage des comptes de la campagne uniquement (cleanup)
+        if: steps.phase.outputs.phase == 'cleanup'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-ui-validation.js cleanup
+      - name: Analyse de secrets (rapport à publier, arbre Git, historique complet, branche preprod-reports)
+        id: scan
+        if: always() && steps.phase.outputs.phase != 'idle'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+        run: |
+          RC=0; git ls-remote --exit-code --heads origin preprod-reports >/dev/null || RC=$?
+          if [ "$RC" -eq 0 ]; then git fetch origin preprod-reports:refs/remotes/origin/preprod-reports; elif [ "$RC" -ne 2 ]; then echo "::error::Lecture du dépôt distant impossible (code $RC)."; exit 1; fi
+          B=""; git rev-parse --verify -q origin/preprod-reports >/dev/null && B="--branch origin/preprod-reports"
+          set +e
+          node scripts/scan-secrets.js --file reports/ui.md > reports/scan1.txt; R1=$?
+          node scripts/scan-secrets.js --tree --history $B > reports/scan2.txt; R2=$?
+          { echo; echo '### Analyse de secrets'; echo; echo 'Rapport lui-même :'; echo '```'; cat reports/scan1.txt; echo '```'; echo 'Arbre Git, historique complet, branche preprod-reports :'; echo '```'; cat reports/scan2.txt; echo '```'; } >> reports/ui.md
+          cat reports/scan1.txt reports/scan2.txt
+          echo "report_clean=$([ $R1 -eq 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          echo "repo_rc=$R2" >> "$GITHUB_OUTPUT"
+      - name: Publier le rapport (branche preprod-reports, jamais main) — uniquement s'il ne contient aucun identifiant
+        if: always() && steps.scan.outputs.report_clean == 'yes'
+        run: |
+          [ -f reports/ui.md ] || exit 0
+          mkdir -p /tmp/rep && cp reports/ui.md "/tmp/rep/ui-${GITHUB_RUN_ID}.md"
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin preprod-reports >/dev/null 2>&1; then
+            git fetch origin preprod-reports && git checkout -f -B preprod-reports origin/preprod-reports
+          else
+            git checkout --orphan preprod-reports && git rm -rf --ignore-unmatch . >/dev/null
+          fi
+          mkdir -p reports && cp /tmp/rep/* reports/ && git rm -q --cached --ignore-unmatch reports/ui.md reports/scan1.txt reports/scan2.txt && git add "reports/ui-${GITHUB_RUN_ID}.md" && git commit -m "Rapport validation isolée run ${GITHUB_RUN_ID}" && git push origin preprod-reports
+      - name: Échec du job si un identifiant a été trouvé dans le dépôt ou la branche des rapports
+        if: always() && steps.scan.outputs.repo_rc != '0' && steps.phase.outputs.phase != 'idle'
+        run: echo "::error::Analyse de secrets positive (voir le rapport)." && exit 1

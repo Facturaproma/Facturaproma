@@ -1,0 +1,158 @@
+# RÉPÉTITION de la migration sql/15 + sql/16 sur la PRÉPRODUCTION Supabase (jamais la production), comptes de test jetables uniquement.
+# Phase pilotée par ops/preprod-migration.json. Chaque phase commence par le contrôle de cible et une sauvegarde restaurée et vérifiée ; tout échec arrête la procédure.
+# Secret requis (environnement « preprod ») : PREPROD_DB_URL. Aucune URL de connexion ni mot de passe n'est écrit dans les journaux ni les rapports.
+name: preprod-migration
+on:
+  push:
+    branches: [dev/fondations]
+    paths: ['ops/preprod-migration.json']
+permissions:
+  contents: write   # uniquement pour publier le rapport sur la branche « preprod-reports »
+concurrency:
+  group: preprod
+  cancel-in-progress: false
+jobs:
+  migration:
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 45
+    services:
+      localpg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: local-throwaway-not-a-secret
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Dépendance (pg uniquement)
+        run: npm install --no-save --ignore-scripts pg@8
+      - name: Client PostgreSQL 17
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      - name: Phase, secret présent, masquage, mots de passe aléatoires
+        id: init
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+        run: |
+          if [ -z "$PREPROD_DB_URL" ]; then echo "::error::Secret PREPROD_DB_URL absent."; exit 1; fi
+          PHASE="$(node -p "require('./ops/preprod-migration.json').phase")"
+          case "$PHASE" in prepare|rehearse|cleanup) ;; *) echo "::error::Phase inconnue."; exit 1;; esac
+          echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
+          node -e "const p=require('./scripts/preprod-db').parseDbUrl(process.env.PREPROD_DB_URL); console.log('Cible autorisée :', p.ref); for (const v of [p.password, encodeURIComponent(p.password), p.user, p.host]) if (v) console.log('::add-mask::' + v)"
+          J='{'; for k in a b c d e; do P="$(openssl rand -hex 16)Aa1!"; echo "::add-mask::$P"; J="$J\"$k\":\"$P\","; done
+          J="${J%,}}"; echo "::add-mask::$J"
+          # transmis aux étapes suivantes par le fichier d'environnement du job (valeur déjà masquée)
+          { echo "MIG_PASSWORDS<<EOFPW"; echo "$J"; echo "EOFPW"; } >> "$GITHUB_ENV"
+          mkdir -p reports; printf '# Répétition de migration (préproduction) — phase %s — run %s — commit %s\n\n' "$PHASE" "$GITHUB_RUN_ID" "$GITHUB_SHA" > reports/migration.md
+          echo "PREPROD_URL=https://$(node -p "require('./scripts/preprod-target.json').preprodRef").supabase.co" >> "$GITHUB_ENV"
+          echo "PREPROD_ANON_KEY=$(node -p "require('./scripts/preprod-target.json').anonKey")" >> "$GITHUB_ENV"
+      - name: 1. Contrôles de cible (refus de la production)
+        if: steps.init.outputs.phase != 'cleanup'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/migration.md
+        run: node scripts/preprod-migration-rehearsal.js guardtests
+      - name: 2. Référence des données existantes (prepare)
+        if: steps.init.outputs.phase == 'prepare'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/migration.md
+        run: node scripts/preprod-migration-rehearsal.js baseline
+      - name: 3. Sauvegarde AVANT l'opération, restaurée et vérifiée
+        if: steps.init.outputs.phase != 'cleanup'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          LOCAL_PGHOST: 127.0.0.1
+          LOCAL_PGPORT: '5432'
+          LOCAL_PGUSER: postgres
+          LOCAL_PGPASSWORD: local-throwaway-not-a-secret
+          REPORT_PATH: reports/migration.md
+          BACKUP_ALLOW_EMPTY: ${{ steps.init.outputs.phase == 'prepare' && '1' || '' }}
+          BACKUP_EXPECTED_DEFECTIVE_EMAILS: mig-c@facturapro-test.invalid
+        run: |
+          printf '\n### Sauvegarde préalable (phase %s)\n\n' "${{ steps.init.outputs.phase }}" >> reports/migration.md
+          node scripts/preprod-backup.js
+      - name: 4. Comptes de test et données « ancien format » (prepare)
+        if: steps.init.outputs.phase == 'prepare'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/migration.md
+        run: node scripts/preprod-migration-rehearsal.js seed
+      - name: 5. Sauvegarde #2 (avec les données de test), restaurée et vérifiée (prepare)
+        if: steps.init.outputs.phase == 'prepare'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          LOCAL_PGHOST: 127.0.0.1
+          LOCAL_PGPORT: '5432'
+          LOCAL_PGUSER: postgres
+          LOCAL_PGPASSWORD: local-throwaway-not-a-secret
+          REPORT_PATH: reports/migration.md
+          BACKUP_EXPECTED_DEFECTIVE_EMAILS: mig-c@facturapro-test.invalid
+        run: |
+          printf '\n### Sauvegarde #2, comptes de test inclus\n\n' >> reports/migration.md
+          node scripts/preprod-backup.js
+      - name: 6. Installation de sql/15 et sql/16 (prepare)
+        if: steps.init.outputs.phase == 'prepare'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/migration.md
+        run: node scripts/preprod-migration-rehearsal.js install
+      - name: 7. Dry-run par compte de test, sans copie (prepare)
+        if: steps.init.outputs.phase == 'prepare'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/migration.md
+        run: node scripts/preprod-migration-rehearsal.js dryrun
+      - name: 8. Répétition complète (rehearse)
+        if: steps.init.outputs.phase == 'rehearse'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/migration.md
+        run: node scripts/preprod-migration-rehearsal.js rehearse
+      - name: 9. Nettoyage des comptes de test uniquement (cleanup)
+        if: steps.init.outputs.phase == 'cleanup'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/migration.md
+        run: node scripts/preprod-migration-rehearsal.js cleanup
+      - name: Analyse de secrets (rapport à publier, arbre Git, historique complet, branche preprod-reports)
+        id: scan
+        if: always()
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+        run: |
+          RC=0; git ls-remote --exit-code --heads origin preprod-reports >/dev/null || RC=$?
+          if [ "$RC" -eq 0 ]; then git fetch origin preprod-reports:refs/remotes/origin/preprod-reports; elif [ "$RC" -ne 2 ]; then echo "::error::Lecture du dépôt distant impossible (code $RC)."; exit 1; fi
+          B=""; git rev-parse --verify -q origin/preprod-reports >/dev/null && B="--branch origin/preprod-reports"
+          set +e
+          node scripts/scan-secrets.js --file reports/migration.md > reports/scan1.txt; R1=$?
+          node scripts/scan-secrets.js --tree --history $B > reports/scan2.txt; R2=$?
+          { echo; echo '### Analyse de secrets'; echo; echo 'Rapport lui-même :'; echo '```'; cat reports/scan1.txt; echo '```'; echo 'Arbre Git, historique complet, branche preprod-reports :'; echo '```'; cat reports/scan2.txt; echo '```'; } >> reports/migration.md
+          cat reports/scan1.txt reports/scan2.txt
+          echo "report_clean=$([ $R1 -eq 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          echo "repo_rc=$R2" >> "$GITHUB_OUTPUT"
+      - name: Publier le rapport (branche preprod-reports, jamais main) — uniquement s'il ne contient aucun identifiant
+        if: always() && steps.scan.outputs.report_clean == 'yes'
+        run: |
+          [ -f reports/migration.md ] || exit 0
+          mkdir -p /tmp/rep && cp reports/migration.md "/tmp/rep/migration-${GITHUB_RUN_ID}.md"
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin preprod-reports >/dev/null 2>&1; then
+            git fetch origin preprod-reports && git checkout -f -B preprod-reports origin/preprod-reports
+          else
+            git checkout --orphan preprod-reports && git rm -rf --ignore-unmatch . >/dev/null
+          fi
+          mkdir -p reports && cp /tmp/rep/* reports/ && git rm -q --cached --ignore-unmatch reports/migration.md reports/scan1.txt reports/scan2.txt && git add "reports/migration-${GITHUB_RUN_ID}.md" && git commit -m "Rapport répétition migration run ${GITHUB_RUN_ID}" && git push origin preprod-reports
+      - name: Échec du job si un identifiant a été trouvé dans le dépôt ou la branche des rapports
+        if: always() && steps.scan.outputs.repo_rc != '0'
+        run: echo "::error::Analyse de secrets positive (voir le rapport)." && exit 1

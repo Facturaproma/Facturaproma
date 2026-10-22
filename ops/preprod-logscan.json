@@ -1,0 +1,1 @@
+{ "_comment": "Pousser une modification de ce fichier déclenche le workflow preprod-logscan (lecture des journaux GitHub Actions, comptage de secrets). Aucune écriture en base.", "nonce": "1" }

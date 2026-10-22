@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FacturaPro — Facturation Maroc</title>
-    <meta name="description" content="Logiciel de facturation 100% marocain. Factures conformes, déclarations CNSS et impôts automatiques.">
+    <meta name="description" content="Logiciel de facturation pour auto-entrepreneurs, freelances et petites entreprises au Maroc : factures, devis, paiements et PDF en français et en arabe.">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -25,7 +25,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     
     <!-- Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+    <!-- Nouveau stockage « une ligne par document » : PRÉPARATION, préproduction + comptes de test + mode décidé par le serveur (voir docstore.js). Absent/en échec => comportement historique inchangé. -->
+    <script src="docstore.js"></script>
     
     <!-- Service Worker Registration -->
     <script>
@@ -350,7 +352,7 @@
         table.tbl-act th:last-child, table.tbl-act td:last-child {
             position: sticky; right: 0; z-index: 2;
             background: var(--surface); box-shadow: -6px 0 8px -6px var(--shadow-md);
-            white-space: normal; min-width: 112px;
+            white-space: normal; min-width: 150px;
         }
         table.tbl-act thead th:last-child { background: var(--surface-soft); }
         table.tbl-act td:last-child { display: table-cell; }
@@ -765,9 +767,30 @@
         }
 
         /* Items table in editor */
+        .editor-main { min-width: 0; }
+        .items-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
         .items-table {
             width: 100%;
+            min-width: 500px;
             margin: 20px 0;
+        }
+        .items-table .item-qty { min-width: 50px; }
+        .items-table .item-price { min-width: 78px; }
+        .items-table .item-disc { min-width: 50px; }
+        .items-table .item-desc { min-width: 100px; }
+        .items-table .item-tva { min-width: 64px; padding-left: 6px; padding-right: 2px; }
+        .items-table .item-total { white-space: nowrap; }
+        /* Écrans moyens (≈1100-1400 px) : panneau latéral plus étroit et cellules plus serrées pour que « Total HT » reste visible sans défilement */
+        @media (min-width: 1101px) and (max-width: 1400px) {
+            .editor-grid { grid-template-columns: 1fr 300px; gap: 16px; }
+            .items-table { min-width: 0; }
+            .items-table th { padding: 10px 6px; }
+            .items-table td { padding: 6px 3px; }
+            .items-table input { padding: 8px 6px; }
+            .items-table .item-qty { min-width: 44px; }
+            .items-table .item-price { min-width: 70px; }
+            .items-table .item-disc { min-width: 44px; }
+            .items-table .item-tva { min-width: 58px; }
         }
 
         .items-table thead {
@@ -3171,10 +3194,11 @@
                     <button class="btn btn-success" id="btnConvertQuote" style="display:none;" onclick="convertEditingQuote()">→ Convertir en facture</button>
                     <button class="btn btn-secondary" onclick="editorExport('pdf')" title="Enregistrer puis télécharger / imprimer en PDF">📥 PDF / Imprimer</button>
                     <button class="btn btn-secondary" onclick="editorExport('whatsapp')" title="Enregistrer puis envoyer par WhatsApp" style="color:#1da851;">💬 WhatsApp</button>
-                    <button class="btn btn-secondary" onclick="saveInvoice('draft')">Brouillon</button>
-                    <button class="btn btn-primary" onclick="saveInvoice('sent')">Enregistrer & Envoyer</button>
+                    <button class="btn btn-secondary lock-hide" onclick="saveInvoice('draft')">Brouillon</button>
+                    <button class="btn btn-primary lock-hide" onclick="saveInvoice('sent')">Enregistrer & Envoyer</button>
                 </div>
             </div>
+            <div id="editorLockBanner" class="alert alert-warning" style="display:none; margin: 0 0 16px;"></div>
 
             <div class="editor-grid">
                 <div class="editor-main">
@@ -3212,23 +3236,24 @@
 
                     <h3 style="font-family: 'Crimson Pro', serif; font-size: 18px; margin: 24px 0 12px;">Articles</h3>
 
-                    <table class="items-table">
+                    <div class="items-scroll"><table class="items-table">
                         <thead>
                             <tr>
-                                <th style="width: 45%;">Description</th>
-                                <th style="width: 12%;">Qté</th>
-                                <th style="width: 18%;">Prix unitaire</th>
-                                <th style="width: 10%;">TVA %</th>
-                                <th style="width: 15%;" style="text-align: right;">Total HT</th>
+                                <th>Description</th>
+                                <th style="width: 52px;">Qté</th>
+                                <th style="width: 84px;">Prix unit.</th>
+                                <th style="width: 56px;">Rem. %</th>
+                                <th style="width: 70px;">TVA %</th>
+                                <th style="width: 84px; text-align: right;">Total HT</th>
                                 <th style="width: 40px;"></th>
                             </tr>
                         </thead>
                         <tbody id="itemsBody"></tbody>
-                    </table>
+                    </table></div>
 
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
                         <button class="btn btn-primary btn-sm" onclick="addItemFromPicker()">📦 Choisir depuis catalogue</button>
-                        <button class="btn btn-secondary btn-sm" onclick="addItem()">✏️ Saisie manuelle</button>
+                        <button class="btn btn-secondary btn-sm lock-hide" onclick="addItem()">✏️ Saisie manuelle</button>
                     </div>
 
                     <div class="totals-section">
@@ -4062,7 +4087,7 @@
             </div>
 
             <div class="notice">
-                <strong>🔔 Système de relances automatiques</strong> — Configurez vos modèles d'emails de relance et FacturaPro vous proposera d'envoyer des rappels aux clients en retard.
+                <strong>🔔 Relances guidées</strong> — Configurez vos modèles de message : FacturaPro repère les factures en retard et prépare le texte, que vous envoyez vous-même (copie du texte ou ouverture dans votre messagerie e-mail).
             </div>
 
             <div class="calc-grid">
@@ -4224,21 +4249,10 @@
                 </div>
             </div>
 
-            <!-- Promo code -->
-            <div class="promo-section" id="sectionPromoCode">
-                <h4>🎁 Vous avez un code promo ?</h4>
-                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Saisissez votre code promo (partenaire comptable…)</p>
-                <div class="promo-input-group">
-                    <input type="text" id="promoCode" placeholder="ENTREZ VOTRE CODE">
-                    <button class="btn btn-primary" onclick="applyPromoCode()">Appliquer</button>
-                </div>
-                <div id="promoResult" style="margin-top: 8px; font-size: 13px; font-weight: 600;"></div>
-            </div>
-
             <!-- Payment methods -->
             <div class="calc-card" id="sectionPayment" style="margin-top: 24px;">
                 <h3>💳 Modes de paiement acceptés</h3>
-                <p class="subtitle">Plusieurs options pour vous faciliter la vie</p>
+                <p class="subtitle">Paiement par virement bancaire</p>
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px;">
                     <div style="padding: 14px; background: var(--surface-soft); border-radius: 10px; border: 1px solid var(--border);">
@@ -4246,15 +4260,10 @@
                         <strong style="font-size: 14px;">Virement bancaire</strong>
                         <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">RIB fourni au paiement</p>
                     </div>
-                    <div style="padding: 14px; background: var(--surface-soft); border-radius: 10px; border: 1px solid var(--border);">
-                        <div style="font-size: 24px; margin-bottom: 6px;">💵</div>
-                        <strong style="font-size: 14px;">Espèces</strong>
-                        <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">Sur rendez-vous</p>
-                    </div>
                 </div>
 
-                <div class="notice" style="margin-top: 20px;">
-                    <strong>📞 Besoin d'aide ?</strong> Contactez-nous via WhatsApp au <strong class="contact-wa">+212 6XX XX XX XX</strong> ou par email à <strong class="contact-email">hello@facturapro.ma</strong> pour finaliser votre achat.
+                <div class="notice" id="contactNotice" style="margin-top: 20px;">
+                    <strong>📞 Besoin d'aide ?</strong> Demandez votre abonnement ci-dessus : notre équipe vous contactera pour finaliser votre achat.
                 </div>
             </div>
 
@@ -4459,14 +4468,14 @@
                     <div class="aside-card">
                         <h3>📊 Export comptable</h3>
                         <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">
-                            Exportez vos factures dans des formats compatibles avec les logiciels comptables et la DGI Maroc.
+                            Exportez vos factures émises en CSV (à importer dans votre logiciel ou à transmettre à votre comptable).
                         </p>
                         
                         <div style="background: var(--surface-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
                             <strong style="display: block; margin-bottom: 6px;">📦 Formats inclus :</strong>
                             <div style="display: flex; flex-direction: column; gap: 4px; color: var(--ink-soft);">
                                 <div>✓ <strong>CSV Excel</strong> (Sage, EBP, Cegid, Quadratus...)</div>
-                                <div>✓ <strong>FEC</strong> (Fichier Écritures Comptables - DGI Maroc)</div>
+                                <div>✓ <strong>FEC</strong> (modèle français, non validé DGI : à faire contrôler par votre comptable)</div>
                                 <div>✓ Compatible cabinet comptable</div>
                             </div>
                         </div>
@@ -4486,20 +4495,6 @@
                         </button>
                         <button class="btn btn-danger" onclick="resetApp()" style="width: 100%;">
                             🔄 Tout réinitialiser
-                        </button>
-                    </div>
-
-                    <div class="aside-card">
-                        <h3>🧪 Mode Test (Dev)</h3>
-                        <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">À utiliser uniquement pour tester le système d'essai</p>
-                        <button class="btn btn-secondary" onclick="resetTrial()" style="width: 100%; margin-bottom: 8px; font-size: 12px;">
-                            🔄 Réinitialiser essai (14 jours)
-                        </button>
-                        <button class="btn btn-secondary" onclick="expireTrial()" style="width: 100%; margin-bottom: 8px; font-size: 12px;">
-                            ⏰ Forcer expiration (test)
-                        </button>
-                        <button class="btn btn-secondary" onclick="setTrialDaysLeft(2)" style="width: 100%; font-size: 12px;">
-                            🔴 Test : 2 jours restants
                         </button>
                     </div>
                 </aside>
@@ -4713,7 +4708,7 @@
 <div class="modal-overlay" id="accountingExportModal" onclick="closeModalIfBg(event, 'accountingExportModal')">
     <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 560px;">
         <h2>📊 Export Comptable</h2>
-        <p>Choisissez le format adapté à votre logiciel comptable ou à la DGI</p>
+        <p>Choisissez le format adapté à votre logiciel comptable ou à votre comptable</p>
 
         <div style="display: flex; flex-direction: column; gap: 12px; margin: 16px 0;">
             <!-- CSV Excel -->
@@ -4740,7 +4735,7 @@
                 <div style="display: flex; gap: 12px; align-items: start;">
                     <div style="font-size: 32px;">🏛️</div>
                     <div style="flex: 1;">
-                        <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">Format FEC (DGI Maroc)</div>
+                        <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">Format FEC (modèle français)</div>
                         <div style="font-size: 12px; color: var(--ink-mute); margin-bottom: 6px;">Fichier Écritures Comptables (export à faire valider par votre comptable)</div>
                         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                             <span style="background: rgba(46, 125, 91, 0.1); color: var(--success); padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600;">Export comptable</span>
@@ -4754,7 +4749,7 @@
         </div>
 
         <div style="background: rgba(201, 169, 91, 0.08); border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 8px; font-size: 12px; color: var(--ink-soft); margin: 16px 0;">
-            💡 <strong>Conseil</strong> : Demandez à votre comptable quel format il préfère. La plupart utilisent le CSV Excel. Le FEC est requis en cas de contrôle fiscal DGI.
+            💡 <strong>Conseil</strong> : Demandez à votre comptable quel format il préfère. La plupart utilisent le CSV Excel. Le format FEC est un modèle d'origine française, fourni à titre indicatif : il n'est ni certifié ni validé par la DGI.
         </div>
 
         <div class="modal-actions">
@@ -5289,6 +5284,8 @@ const SyncManager = {
     },
     
     addPendingChange(change) {
+        // une écriture « clé entière » en attente suffit : le rejeu envoie la valeur courante (pas d'empilement par clé)
+        if (change.type === 'storage' && change.key && this.pendingChanges.some(c => c.type === 'storage' && c.key === change.key)) return;
         this.pendingChanges.push({
             ...change,
             timestamp: Date.now(),
@@ -5321,17 +5318,19 @@ const SyncManager = {
                 // Le sync se fait via Storage.set qui appelle déjà Supabase
                 // Pour les anciennes modifications, juste re-déclencher la sauvegarde
                 if (change.type === 'storage' && change.key) {
-                    const value = Storage.get(change.key);
-                    if (window._supabaseClient && Storage._currentUserId) {
-                        await window._supabaseClient
-                            .from('user_data')
-                            .upsert({
-                                user_id: Storage._currentUserId,
-                                key: change.key,
-                                value: value,
-                                updated_at: new Date().toISOString()
-                            }, { onConflict: 'user_id,key' });
+                    if (DocStoreGlue.active() && DOC_KEYS.indexOf(change.key) >= 0) {
+                        // nouveau stockage : ces clés ne passent plus par user_data (file propre à docstore.js)
+                        console.warn('[Sync] changement ancien format ignoré (nouveau stockage actif) :', change.key);
+                        this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id);
+                        continue;
                     }
+                    if (!supaClient || !Storage._currentUserId) { failed.push(change); continue; }   // pas de client/session : rien n'est envoyé, rien n'est déclaré synchronisé (avant : `window._supabaseClient`, jamais défini)
+                    // UNE seule logique d'envoi (celle de l'écriture directe : fusion des factures, refus de mode, licence). Résultat : 'ok' | 'kept' (reste en attente) | 'dropped' (refus explicite, copie de récupération)
+                    const sent = JSON.stringify(Storage.get(change.key));
+                    const res = await Storage._syncToCloud(change.key, Storage.get(change.key));
+                    if (res === 'kept') { failed.push(change); continue; }                       // refus (licence), réseau, session : l'écriture RESTE en attente, jamais marquée synchronisée
+                    if (res === 'dropped') { this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id); continue; }   // refus explicite déjà signalé
+                    if (JSON.stringify(Storage.get(change.key)) !== sent) { failed.push(change); continue; }   // modifié pendant l'envoi : l'entrée reste (la valeur la plus récente sera renvoyée)
                 }
                 synced++;
                 // Retirer de la queue
@@ -5511,17 +5510,39 @@ async function getCaptchaToken() {
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q';
 
 // ============================================
-// CONTACT COMMERCIAL : un seul endroit à modifier
-// Remplacer par le vrai numéro / e-mail de la SARL.
+// CONTACT COMMERCIAL : configuré dans Admin → Réglages (WhatsApp, e-mail), lu via la fonction SQL get_contact_info().
+// Aucune valeur factice n'est affichée : tant que le contact n'est pas configuré (ou indisponible), le client est invité
+// à demander son abonnement dans l'application, et l'équipe le contacte.
 // ============================================
-const CONTACT = {
-    whatsapp: '+212 6XX XX XX XX',
-    email: 'hello@facturapro.ma'
-};
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.contact-wa').forEach(e => e.textContent = CONTACT.whatsapp);
-    document.querySelectorAll('.contact-email').forEach(e => e.textContent = CONTACT.email);
-});
+const CONTACT = { whatsapp: '', email: '' };
+function contactLinesText() {
+    const l = [];
+    if (CONTACT.whatsapp) l.push(`📱 WhatsApp : ${CONTACT.whatsapp}`);
+    if (CONTACT.email) l.push(`📧 E-mail : ${CONTACT.email}`);
+    return l.length ? l.join('\n') : `📞 Contact : demandez votre abonnement dans l'application, notre équipe vous contactera.`;
+}
+function renderContactNotice() {
+    const el = document.getElementById('contactNotice');
+    if (!el) return;
+    const parts = [];
+    if (CONTACT.whatsapp) parts.push(`WhatsApp au <strong>${escapeHtml(CONTACT.whatsapp)}</strong>`);
+    if (CONTACT.email) parts.push(`e-mail à <strong>${escapeHtml(CONTACT.email)}</strong>`);
+    el.innerHTML = parts.length
+        ? `<strong>📞 Besoin d'aide ?</strong> Contactez-nous par ${parts.join(' ou par ')} pour finaliser votre achat.`
+        : `<strong>📞 Besoin d'aide ?</strong> Demandez votre abonnement ci-dessus : notre équipe vous contactera pour finaliser votre achat.`;
+}
+async function loadContactInfo() {
+    try {
+        if (USE_SUPABASE && ensureSupabase()) {
+            const { data, error } = await supaClient.rpc('get_contact_info');
+            if (!error && data) { CONTACT.whatsapp = String(data.whatsapp || '').trim(); CONTACT.email = String(data.email || '').trim(); }
+            else if (error) console.warn('get_contact_info indisponible :', error.message);
+        }
+    } catch (e) { console.warn('get_contact_info :', e); }
+    renderContactNotice();
+    return CONTACT;
+}
+document.addEventListener('DOMContentLoaded', renderContactNotice);
 
 // ============================================
 // RÉINITIALISATION DE MOT DE PASSE (lien reçu par e-mail)
@@ -5688,6 +5709,7 @@ async function forceLogout(reason) {
     try { localStorage.setItem(SessionPolicy.K_MSG, reason); } catch {}
     Storage._cache = {};
     Storage._currentUserId = null;
+    DocStoreGlue.reset();
     SessionPolicy._hideWarning();
     try { document.getElementById('loginForm').reset(); document.getElementById('signupForm').reset(); } catch {}
     try { switchAuthTab('login'); } catch {}
@@ -5862,6 +5884,166 @@ const Auth = {
 };
 
 // ============================================
+// NOUVEAU STOCKAGE (préparation, préproduction uniquement) — glue entre Storage et docstore.js
+// Une seule source de vérité par compte : legacy (user_data) OU documents. Le mode est décidé par le SERVEUR (get_doc_mode) ;
+// ce code ne l'active jamais sur la seule foi d'un indicateur local, ni hors build de préproduction, ni hors compte de test.
+// ============================================
+const DOC_KEYS = ['invoices', 'quotes', 'payments', 'docLog'];
+const DocStoreGlue = {
+    store: null,
+    mode: 'legacy',            // legacy | documents | blocked
+    orphan: null,              // retour au mode ancien avec une file locale non vide (jamais rejouée) : {pending, conflicts, rejected}
+    _orphanHidden: false,
+    refused: null,             // 'nouveau' : l'ancien chemin a reçu MODE_NOUVEAU_STOCKAGE (le compte est passé au nouveau stockage)
+    _listeners: false,
+    _lastReload: 0,
+    usesDocuments() { return this.mode === 'documents'; },
+    active() { return this.mode === 'documents' || this.mode === 'blocked'; },
+    // Les 4 clés ne s'écrivent que par UN chemin. 'refused' : écriture refusée localement, avec message (jamais silencieuse).
+    route(baseKey) {
+        if (DOC_KEYS.indexOf(baseKey) < 0) return null;
+        if (this.refused) return 'refused';
+        if (this.mode === 'blocked') return 'refused';
+        if (this.mode === 'documents') { const st = this.store && this.store.status(); return (!st || st.halted) ? 'refused' : 'documents'; }
+        return null;
+    },
+    refusedToast() {
+        const t = Date.now();
+        if (this._toastAt && t - this._toastAt < 4000) return;
+        this._toastAt = t;
+        try { showToast(this.refused ? '🔒 Ce compte utilise le nouveau stockage (MODE_NOUVEAU_STOCKAGE) : rechargez l\'application. Modification non enregistrée.' : '🔒 Nouveau stockage indisponible ou arrêté : modification non enregistrée. Voir le bandeau en bas de page.', 'error'); } catch {}
+    },
+    reset() {
+        try { if (this.store) this.store.reset(); } catch {}
+        this.store = null; this.mode = 'legacy'; this.refused = null; this.orphan = null; this._orphanHidden = false;
+        this.renderBanner();
+    },
+    async start(userId) {
+        this.reset();
+        if (typeof DocStore === 'undefined' || typeof supaClient === 'undefined' || !supaClient) return { active: false };
+        try {
+            let email = ''; try { const u = await Auth.getCurrentUser(); email = (u && u.email) || ''; } catch {}
+            const self = this;
+            this.store = DocStore.createStore({
+                client: supaClient, userId, email, url: SUPABASE_URL, storage: localStorage,
+                uuid: uuid,
+                notify: (lvl, msg) => { try { showToast(msg, lvl === 'error' ? 'error' : lvl === 'warning' ? 'warning' : 'success'); } catch {} },
+                onChange: () => self.renderBanner(),
+                onReload: (state) => { self.install(state); self.rerender(); },
+                onApply: (key, doc, op, id) => self.apply(key, doc, op, id)
+            });
+            const r = await this.store.start();
+            this.mode = r.mode === 'documents' ? 'documents' : (r.mode === 'blocked' ? 'blocked' : 'legacy');
+            this.orphan = r.orphan || null;
+            if (this.mode === 'documents') { this.listen(); setTimeout(() => { try { this.store.flushSoon(); } catch {} }, 300); }   // reprise : envoie la file persistée (rejouable grâce aux op_id)
+            this.renderBanner();
+            return { active: this.active(), state: r.state || null };
+        } catch (err) {
+            // jamais de repli silencieux sur l'écriture ancien format : le compte reste en lecture seule pour ces 4 clés
+            console.error('[DocStore] démarrage impossible', err);
+            this.mode = 'blocked'; this.renderBanner();
+            return { active: true, state: null };
+        }
+    },
+    install(state) {
+        DOC_KEYS.forEach(k => {
+            if (!state || !Array.isArray(state[k])) return;
+            Storage._cache[k] = state[k];
+            try { localStorage.setItem(this.store.cacheKey(k), JSON.stringify(state[k])); } catch {}
+        });
+    },
+    apply(key, doc, op, id) {   // résolution de conflit : met à jour le cache local SANS repasser par Storage.set (pas de nouvelle opération)
+        const arr = (Storage.get(key, []) || []).slice();
+        const i = arr.findIndex(d => d.id === (doc ? doc.id : id));
+        if (op === 'remove') { if (i >= 0) arr.splice(i, 1); }
+        else if (i >= 0) arr[i] = doc; else arr.push(doc);
+        Storage._cache[key] = arr;
+        try { localStorage.setItem(this.store.cacheKey(key), JSON.stringify(arr)); } catch {}
+        this.rerender();
+    },
+    commit(baseKey, val) {
+        try { this.store.commit(baseKey, val); }
+        catch (e) { console.error('[DocStore] commit', e); try { showToast('❌ Enregistrement impossible (' + (e && e.message || e) + ')', 'error'); } catch {} }
+    },
+    rerender() { try { const a = document.querySelector('.page.active'); if (a && a.id.indexOf('page-') === 0 && a.id !== 'page-invoice-editor') navTo(a.id.slice(5)); } catch {} },
+    listen() {
+        if (this._listeners) return; this._listeners = true;
+        window.addEventListener('online', () => { if (this.store) this.store.flushSoon(); });
+        document.addEventListener('visibilitychange', async () => {
+            if (document.hidden || !this.store || this.mode !== 'documents') return;
+            this.store.flushSoon();
+            if (Date.now() - this._lastReload > 30000 && !this.store.status().pending) {
+                this._lastReload = Date.now();
+                try { await this.store.reload(); } catch (e) { console.warn('[DocStore] reload', e); }
+            }
+        });
+    },
+    // Refus de l'ancien chemin par le serveur : explicite, sans nouvelle tentative, sans le confondre avec une licence expirée (42501).
+    // Copie de sauvegarde locale d'une écriture ancien format refusée : l'utilisateur peut la récupérer (rien n'est perdu en silence)
+    archiveRefused(key, value, reason) {
+        try { if (Storage._currentUserId) localStorage.setItem('fp_refused_' + Storage._currentUserId + '_' + key, JSON.stringify({ at: new Date().toISOString(), reason, value })); } catch {}
+    },
+    handleLegacyRefusal(error, key, value) {
+        const t = String((error && (error.message || '')) || '') + ' ' + String((error && error.hint) || '');
+        if (!/MODE_NOUVEAU_STOCKAGE/.test(t)) return false;
+        this.refused = 'nouveau';
+        this.archiveRefused(key, value !== undefined ? value : Storage._cache[key], 'MODE_NOUVEAU_STOCKAGE');
+        try { SyncManager.pendingChanges = SyncManager.pendingChanges.filter(c => DOC_KEYS.indexOf(c.key) < 0); SyncManager.savePendingChanges(); SyncManager.updateUI(); } catch {}
+        console.warn('[DocStore] MODE_NOUVEAU_STOCKAGE sur', key, '— plus aucune écriture sur ces clés avant rechargement.');
+        this.refusedToast(); this.renderBanner();
+        return true;
+    },
+    exportRecovery() {
+        try {
+            const blob = new Blob([this.store.exportRecovery()], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'facturapro-recuperation-' + new Date().toISOString().slice(0, 10) + '.json';
+            document.body.appendChild(a); a.click(); a.remove();
+        } catch (e) { console.error('[DocStore] export', e); }
+    },
+    showConflicts() {
+        if (!this.store) return;
+        [...this.store.conflicts].forEach(c => {
+            const label = (c.mine && c.mine.number && !String(c.mine.number).startsWith('BRO-')) ? c.mine.number : (c.type + ' ' + c.id.slice(0, 8));
+            if (c.server_doc) {
+                const mine = confirm('Conflit sur ' + label + ' : modifié sur un autre appareil.\n\nOK = garder MA version (elle sera réappliquée sur la version du serveur)\nAnnuler = garder la version du SERVEUR (ma version locale est abandonnée)');
+                this.store.resolveConflict(c.id, mine ? 'keep-mine' : 'keep-server', Storage.get(c.key, []));
+            } else {
+                const recreate = confirm('Conflit sur ' + label + ' : supprimé sur un autre appareil.\n\nOK = le RECRÉER avec ma version\nAnnuler = l\'ABANDONNER (le supprimer ici aussi)');
+                this.store.resolveConflict(c.id, recreate ? 'keep-mine' : 'keep-server', Storage.get(c.key, []));
+            }
+        });
+        this.renderBanner();
+    },
+    renderBanner() {
+        let el = document.getElementById('docstoreBanner');
+        const st = this.store ? this.store.status() : null;
+        let msg = '', btn = '', act = null;
+        if (this.refused) { msg = '🔒 Ce compte utilise le nouveau stockage (MODE_NOUVEAU_STOCKAGE) : rechargez l\'application.'; btn = 'Recharger'; act = () => location.reload(); }
+        else if (this.mode === 'blocked') { msg = '🔒 Nouveau stockage : lecture seule (' + ((st && st.reason) || 'mode inconnu') + ').'; btn = 'Recharger'; act = () => location.reload(); }
+        else if (this.mode === 'documents' && st) {
+            if (st.halted === 'licence') { msg = '🔒 Licence inactive ou expirée (LICENCE_INACTIVE). ' + st.pending + ' modification(s) conservée(s) sur cet appareil, aucune nouvelle tentative automatique.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+            else if (st.halted === 'auth') { msg = '🔑 Session expirée ou refusée (authentification). ' + st.pending + ' modification(s) conservée(s) ; reconnectez-vous puis réessayez.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+            else if (st.halted === 'mode_ancien') { msg = '⚠️ MODE_ANCIEN_STOCKAGE : ce compte est repassé à l\'ancien stockage. Vos modifications en attente (' + st.pending + ') sont conservées sur cet appareil. Rechargez.'; btn = 'Recharger'; act = () => location.reload(); }
+            else if (st.halted) { msg = '⚠️ Écriture refusée par le serveur (' + (st.lastError || st.halted) + '). ' + st.pending + ' modification(s) en attente, aucune nouvelle tentative automatique.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+            else if (st.conflicts) { msg = '⚠️ ' + st.conflicts + ' conflit(s) entre appareils à résoudre.'; btn = 'Résoudre'; act = () => this.showConflicts(); }
+            else if (st.pending) { msg = '🔄 ' + st.pending + ' modification(s) en attente d\'envoi' + (st.lastError ? ' — ' + st.lastError : '') + '.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+        }
+        if (!msg && this.orphan && !this._orphanHidden && this.mode === 'legacy') {
+            msg = '⚠️ Ce compte est en ancien stockage, mais cet appareil conserve des modifications du nouveau stockage non envoyées (' + this.orphan.pending + ' en attente, ' + this.orphan.conflicts + ' conflit(s), ' + this.orphan.rejected + ' rejetée(s)). Elles ne sont PAS rejouées automatiquement : exportez-les pour les récupérer.';
+            btn = 'Exporter'; act = () => { this.exportRecovery(); this._orphanHidden = true; this.renderBanner(); };
+        }
+        if (!msg) { if (el) el.remove(); return; }
+        if (!el) {
+            el = document.createElement('div'); el.id = 'docstoreBanner';
+            el.setAttribute('style', 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#7c2d12;color:#fff;padding:10px 16px;font-size:14px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap');
+            document.body.appendChild(el);
+        }
+        el.innerHTML = ''; const sp = document.createElement('span'); sp.textContent = msg; el.appendChild(sp);
+        if (btn) { const b = document.createElement('button'); b.textContent = btn; b.setAttribute('style', 'padding:4px 12px;border-radius:6px;border:0;cursor:pointer'); b.onclick = act; el.appendChild(b); }
+    }
+};
+
+// ============================================
 // STORAGE LAYER (Hybrid: Supabase OR Local)
 // ============================================
 const Storage = {
@@ -5888,6 +6070,8 @@ const Storage = {
     
     _buildLocalKey(key, userId) {
         const baseKey = this.keys[key] || key;
+        // nouveau stockage : copie locale SÉPARÉE de l'ancienne (jamais de mélange des deux sources)
+        if (DocStoreGlue.active() && DOC_KEYS.indexOf(baseKey) >= 0) return `fpd_${userId}_${baseKey}`;
         return `fp_${userId}_${baseKey}`;
     },
     
@@ -5935,6 +6119,9 @@ const Storage = {
         }
         // En mode cloud, la licence n'est jamais écrite par le navigateur
         if (USE_SUPABASE && baseKey === 'licenseInfo') return;
+        // Nouveau stockage : un seul chemin d'écriture par compte ; refus local explicite si le compte n'y est pas autorisé à écrire
+        const docRoute = DocStoreGlue.route(baseKey);
+        if (docRoute === 'refused') { delete this._cache[baseKey]; DocStoreGlue.refusedToast(); return; }
         this._cache[baseKey] = val;
         
         // Save locally always (offline-first)
@@ -5942,6 +6129,9 @@ const Storage = {
             localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(val));
         }
         
+        // Mode « documents » : opérations par document (upsert_document, record_payment, …) ; AUCUNE écriture dans user_data pour ces clés
+        if (docRoute === 'documents') { DocStoreGlue.commit(baseKey, val); return; }
+
         // Sync to Supabase if configured (async, non-blocking)
         // Licence expirée : la base refuse l'écriture, inutile d'essayer (copie locale seulement)
         let expiredNow = false;
@@ -5951,11 +6141,35 @@ const Storage = {
         }
     },
     
-    async _syncToCloud(key, value) {
+    // Deux appareils : la liste des factures est écrite en un bloc. Quand le serveur refuse l'écriture
+    // parce qu'elle « oublierait » une facture émise ailleurs, on fusionne (par identifiant) puis on réessaie :
+    // aucune facture émise ni nouvelle facture locale n'est perdue.
+    async _mergeInvoicesWithCloud(local) {
+        const { data, error } = await supaClient.from('user_data').select('key, value').eq('user_id', this._currentUserId);
+        if (error) return null;
+        const row = (data || []).find(r => r.key === 'invoices');
+        const cloud = (row && Array.isArray(row.value)) ? row.value : [];
+        const localById = new Map((local || []).map(i => [i.id, i]));
+        const out = cloud.map(c => {
+            const l = localById.get(c.id);
+            if (!l) return c;                                   // créée sur un autre appareil : conservée
+            if ((c.status || 'draft') !== 'draft') {             // émise : le serveur fait foi, sauf avancement du règlement
+                return (l.paidAmount || 0) > (c.paidAmount || 0)
+                    ? { ...c, status: l.status, paidAmount: l.paidAmount, paidAt: l.paidAt, payments: l.payments || c.payments }
+                    : c;
+            }
+            return l;                                           // brouillon : la version locale (plus récente) l'emporte
+        });
+        const cloudIds = new Set(cloud.map(c => c.id));
+        (local || []).forEach(l => { if (!cloudIds.has(l.id)) out.push(l); });   // nouvelles factures locales
+        return out;
+    },
+
+    async _syncToCloud(key, value, retried = false) {
         // Si offline, ajouter à la queue
         if (typeof SyncManager !== 'undefined' && !SyncManager.isOnline) {
             SyncManager.addPendingChange({ type: 'storage', key });
-            return;
+            return 'kept';
         }
         
         try {
@@ -5967,11 +6181,33 @@ const Storage = {
             }, { onConflict: 'user_id,key' });
             
             if (error) {
+                // MODE_NOUVEAU_STOCKAGE (SQLSTATE 42501 aussi !) : le compte est passé au nouveau stockage — ce n'est PAS une licence expirée, et on ne réessaie pas
+                if (DocStoreGlue.handleLegacyRefusal(error, key, value)) return 'dropped';
                 // 42501 = refus RLS : licence expirée côté serveur
                 if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
-                    console.warn('Écriture refusée par le serveur (licence).');
+                    console.warn('Écriture refusée par le serveur (licence) : conservée en attente.');
                     License.refresh();
-                    return;
+                    if (typeof SyncManager !== 'undefined') SyncManager.addPendingChange({ type: 'storage', key });   // jamais perdue ni déclarée synchronisée
+                    return 'kept';
+                }
+                if (/FACTURE_VERROUILLEE|NUMERO_EN_DOUBLE|NUMERO_NON_ATTRIBUE/.test(error.message || '')) {
+                    if (key === 'invoices' && !retried && /FACTURE_VERROUILLEE/.test(error.message || '')) {
+                        const merged = await this._mergeInvoicesWithCloud(value);
+                        if (merged) {
+                            this._cache['invoices'] = merged;
+                            try { localStorage.setItem(this._buildLocalKey('invoices', this._currentUserId), JSON.stringify(merged)); } catch {}
+                            const r2 = await this._syncToCloud(key, merged, true);
+                            try { renderInvoices(); } catch {}
+                            return r2;
+                        }
+                    }
+                    // Le serveur protège les factures émises : on recharge la version serveur
+                    console.warn('Écriture refusée (facture émise verrouillée).');
+                    DocStoreGlue.archiveRefused(key, value, 'FACTURE_VERROUILLEE');
+                    if (typeof showToast === 'function') showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error');
+                    await this.loadFromCloud();
+                    try { renderInvoices(); } catch {}
+                    return 'dropped';
                 }
                 throw error;
             }
@@ -5981,12 +6217,14 @@ const Storage = {
                 SyncManager.lastSyncTime = Date.now();
                 SyncManager.updateUI();
             }
+            return 'ok';
         } catch (err) {
             console.warn('Cloud sync failed:', err);
             // Si erreur réseau, ajouter à la queue pour retry plus tard
             if (typeof SyncManager !== 'undefined') {
                 SyncManager.addPendingChange({ type: 'storage', key });
             }
+            return 'kept';
         }
     },
     
@@ -5999,6 +6237,9 @@ const Storage = {
         
         this._currentUserId = userId;
         
+        // Nouveau stockage : le SERVEUR dit si ce compte est en mode « documents » (jamais un indicateur local)
+        const doc = await DocStoreGlue.start(userId);
+        
         try {
             const { data, error } = await supaClient
                 .from('user_data')
@@ -6009,9 +6250,12 @@ const Storage = {
             
             // Hydrate cache and localStorage
             (data || []).forEach(row => {
+                // en mode documents (ou bloqué) l'ancien tableau est FIGÉ : il ne doit jamais redevenir la source de ces 4 clés
+                if (DocStoreGlue.active() && DOC_KEYS.indexOf(row.key) >= 0) return;
                 this._cache[row.key] = row.value;
                 localStorage.setItem(this._buildLocalKey(row.key, userId), JSON.stringify(row.value));
             });
+            if (doc && doc.active && doc.state) DocStoreGlue.install(doc.state);
             
             console.log(`✓ Loaded ${data?.length || 0} records from cloud`);
         } catch (err) {
@@ -6022,6 +6266,7 @@ const Storage = {
     async setCurrentUser(userId) {
         this._currentUserId = userId;
         this._cache = {};
+        DocStoreGlue.reset();
         
         // Try to load from cloud first
         if (USE_SUPABASE) {
@@ -6032,6 +6277,7 @@ const Storage = {
     // Clear current user data
     async clearAll() {
         if (!this._currentUserId) return;
+        if (DocStoreGlue.active()) { console.warn('[DocStore] clearAll refusé : nouveau stockage actif.'); return; }
         
         this._cache = {};
         
@@ -6125,20 +6371,97 @@ function showToast(message, type = '') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-function getNextNumber(type) {
-    const counter = Storage.get('counter', { invoice: 0, quote: 0, credit: 0 });
-    counter[type] = (counter[type] || 0) + 1;
-    Storage.set('counter', counter);
-    
+// ---- Calculs (arrondi à 2 décimales, ligne par ligne) -------------------
+// Règle : HT de ligne = quantité × prix × (1 − remise %), arrondi au centime ;
+// TVA de ligne = HT de ligne × taux, arrondie au centime ; les totaux sont la
+// somme des lignes arrondies. Ainsi les montants affichés s'additionnent exactement.
+function roundMoney(x) {
+    // Symétrique pour les montants négatifs (avoirs) : -1,005 -> -1,01 comme +1,005 -> 1,01
+    const n = Number(x) || 0;
+    return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100 || 0;
+}
+function computeLine(qty, price, tvaRate, discountPct) {
+    const q = Number(qty) || 0, p = Number(price) || 0, t = Number(tvaRate) || 0;
+    const d = Math.min(Math.max(Number(discountPct) || 0, 0), 100);
+    const totalHT = roundMoney(q * p * (1 - d / 100));
+    const totalTVA = roundMoney(totalHT * t / 100);
+    return { totalHT, totalTVA, totalTTC: roundMoney(totalHT + totalTVA) };
+}
+function computeTotals(items) {
+    const totalHT = roundMoney((items || []).reduce((s, i) => s + (i.totalHT || 0), 0));
+    const totalTVA = roundMoney((items || []).reduce((s, i) => s + (i.totalTVA || 0), 0));
+    return { totalHT, totalTVA, totalTTC: roundMoney(totalHT + totalTVA) };
+}
+
+// ---- Numérotation ---------------------------------------------------------
+function formatDocNumber(type, n) {
     const company = Storage.get('company', {});
     let prefix;
     if (type === 'invoice') prefix = company.invoicePrefix || 'FAC';
     else if (type === 'quote') prefix = company.quotePrefix || 'DEV';
     else if (type === 'credit') prefix = company.creditPrefix || 'AVR';  // Avoir
     else prefix = 'DOC';
-    
-    const year = new Date().getFullYear();
-    return `${prefix}-${year}-${String(counter[type]).padStart(3, '0')}`;
+    return `${prefix}-${new Date().getFullYear()}-${String(n).padStart(3, '0')}`;
+}
+
+// Numéro OFFICIEL : attribué uniquement par le serveur (séquence unique par compte).
+// Si le serveur est injoignable, injoignable après erreur, ou si sql/14 n'est pas installé,
+// l'émission est REFUSÉE (la facture reste en brouillon) : jamais de numéro officiel local.
+// Seul le mode local sans serveur (démonstration) utilise le compteur du navigateur,
+// et les devis (documents non fiscaux) peuvent se rabattre sur le compteur local.
+class NumberingError extends Error {
+    constructor(code, message) { super(message); this.code = code; }
+}
+async function getNextNumber(type) {
+    const counter = Storage.get('counter', { invoice: 0, quote: 0, credit: 0 });
+    const floor = counter[type] || 0;
+    const cloud = typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof supaClient !== 'undefined' && supaClient && Storage._currentUserId;
+    let n = null;
+    if (cloud) {
+        let failure = null;
+        if (navigator.onLine === false) {
+            failure = new NumberingError('OFFLINE', 'Hors connexion : impossible d\'obtenir un numéro officiel. Le document est enregistré en brouillon ; émettez-le une fois reconnecté.');
+        } else {
+            try {
+                const { data, error } = await supaClient.rpc('next_doc_number', { p_type: type, p_floor: floor });
+                if (error) {
+                    const msg = String(error.message || '');
+                    if (/LICENCE_INACTIVE/.test(msg)) failure = new NumberingError('LICENSE', 'Licence inactive : émission impossible.');
+                    else if (error.code === 'PGRST202' || error.code === '42883' || /next_doc_number/.test(msg)) failure = new NumberingError('SERVER_UPDATE', 'Mise à jour du serveur requise pour émettre une facture. Contactez le support.');
+                    else failure = new NumberingError('NETWORK', 'Serveur injoignable : impossible d\'obtenir un numéro officiel. Le document reste en brouillon ; réessayez dans un instant.');
+                } else if (Number.isInteger(data) && data > 0) {
+                    n = data;
+                } else {
+                    failure = new NumberingError('NETWORK', 'Réponse inattendue du serveur : le document reste en brouillon.');
+                }
+            } catch (e) {
+                failure = new NumberingError('NETWORK', 'Serveur injoignable : impossible d\'obtenir un numéro officiel. Le document reste en brouillon ; réessayez dans un instant.');
+            }
+        }
+        if (n === null) {
+            if (type !== 'quote') throw failure;    // facture / avoir : jamais de numéro local
+            n = floor + 1;                          // devis : repli local toléré (document non fiscal)
+        }
+    } else {
+        n = floor + 1;                              // mode local sans serveur (démonstration)
+    }
+    counter[type] = Math.max(n, floor);
+    Storage.set('counter', counter);
+    return formatDocNumber(type, n);
+}
+
+const dn = (n) => (typeof n === 'string' && n.startsWith('BRO-')) ? 'Brouillon' : (n || '');
+const isDraftNumber = (num) => typeof num === 'string' && num.startsWith('BRO-');
+const draftNumber = () => 'BRO-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+const isLockedDoc = (d) => !!d && (d.type === 'invoice' || d.type === 'credit' || (!d.type && d.number)) && (d.status || 'draft') !== 'draft';
+
+// ---- Journal des opérations (piste d'audit) --------------------------------
+function logDoc(action, doc, detail = '') {
+    try {
+        const log = Storage.get('docLog', []) || [];
+        log.push({ ts: new Date().toISOString(), action, docId: doc && doc.id, number: doc && doc.number, detail });
+        Storage.set('docLog', log.slice(-2000));
+    } catch (e) { /* le journal ne doit jamais bloquer l'action */ }
 }
 
 function statusLabel(status) {
@@ -6553,6 +6876,7 @@ async function handleLogout() {
     SessionPolicy.clear();
     Storage._cache = {};
     Storage._currentUserId = null;
+    DocStoreGlue.reset();
     showToast('Déconnexion réussie', 'success');
     
     setTimeout(() => {
@@ -6693,7 +7017,7 @@ function navTo(page) {
     if (page === 'team') { navTo('dashboard'); return; }
     if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
-    if (page === 'invoice-editor') renderComplianceBox();
+    if (page === 'invoice-editor') { renderComplianceBox(); applyEditorLock(); }
     
     // Close mobile sidebar
     document.getElementById('sidebar').classList.remove('open');
@@ -6784,7 +7108,7 @@ function renderActionCenter(invoices) {
                 <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--border);">
                     <div style="flex:1; min-width:0;">
                         <strong>${escapeHtml(i.clientName || '—')}</strong>
-                        <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(i.number)} · ${i.overdueDays || 0} j de retard</div>
+                        <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(dn(i.number))} · ${i.overdueDays || 0} j de retard</div>
                     </div>
                     <strong>${formatCurrency(i.totalTTC)}</strong>
                     <button class="btn btn-secondary btn-sm" onclick="quickRelance('${i.id}')" title="Relancer par WhatsApp" style="color:#25D366;">💬 Relancer</button>
@@ -6872,7 +7196,7 @@ function renderDashboard() {
                 <tbody>
                     ${recent.map(i => `
                         <tr onclick="editInvoice('${i.id}')">
-                            <td><strong>${escapeHtml(i.number)}</strong></td>
+                            <td><strong>${escapeHtml(dn(i.number))}</strong></td>
                             <td>${escapeHtml(i.clientName || '—')}</td>
                             <td>${formatDate(i.date)}</td>
                             <td><strong>${formatCurrency(i.totalTTC)}</strong></td>
@@ -6971,7 +7295,7 @@ function renderInvoices() {
                 ${sorted.map(i => {
                     const isCredit = i.type === 'credit' || (i.totalTTC || 0) < 0;
                     const rowStyle = isCredit ? 'background: rgba(232, 177, 74, 0.04);' : '';
-                    const numberDisplay = isCredit ? `<strong style="color: var(--warning);">${escapeHtml(i.number)}</strong> <span style="font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 100px; font-weight: 700;">AVOIR</span>` : `<strong>${escapeHtml(i.number)}</strong>`;
+                    const numberDisplay = isCredit ? `<strong style="color: var(--warning);">${escapeHtml(dn(i.number))}</strong> <span style="font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 100px; font-weight: 700;">AVOIR</span>` : `<strong>${escapeHtml(dn(i.number))}</strong>`;
                     const amountDisplay = isCredit 
                         ? `<strong style="color: var(--danger);">${formatCurrency(i.totalTTC)}</strong>`
                         : `<strong>${formatCurrency(i.totalTTC)}</strong>`;
@@ -7005,7 +7329,7 @@ function newInvoice() {
     
     document.getElementById('editorTitle').textContent = 'Nouvelle facture';
     document.getElementById('editorType').value = 'invoice';
-    document.getElementById('editorInvoiceNumber').textContent = getNextNumberPreview('invoice');
+    document.getElementById('editorInvoiceNumber').textContent = 'Numéro attribué à l\'émission';
     document.getElementById('editorNumber').value = '';
     document.getElementById('editorDate').value = todayISO();
     document.getElementById('editorDueDate').value = addDaysISO(30);
@@ -7025,6 +7349,28 @@ function newInvoice() {
     document.getElementById('editorCompany').textContent = `Émis par ${company.name || 'votre entreprise'}`;
     
     navTo('invoice-editor');
+}
+
+// Facture émise = lecture seule (le serveur refuse aussi toute modification : sql/14)
+function applyEditorLock() {
+    const locked = editingType !== 'quote' && isLockedDoc(editingInvoice);
+    const page = document.getElementById('page-invoice-editor');
+    if (!page) return;
+    page.querySelectorAll('input, select, textarea').forEach(el => { el.disabled = locked; });
+    page.querySelectorAll('.lock-hide, .item-remove').forEach(el => { el.style.display = locked ? 'none' : ''; });
+    const ban = document.getElementById('editorLockBanner');
+    if (!ban) return;
+    if (!locked) { ban.style.display = 'none'; ban.innerHTML = ''; return; }
+    const hist = (Storage.get('docLog', []) || []).filter(l => l.docId === editingInvoice.id).slice(-5)
+        .map(l => `<li>${escapeHtml(new Date(l.ts).toLocaleString('fr-FR'))} — ${escapeHtml(l.action.replace(/_/g, ' '))}${l.detail ? ' (' + escapeHtml(l.detail) + ')' : ''}</li>`).join('');
+    const isCredit = editingInvoice.type === 'credit';
+    ban.innerHTML = `<strong>🔒 ${isCredit ? 'Avoir' : 'Facture'} ${escapeHtml(editingInvoice.number)} émis : non modifiable.</strong><br>`
+        + (isCredit ? '' : `Pour corriger une erreur, créez un avoir ; pour refaire une facture proche, utilisez « Dupliquer ». `)
+        + `<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">`
+        + (isCredit ? '' : `<button type="button" class="btn btn-secondary btn-sm" onclick="createCreditFromInvoice('${editingInvoice.id}')">↩️ Créer un avoir</button>`)
+        + `<button type="button" class="btn btn-secondary btn-sm" onclick="duplicateInvoice('${editingInvoice.id}')">📋 Dupliquer</button></div>`
+        + (hist ? `<ul style="margin:8px 0 0 18px; font-size:12px;">${hist}</ul>` : '');
+    ban.style.display = 'block';
 }
 
 function getNextNumberPreview(type) {
@@ -7049,10 +7395,10 @@ function editInvoice(id) {
     editingInvoice = invoice;
     editingType = 'invoice';
     
-    document.getElementById('editorTitle').textContent = `Facture ${invoice.number}`;
+    document.getElementById('editorTitle').textContent = isDraftNumber(invoice.number) ? 'Facture (brouillon)' : `Facture ${invoice.number}`;
     document.getElementById('editorType').value = 'invoice';
-    document.getElementById('editorInvoiceNumber').textContent = invoice.number;
-    document.getElementById('editorNumber').value = invoice.number;
+    document.getElementById('editorInvoiceNumber').textContent = isDraftNumber(invoice.number) ? 'Numéro attribué à l\'émission' : invoice.number;
+    document.getElementById('editorNumber').value = isDraftNumber(invoice.number) ? '' : invoice.number;
     document.getElementById('editorDate').value = invoice.date;
     document.getElementById('editorDueDate').value = invoice.dueDate || '';
     setEditorStatusOptions('invoice');
@@ -7082,7 +7428,7 @@ function duplicateInvoice(id) {
     
     document.getElementById('editorTitle').textContent = 'Nouvelle facture';
     document.getElementById('editorType').value = 'invoice';
-    document.getElementById('editorInvoiceNumber').textContent = getNextNumberPreview('invoice');
+    document.getElementById('editorInvoiceNumber').textContent = 'Numéro attribué à l\'émission';
     document.getElementById('editorNumber').value = '';
     document.getElementById('editorDate').value = todayISO();
     document.getElementById('editorDueDate').value = addDaysISO(30);
@@ -7104,20 +7450,35 @@ function duplicateInvoice(id) {
 }
 
 function deleteInvoice(id) {
-    if (!confirm('Supprimer cette facture ?')) return;
     const invoices = Storage.get('invoices', []);
+    const inv = invoices.find(i => i.id === id);
+    if (inv && isLockedDoc(inv)) {
+        showToast(`La facture ${inv.number} est émise : elle ne peut pas être supprimée. Créez un avoir pour l'annuler.`, 'error');
+        return;
+    }
+    if (!confirm('Supprimer ce brouillon ?')) return;
+    if (inv) logDoc('suppression_brouillon', inv);
     Storage.set('invoices', invoices.filter(i => i.id !== id));
     renderInvoices();
-    showToast('Facture supprimée', 'success');
+    showToast('Brouillon supprimé', 'success');
 }
 
 // ============================================
 // CREDIT NOTES (AVOIRS) - Remboursements
 // ============================================
-function createCreditFromInvoice(id) {
+async function createCreditFromInvoice(id) {
     const invoices = Storage.get('invoices', []);
     const original = invoices.find(i => i.id === id);
     if (!original) return;
+    if (!isLockedDoc(original)) {
+        showToast('Un avoir se crée sur une facture émise. Supprimez simplement ce brouillon.', 'error');
+        return;
+    }
+    const already = invoices.find(i => i.type === 'credit' && i.relatedInvoiceId === original.id);
+    if (already) {
+        showToast(`Un avoir existe déjà pour cette facture (${already.number}).`, 'error');
+        return;
+    }
     
     if (!confirm(`📝 Créer un avoir (note de crédit) pour cette facture ?\n\n` +
                  `Facture originale : ${original.number}\n` +
@@ -7129,7 +7490,10 @@ function createCreditFromInvoice(id) {
     }
     
     // Générer un nouveau numéro d'avoir
-    const creditNumber = getNextNumber('credit');
+    const reason = prompt('Motif de l\'avoir :', 'Remboursement / Annulation') || 'Remboursement';
+    let creditNumber;
+    try { creditNumber = await getNextNumber('credit'); }
+    catch (e) { if (e instanceof NumberingError) { showToast(e.message, 'error'); return; } throw e; }
     
     // Créer l'avoir avec items en NÉGATIF
     const credit = {
@@ -7147,18 +7511,22 @@ function createCreditFromInvoice(id) {
         items: (original.items || []).map(item => ({
             ...item,
             quantity: -Math.abs(item.quantity || 0),  // Quantité négative
+            totalHT: -Math.abs(item.totalHT || 0),
+            totalTVA: -Math.abs(item.totalTVA || 0),
+            totalTTC: -Math.abs(item.totalTTC || 0)
         })),
         totalHT: -Math.abs(original.totalHT || original.subtotal || 0),
         totalTVA: -Math.abs(original.totalTVA || 0),
         totalTTC: -Math.abs(original.totalTTC || 0),
         status: 'sent',
-        notes: `Avoir relatif à la facture ${original.number}\nMotif : ${prompt('Motif de l\'avoir :', 'Remboursement / Annulation') || 'Remboursement'}`,
+        notes: `Avoir relatif à la facture ${original.number}\nMotif : ${reason}`,
         paymentTerms: '0',
         createdAt: new Date().toISOString()
     };
     
     invoices.push(credit);
     Storage.set('invoices', invoices);
+    logDoc('avoir', credit, `sur ${original.number}`);
     
     showToast(`✓ Avoir ${creditNumber} créé`, 'success');
     renderInvoices();
@@ -7191,7 +7559,7 @@ function updateEditorType() {
     } else {
         document.getElementById('editorTitle').textContent = editingInvoice ? `Facture ${editingInvoice.number}` : 'Nouvelle facture';
         document.getElementById('editorInvoiceNumber').textContent = 
-            editingInvoice ? editingInvoice.number : getNextNumberPreview('invoice');
+            editingInvoice ? dn(editingInvoice.number) : 'Numéro attribué à l\'émission';
     }
 }
 
@@ -7211,8 +7579,9 @@ function addItem(data = null) {
                 <button type="button" class="btn btn-secondary" onclick="openProductPicker('${rowId}')" title="Sélectionner un produit/service" style="padding: 6px 10px; font-size: 14px;">📦</button>
             </div>
         </td>
-        <td><input type="number" class="item-qty" min="1" step="0.01" value="${data?.quantity || 1}" oninput="updateTotals()"></td>
+        <td><input type="number" class="item-qty" min="0.01" step="0.01" value="${data?.quantity || 1}" oninput="updateTotals()"></td>
         <td><input type="number" class="item-price" min="0" step="0.01" placeholder="0.00" value="${data?.price || 0}" oninput="updateTotals()"></td>
+        <td><input type="number" class="item-disc" min="0" max="100" step="0.5" placeholder="0" value="${data?.discount || 0}" oninput="updateTotals()"></td>
         <td>
             <select class="item-tva" onchange="updateTotals()">
                 <option value="0" ${data?.tva == 0 ? 'selected' : ''}>0%</option>
@@ -7418,24 +7787,17 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function updateTotals() {
-    let totalHT = 0;
-    let totalTVA = 0;
-    
+    const lines = [];
     document.querySelectorAll('#itemsBody tr').forEach(row => {
-        const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-        const price = parseFloat(row.querySelector('.item-price').value) || 0;
-        const tva = parseFloat(row.querySelector('.item-tva').value) || 0;
-        
-        const lineHT = qty * price;
-        const lineTVA = lineHT * (tva / 100);
-        
-        totalHT += lineHT;
-        totalTVA += lineTVA;
-        
-        row.querySelector('.item-total').textContent = formatCurrency(lineHT);
+        const line = computeLine(
+            parseFloat(row.querySelector('.item-qty').value),
+            parseFloat(row.querySelector('.item-price').value),
+            parseFloat(row.querySelector('.item-tva').value),
+            parseFloat(row.querySelector('.item-disc')?.value));
+        lines.push(line);
+        row.querySelector('.item-total').textContent = formatCurrency(line.totalHT);
     });
-    
-    const totalTTC = totalHT + totalTVA;
+    const { totalHT, totalTVA, totalTTC } = computeTotals(lines);
     
     document.getElementById('totalHT').textContent = formatCurrency(totalHT);
     document.getElementById('totalTVA').textContent = formatCurrency(totalTVA);
@@ -7450,16 +7812,19 @@ function getCurrentItems() {
         const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
         const price = parseFloat(row.querySelector('.item-price').value) || 0;
         const tva = parseFloat(row.querySelector('.item-tva').value) || 0;
+        const discount = Math.min(Math.max(parseFloat(row.querySelector('.item-disc')?.value) || 0, 0), 100);
         
         if (desc && qty > 0) {
+            const line = computeLine(qty, price, tva, discount);
             items.push({
                 description: desc,
                 quantity: qty,
                 price: price,
+                discount: discount,
                 tva: tva,
-                totalHT: qty * price,
-                totalTVA: qty * price * (tva / 100),
-                totalTTC: qty * price * (1 + tva / 100)
+                totalHT: line.totalHT,
+                totalTVA: line.totalTVA,
+                totalTTC: line.totalTTC
             });
         }
     });
@@ -7469,7 +7834,18 @@ function getCurrentItems() {
 // ============================================
 // SAVE INVOICE / QUOTE
 // ============================================
-function persistEditor(forceStatus = null) {
+let _persisting = false;
+async function persistEditor(forceStatus = null) {
+    if (_persisting) return null;          // évite un double clic = deux documents
+    _persisting = true;
+    try { return await _persistEditor(forceStatus); } finally { _persisting = false; }
+}
+async function _persistEditor(forceStatus = null) {
+    // Une facture émise est figée : correction par avoir uniquement
+    if (editingInvoice && editingType !== 'quote' && isLockedDoc(editingInvoice)) {
+        showToast('Facture émise : non modifiable. Créez un avoir pour la corriger.', 'error');
+        return null;
+    }
     // Check license
     if (!License.hasFullAccess()) {
         showToast('🔒 Période d\'essai expirée. Activez votre licence pour continuer.', 'error');
@@ -7496,19 +7872,39 @@ function persistEditor(forceStatus = null) {
         return null;
     }
     
-    const totalHT = items.reduce((s, i) => s + i.totalHT, 0);
-    const totalTVA = items.reduce((s, i) => s + i.totalTVA, 0);
-    const totalTTC = totalHT + totalTVA;
+    const { totalHT, totalTVA, totalTTC } = computeTotals(items);
     
     const isQuote = editingType === 'quote';
     const storageKey = isQuote ? 'quotes' : 'invoices';
     const collection = Storage.get(storageKey, []);
     
+    let newStatus = forceStatus || document.getElementById('editorStatus').value;
+    let number = editingInvoice?.number;
+    let justIssued = false;
+    let issuanceBlocked = false;
+    if (isQuote) {
+        if (!number) number = await getNextNumber('quote');
+    } else {
+        const wasDraft = !editingInvoice || (editingInvoice.status || 'draft') === 'draft';
+        if (wasDraft && newStatus !== 'draft') {
+            // Émission : le numéro officiel vient du serveur. Sans serveur, on reste en brouillon.
+            try { number = await getNextNumber('invoice'); justIssued = true; }
+            catch (e) {
+                if (!(e instanceof NumberingError)) throw e;
+                issuanceBlocked = true; newStatus = 'draft';
+                number = (editingInvoice && isDraftNumber(editingInvoice.number)) ? editingInvoice.number : draftNumber();
+                showToast(e.message, 'error');
+            }
+        } else if (!number) {
+            number = draftNumber();
+        }
+    }
+
     const data = {
         // on conserve les champs que l'éditeur ne gère pas (lien devis ↔ facture, paiements, etc.)
         ...(editingInvoice || {}),
         id: editingInvoice?.id || uuid(),
-        number: editingInvoice?.number || getNextNumber(isQuote ? 'quote' : 'invoice'),
+        number: number,
         type: editingType,
         date: document.getElementById('editorDate').value,
         dueDate: document.getElementById('editorDueDate').value,
@@ -7520,7 +7916,7 @@ function persistEditor(forceStatus = null) {
         totalHT: totalHT,
         totalTVA: totalTVA,
         totalTTC: totalTTC,
-        status: forceStatus || document.getElementById('editorStatus').value,
+        status: newStatus,
         paymentTerms: document.getElementById('editorPaymentTerms').value,
         notes: document.getElementById('editorNotes').value,
         createdAt: editingInvoice?.createdAt || new Date().toISOString(),
@@ -7536,12 +7932,20 @@ function persistEditor(forceStatus = null) {
     
     Storage.set(storageKey, collection);
     editingInvoice = data;   // les enregistrements suivants mettent à jour ce document (pas de doublon)
-    return data;
+    if (justIssued) {
+        logDoc('emission', data, `Facture émise, total TTC ${data.totalTTC}`);
+        // le devis d'origine pointe vers le numéro officiel
+        const quotes = Storage.get('quotes', []);
+        const q = quotes.find(x => x.convertedTo === data.id);
+        if (q) { q.convertedInvoiceNumber = data.number; Storage.set('quotes', quotes); }
+    }
+    return issuanceBlocked ? Object.assign({}, data, { _issuanceBlocked: true }) : data;
 }
 
-function editorExport(kind) {
+async function editorExport(kind) {
     const isQuote = editingType === 'quote';
-    const data = persistEditor(null);
+    // Facture émise : on n'enregistre rien, on exporte le document tel quel
+    const data = (!isQuote && editingInvoice && isLockedDoc(editingInvoice)) ? editingInvoice : await persistEditor(null);
     if (!data) return;
     editingInvoice = data;
     const type = isQuote ? 'quote' : 'invoice';
@@ -7549,11 +7953,12 @@ function editorExport(kind) {
     else sendDocWhatsApp(data.id, type);
 }
 
-function saveInvoice(forceStatus = null) {
+async function saveInvoice(forceStatus = null) {
     const wasAccepted = editingType === 'quote' && editingInvoice && editingInvoice.status === 'accepted';
-    const data = persistEditor(forceStatus);
+    const data = await persistEditor(forceStatus);
     if (!data) return;
     const isQuote = editingType === 'quote';
+    if (data._issuanceBlocked) return;   // message d'erreur déjà affiché, on reste sur le brouillon
     showToast(isQuote ? 'Devis enregistré ✓' : 'Facture enregistrée ✓', 'success');
 
     // Devis accepté : proposer tout de suite la facture (sans rien ressaisir)
@@ -7567,10 +7972,10 @@ function saveInvoice(forceStatus = null) {
 }
 
 // Bouton « Convertir en facture » dans l'éditeur de devis : enregistre d'abord, puis convertit
-function convertEditingQuote() {
-    const data = persistEditor(null);
+async function convertEditingQuote() {
+    const data = await persistEditor(null);
     if (!data) return;
-    convertQuoteToInvoice(data.id);
+    await convertQuoteToInvoice(data.id);
 }
 
 // ============================================
@@ -7692,7 +8097,7 @@ function editQuote(id) {
     navTo('invoice-editor');
 }
 
-function convertQuoteToInvoice(id, silent) {
+async function convertQuoteToInvoice(id, silent) {
     const quotes = Storage.get('quotes', []);
     const quote = quotes.find(q => q.id === id);
     if (!quote) return;
@@ -7702,7 +8107,7 @@ function convertQuoteToInvoice(id, silent) {
     if (quote.convertedTo) {
         const existing = invoices.find(i => i.id === quote.convertedTo);
         if (existing) {
-            if (confirm(`Ce devis a déjà été transformé en facture ${existing.number}.\n\nOuvrir cette facture ?`)) editInvoice(existing.id);
+            if (confirm(`Ce devis a déjà été transformé en facture ${isDraftNumber(existing.number) ? '(brouillon)' : existing.number}.\n\nOuvrir cette facture ?`)) editInvoice(existing.id);
             return;
         }
     }
@@ -7718,7 +8123,7 @@ function convertQuoteToInvoice(id, silent) {
     const newInvoice = {
         ...quote,
         id: uuid(),
-        number: getNextNumber('invoice'),
+        number: draftNumber(),     // le numéro officiel est attribué à l'émission
         type: 'invoice',
         status: 'draft',          // à vérifier puis « Enregistrer & Envoyer »
         date: todayISO(),
@@ -7740,12 +8145,13 @@ function convertQuoteToInvoice(id, silent) {
 
     quote.status = 'accepted';
     quote.convertedTo = newInvoice.id;
-    quote.convertedInvoiceNumber = newInvoice.number;
+    quote.convertedInvoiceNumber = 'brouillon';
     quote.convertedAt = nowIso;
     quote.updatedAt = nowIso;
     Storage.set('quotes', quotes);
 
-    showToast(`Facture ${newInvoice.number} créée en brouillon : vérifiez puis envoyez ✓`, 'success');
+    logDoc('conversion_devis', newInvoice, `depuis ${quote.number}`);
+    showToast('Facture créée en brouillon : vérifiez puis envoyez ✓', 'success');
     editInvoice(newInvoice.id);
 }
 
@@ -8990,7 +9396,7 @@ function exportReportCSV(type) {
     
     if (type === 'invoices') {
         const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
-            i.type !== 'credit' && isInReportRange(i.date, range)
+            i.type !== 'credit' && i.status !== 'draft' && isInReportRange(i.date, range)
         );
         headers = ['N° Facture', 'Date', 'Client', 'Montant HT', 'TVA', 'Montant TTC', 'Échéance', 'Statut', 'Date Paiement'];
         rows = allInvoices.map(i => [
@@ -9543,6 +9949,9 @@ function exportData() {
         products: Storage.get('products', []),
         invoices: Storage.get('invoices', []),
         quotes: Storage.get('quotes', []),
+        payments: Storage.get('payments', []),
+        counter: Storage.get('counter', {}),
+        journal: Storage.get('docLog', []),
         exportDate: new Date().toISOString()
     };
     
@@ -9579,11 +9988,12 @@ function exportAccounting(format = 'csv') {
         return;
     }
     
-    const invoices = Storage.get('invoices', []);
+    // Seules les factures et avoirs ÉMIS sont exportés : un brouillon (numéro provisoire BRO-) n'est pas une pièce comptable.
+    const invoices = (Storage.get('invoices', []) || []).filter(i => i.status !== 'draft');
     const company = Storage.get('company', {});
     
     if (invoices.length === 0) {
-        showToast('Aucune facture à exporter', 'error');
+        showToast('Aucune facture émise à exporter', 'error');
         return;
     }
     
@@ -9597,6 +10007,7 @@ function exportAccounting(format = 'csv') {
             'Désignation',
             'Quantité',
             'Prix Unitaire HT',
+            'Remise %',
             'Total HT',
             'TVA %',
             'Montant TVA',
@@ -9612,6 +10023,10 @@ function exportAccounting(format = 'csv') {
             
             // Une ligne par item de la facture
             (inv.items || []).forEach(item => {
+                // Montants = ceux de la facture (arrondis ligne par ligne, remise incluse), pas recalculés
+                const L = (item.totalHT !== undefined)
+                    ? { totalHT: item.totalHT, totalTVA: item.totalTVA, totalTTC: item.totalTTC }
+                    : computeLine(item.quantity, item.unitPrice, item.tva, item.discount);
                 rows.push([
                     formatDate(inv.date),
                     inv.number || '',
@@ -9620,11 +10035,12 @@ function exportAccounting(format = 'csv') {
                     (item.description || '').replace(/[",;]/g, ' '),
                     item.quantity || 0,
                     (item.unitPrice || 0).toFixed(2),
-                    ((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2),
+                    item.discount || 0,
+                    Number(L.totalHT || 0).toFixed(2),
                     item.tva || 0,
-                    (((item.quantity || 0) * (item.unitPrice || 0)) * ((item.tva || 0) / 100)).toFixed(2),
-                    ((item.quantity || 0) * (item.unitPrice || 0) * (1 + (item.tva || 0) / 100)).toFixed(2),
-                    inv.status || 'draft',
+                    Number(L.totalTVA || 0).toFixed(2),
+                    Number(L.totalTTC || 0).toFixed(2),
+                    inv.status || '',
                     inv.paymentDate ? formatDate(inv.paymentDate) : '',
                     inv.paymentMode || ''
                 ]);
@@ -9647,7 +10063,7 @@ function exportAccounting(format = 'csv') {
         
         showToast('Export comptable CSV téléchargé ✓', 'success');
     } else if (format === 'fec') {
-        // Format FEC (Fichier des Écritures Comptables) - format marocain DGI
+        // Export au format FEC (modèle français, aucune validation DGI) : à contrôler par votre comptable avant tout usage
         const headers = [
             'JournalCode',
             'JournalLib',
@@ -9671,24 +10087,27 @@ function exportAccounting(format = 'csv') {
         
         const rows = [];
         invoices.forEach((inv, idx) => {
-            if (inv.status !== 'paid') return; // FEC uniquement sur factures validées
+            // Ventes comptabilisées à l'émission (hors brouillons, déjà filtrés) ; un avoir inverse les sens débit/crédit
+            const sign = (inv.type === 'credit' || (inv.totalTTC || 0) < 0) ? -1 : 1;
             
             const client = (Storage.get('clients', []).find(c => c.id === inv.clientId)) || {};
             const ecrNum = String(idx + 1).padStart(5, '0');
             const dateFormatted = (inv.date || '').replace(/-/g, '');
-            const totalHT = (inv.totalHT || 0).toFixed(2);
-            const totalTVA = (inv.totalTVA || 0).toFixed(2);
-            const totalTTC = (inv.totalTTC || 0).toFixed(2);
+            const totalHT = Math.abs(inv.totalHT || 0).toFixed(2);
+            const totalTVA = Math.abs(inv.totalTVA || 0).toFixed(2);
+            const totalTTC = Math.abs(inv.totalTTC || 0).toFixed(2);
+            const Z = '0.00';
+            const lib = sign < 0 ? 'Avoir' : 'Vente';
             
-            // Ligne 1 : Client (débit)
-            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '3421', 'Clients', client.id || '', client.name || '', inv.number, dateFormatted, `Vente ${inv.number}`, totalTTC, '0.00', '', '', dateFormatted, totalTTC, 'MAD']);
+            // Ligne 1 : Client (débit pour une facture, crédit pour un avoir)
+            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '3421', 'Clients', client.id || '', client.name || '', inv.number, dateFormatted, `${lib} ${inv.number}`, sign > 0 ? totalTTC : Z, sign > 0 ? Z : totalTTC, '', '', dateFormatted, totalTTC, 'MAD']);
             
-            // Ligne 2 : Vente (crédit)
-            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '7111', 'Ventes de marchandises', '', '', inv.number, dateFormatted, `Vente ${inv.number}`, '0.00', totalHT, '', '', dateFormatted, totalHT, 'MAD']);
+            // Ligne 2 : Vente (crédit pour une facture, débit pour un avoir)
+            rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '7111', 'Ventes de marchandises', '', '', inv.number, dateFormatted, `${lib} ${inv.number}`, sign > 0 ? Z : totalHT, sign > 0 ? totalHT : Z, '', '', dateFormatted, totalHT, 'MAD']);
             
-            // Ligne 3 : TVA collectée (crédit)
+            // Ligne 3 : TVA collectée
             if (parseFloat(totalTVA) > 0) {
-                rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '4455', 'TVA collectée', '', '', inv.number, dateFormatted, `TVA Vente ${inv.number}`, '0.00', totalTVA, '', '', dateFormatted, totalTVA, 'MAD']);
+                rows.push(['VTE', 'Ventes', ecrNum, dateFormatted, '4455', 'TVA collectée', '', '', inv.number, dateFormatted, `TVA ${lib} ${inv.number}`, sign > 0 ? Z : totalTVA, sign > 0 ? totalTVA : Z, '', '', dateFormatted, totalTVA, 'MAD']);
             }
         });
         
@@ -9725,8 +10144,18 @@ function showAccountingExportMenu() {
 }
 
 async function resetApp() {
-    if (!confirm('⚠️ ATTENTION : Toutes vos données seront effacées définitivement. Continuer ?')) return;
-    if (!confirm('Êtes-vous absolument sûr ? Cette action est irréversible.')) return;
+    if (DocStoreGlue.active()) {
+        alert('Réinitialisation indisponible : ce compte utilise le nouveau stockage (test). Aucune donnée n\'a été modifiée.');
+        return;
+    }
+    if ((Storage.get('invoices', []) || []).some(i => isLockedDoc(i))) {
+        alert('Réinitialisation impossible : votre compte contient des factures émises, qui doivent être conservées. Pour supprimer votre compte et vos données, contactez le support.');
+        return;
+    }
+    if (!confirm('⚠️ ATTENTION : Toutes vos données (factures émises comprises) seront effacées définitivement. Une copie sera téléchargée avant. Continuer ?')) return;
+    const word = prompt('Pour confirmer, tapez SUPPRIMER en majuscules :');
+    if (word !== 'SUPPRIMER') { showToast('Suppression annulée', 'info'); return; }
+    exportData();   // sauvegarde automatique avant effacement
     await Storage.clearAll();
     location.reload();
 }
@@ -9739,8 +10168,7 @@ const TRIAL_DURATION_DAYS = 14;
 // Codes promos disponibles
 // Note : tier 'lifetime' réservé aux Founders bêta. Promos publiques sur tiers payants.
 const PROMO_CODES = {
-    // Offre fondateurs : gérée côté admin par codes de licence à usage unique (pas de code promo public)
-    'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['annual', 'monthly'] }
+    // Aucun code promo public. Offre fondateurs : gérée côté admin par codes de licence à usage unique.
 };
 
 const License = {
@@ -10061,6 +10489,7 @@ function updateTrialUI() {
 }
 
 function renderLicensePage() {
+    loadContactInfo();   // asynchrone : met à jour le bloc « Besoin d'aide ? » dès que les coordonnées sont lues
     const info = License.get();
     const isLicensed = isUserLicensed();
     const daysLeft = License.getDaysRemaining();
@@ -10281,16 +10710,15 @@ function selectPlan(tier) {
     setTimeout(() => purchaseLicense(tier), 100);
 }
 
-function showHowToBuy() {
+async function showHowToBuy() {
+    await loadContactInfo();
     alert(`💳 Comment payer FacturaPro\n\n` +
-        `1️⃣ VIREMENT BANCAIRE\n` +
-        `   Effectuez un virement vers le compte indiqué\n` +
-        `   Envoyez-nous le justificatif par WhatsApp\n\n` +
-        `2️⃣ ESPÈCES (Casa/Rabat)\n` +
-        `   Sur rendez-vous uniquement\n\n` +
-        `📱 Contact : WhatsApp ${CONTACT.whatsapp}\n` +
-        `📧 Email : ${CONTACT.email}\n\n` +
-        `Une fois le paiement reçu, vous recevrez votre code de licence par WhatsApp/email sous 24h.`);
+        `VIREMENT BANCAIRE\n` +
+        `   1. Demandez votre abonnement dans l'application\n` +
+        `   2. Nous vous envoyons le RIB\n` +
+        `   3. Après le virement, envoyez-nous le justificatif\n\n` +
+        `${contactLinesText()}\n\n` +
+        `Une fois le paiement reçu, vous recevrez votre code de licence sous 24h.`);
 }
 
 async function logoutFromLicense() {
@@ -10298,12 +10726,14 @@ async function logoutFromLicense() {
     await Auth.logout();
     Storage._cache = {};
     Storage._currentUserId = null;
+    DocStoreGlue.reset();
     document.getElementById('licenseScreen')?.classList.add('hidden');
     location.reload();
 }
 
 async function purchaseLicense(tier) {
-    const promo = Storage.get('activePromo', null);
+    const _storedPromo = Storage.get('activePromo', null);
+    const promo = (_storedPromo && PROMO_CODES[_storedPromo.code]) ? _storedPromo : null;   // un ancien code mémorisé n'est plus honoré
     const company = Storage.get('company', {});
     const session = await Auth.getCurrentUser();
     
@@ -10375,6 +10805,7 @@ async function purchaseLicense(tier) {
         `Continuer ?`;
     
     if (!confirm(confirmMsg)) return;
+    await loadContactInfo();   // coordonnées de contact configurées dans Admin → Réglages
     
     // Créer la demande dans Supabase
     let requestSent = false;
@@ -10400,6 +10831,10 @@ async function purchaseLicense(tier) {
             requestSent = true;
         } catch (err) {
             console.error('Failed to send subscription request:', err);
+            if (/demande déjà en attente/.test(String((err && err.message) || ''))) {
+                alert('ℹ️ Vous avez déjà une demande d\'abonnement en cours de traitement.\n\nPas besoin d\'en refaire une : notre équipe vous contacte pour le virement et vous envoie votre code d\'activation.\n\n' + contactLinesText());
+                return;
+            }
             // Fallback : on continue quand même pour ne pas bloquer le client
         }
     }
@@ -10410,21 +10845,16 @@ async function purchaseLicense(tier) {
         `📋 Plan : ${config.label}\n` +
         `💰 Montant : ${finalPrice} DH / ${config.period}\n\n` +
         `🚀 PROCHAINES ÉTAPES :\n\n` +
-        `1️⃣ Effectuez votre paiement par :\n` +
-        `   • Virement bancaire\n` +
-        `   • Espèces (Casa/Rabat sur RDV)\n\n` +
-        `2️⃣ Envoyez le justificatif sur WhatsApp :\n` +
-        `   📱 ${CONTACT.whatsapp}\n\n` +
-        `3️⃣ Vous recevrez votre code d'activation\n` +
-        `   sous 24h par WhatsApp/email\n\n` +
-        `📧 Référence : ${session.email}\n` +
-        `🆔 ID demande : ${Date.now().toString(36).toUpperCase()}\n\n` +
+        `1️⃣ Notre équipe vous envoie le RIB pour le virement bancaire\n\n` +
+        `2️⃣ Après le virement, envoyez-nous le justificatif\n` +
+        `   ${contactLinesText().replace(/\n/g, '\n   ')}\n\n` +
+        `3️⃣ Vous recevrez votre code d'activation sous 24h\n\n` +
+        `📧 Référence : ${session.email}\n\n` +
         `Notre équipe vous contactera dans les 24h !`
         :
         `⚠️ La demande n'a pas pu être envoyée automatiquement.\n\n` +
         `Pour acheter votre abonnement, contactez-nous :\n\n` +
-        `📱 WhatsApp : ${CONTACT.whatsapp}\n` +
-        `📧 Email : ${CONTACT.email}\n\n` +
+        `${contactLinesText()}\n\n` +
         `Précisez :\n` +
         `• Plan : ${config.label}\n` +
         `• Email : ${session.email}\n` +
@@ -10881,6 +11311,7 @@ function savePayment() {
             invoices[idx].status = 'sent';
         }
         Storage.set('invoices', invoices);
+        logDoc('paiement', invoices[idx], `${amount} DH (${method})`);
     }
     
     closeModal('paymentModal');
@@ -11085,7 +11516,55 @@ function openInMailto() {
 // ============================================
 // PDF GENERATION
 // ============================================
-function generatePDF(id, type) {
+// --- Texte arabe dans les PDF -------------------------------------------------
+// Les polices standard de jsPDF n'ont pas de glyphes arabes. La police Noto Naskh Arabic (licence OFL,
+// fonts/) est chargée uniquement si le document contient de l'arabe, puis les textes arabes sont mis
+// en forme (liaison des lettres + sens droite-à-gauche) avec processArabic de jsPDF.
+const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F]/;
+let _arabicFontB64 = null;
+async function loadArabicFont() {
+    if (_arabicFontB64) return _arabicFontB64;
+    const res = await fetch('fonts/NotoNaskhArabic-Regular.ttf');
+    if (!res.ok) throw new Error('police arabe indisponible (' + res.status + ')');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    _arabicFontB64 = btoa(bin);
+    return _arabicFontB64;
+}
+async function enableArabicPdf(pdf) {
+    const b64 = await loadArabicFont();
+    pdf.addFileToVFS('NotoNaskhArabic.ttf', b64);
+    pdf.addFont('NotoNaskhArabic.ttf', 'NotoNaskhArabic', 'normal');
+    pdf.addFont('NotoNaskhArabic.ttf', 'NotoNaskhArabic', 'bold');
+    const shape = (t) => (typeof t === 'string' && ARABIC_RE.test(t)) ? pdf.processArabic(t) : t;
+    const origText = pdf.text.bind(pdf);
+    pdf.text = function (text, x, y, opts, ...rest) {
+        const list = Array.isArray(text) ? text : [text];
+        if (!list.some(t => typeof t === 'string' && ARABIC_RE.test(t))) return origText(text, x, y, opts, ...rest);
+        // texte arabe : police arabe, mise en forme, alignement à droite si la ligne est entièrement arabe
+        const prev = pdf.getFont();
+        pdf.setFont('NotoNaskhArabic', 'normal');
+        const out = list.map(shape);
+        const r = origText(Array.isArray(text) ? out : out[0], x, y, opts, ...rest);
+        pdf.setFont(prev.fontName, prev.fontStyle);
+        return r;
+    };
+    // autoTable : police arabe pour les cellules arabes (mesure de largeur correcte) + mise en forme
+    const origAT = pdf.autoTable.bind(pdf);
+    pdf.autoTable = function (o) {
+        const prevHook = o.didParseCell;
+        o.didParseCell = function (d) {
+            if (d.cell && Array.isArray(d.cell.text) && d.cell.text.some(t => ARABIC_RE.test(t))) {
+                d.cell.styles.font = 'NotoNaskhArabic'; d.cell.styles.fontStyle = 'normal';
+                d.cell.text = d.cell.text.map(shape);
+            }
+            if (prevHook) prevHook(d);
+        };
+        return origAT(o);
+    };
+}
+
+async function generatePDF(id, type) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
     const doc_data = collection.find(d => d.id === id);
     if (!doc_data) return;
@@ -11093,6 +11572,10 @@ function generatePDF(id, type) {
     const company = Storage.get('company', {});
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    if (ARABIC_RE.test(JSON.stringify([doc_data, company]))) {
+        try { await enableArabicPdf(pdf); }
+        catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée, vérifiez votre connexion). Le PDF sera généré sans lui.', 'error'); }
+    }
     
     const isInvoice = type === 'invoice';
     const isCredit = doc_data.type === 'credit' || (doc_data.totalTTC || 0) < 0;
@@ -11164,7 +11647,7 @@ function generatePDF(id, type) {
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(...accentColor);
-    pdf.text(doc_data.number, 195, 30, { align: 'right' });
+    pdf.text(isDraftNumber(doc_data.number) ? 'BROUILLON' : doc_data.number, 195, 30, { align: 'right' });
     
     // === COMPANY INFO BOX ===
     let yPos = 48;
@@ -11230,17 +11713,21 @@ function generatePDF(id, type) {
     yPos += 40;
     
     // === ITEMS TABLE ===
-    const tableData = doc_data.items.map(item => [
-        item.description,
-        item.quantity.toString(),
-        formatCurrencyForPDF(item.price, false),
-        item.tva + '%',
-        formatCurrencyForPDF(item.totalHT, false)
-    ]);
+    const hasDiscount = doc_data.items.some(it => (it.discount || 0) > 0);
+    const tableData = doc_data.items.map(item => {
+        const row = [
+            item.description,
+            item.quantity.toString(),
+            formatCurrencyForPDF(item.price, false)
+        ];
+        if (hasDiscount) row.push((item.discount || 0) > 0 ? item.discount + '%' : '');
+        row.push(item.tva + '%', formatCurrencyForPDF(item.totalHT, false));
+        return row;
+    });
     
     pdf.autoTable({
         startY: yPos,
-        head: [['Désignation', 'Qté', 'P.U. HT', 'TVA', 'Total HT']],
+        head: [hasDiscount ? ['Désignation', 'Qté', 'P.U. HT', 'Remise', 'TVA', 'Total HT'] : ['Désignation', 'Qté', 'P.U. HT', 'TVA', 'Total HT']],
         body: tableData,
         theme: 'plain',
         headStyles: {
@@ -11263,7 +11750,14 @@ function generatePDF(id, type) {
         alternateRowStyles: {
             fillColor: [250, 248, 243]
         },
-        columnStyles: {
+        columnStyles: hasDiscount ? {
+            0: { cellWidth: 62, fontStyle: 'normal' },
+            1: { cellWidth: 16, halign: 'center' },
+            2: { cellWidth: 28, halign: 'right' },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 16, halign: 'center' },
+            5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+        } : {
             0: { cellWidth: 80, fontStyle: 'normal' },
             1: { cellWidth: 18, halign: 'center' },
             2: { cellWidth: 32, halign: 'right' },
@@ -11332,7 +11826,7 @@ function generatePDF(id, type) {
         pdf.setTextColor(180, 100, 20);
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'italic');
-        pdf.text('⚠ Attention : TVA appliquée. Vérifiez votre statut fiscal.', 19, yPos + 7);
+        pdf.text('Attention : TVA appliquée. Vérifiez votre statut fiscal.', 19, yPos + 7);
         yPos += 16;
     }
     
@@ -11399,7 +11893,7 @@ function generatePDF(id, type) {
         });
     }
     
-    pdf.save(`${doc_data.number}.pdf`);
+    pdf.save(`${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`);
     
     // Show upgrade message for trial users
     if (licenseInfo.type === 'trial') {

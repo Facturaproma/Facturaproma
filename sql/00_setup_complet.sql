@@ -30,7 +30,7 @@ BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS user_data_updated_at ON user_data;
 CREATE TRIGGER user_data_updated_at

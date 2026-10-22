@@ -1,0 +1,114 @@
+# Sauvegarde + restauration TESTÉES de la PRÉPRODUCTION Supabase (jamais la production) vers une base PostgreSQL LOCALE jetable du runner.
+# Secret requis (environnement GitHub « preprod ») : PREPROD_DB_URL. Aucune URL de connexion n'est écrite dans les journaux ni les rapports.
+# Le fichier de sauvegarde n'est ni publié, ni commité, ni transmis en artefact : il est supprimé à la fin du script.
+name: preprod-backup
+on:
+  push:
+    branches: [dev/fondations]
+    paths: ['ops/preprod-backup.json']
+  workflow_dispatch:
+permissions:
+  contents: write   # uniquement pour publier le rapport sur la branche « preprod-reports »
+concurrency:
+  group: preprod
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 30
+    services:
+      localpg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: local-throwaway-not-a-secret
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Dépendance (pg uniquement)
+        run: npm install --no-save --ignore-scripts pg@8
+      - name: Client PostgreSQL 17 (même version majeure que le serveur Supabase)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      - name: Secret présent, cible vérifiée, masquage des éléments dérivés
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+        run: |
+          if [ -z "$PREPROD_DB_URL" ]; then echo "::error::Secret PREPROD_DB_URL absent de l'environnement GitHub « preprod »."; exit 1; fi
+          node -e "const p=require('./scripts/preprod-db').parseDbUrl(process.env.PREPROD_DB_URL); console.log('Cible autorisée :', p.ref); for (const v of [p.password, encodeURIComponent(p.password), p.user, p.host]) if (v) console.log('::add-mask::' + v)"
+          pg_dump --version
+          mkdir -p reports; printf '# Rapport sauvegarde/restauration — run %s — commit %s\n\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > reports/backup.md
+      - name: Données de test fictives dans la préproduction (comptes de test + factures via l'API réelle)
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/prep.md
+        run: |
+          set -o pipefail
+          PA="$(openssl rand -hex 16)Aa1!"; PB="$(openssl rand -hex 16)Bb2!"
+          echo "::add-mask::$PA"; echo "::add-mask::$PB"
+          export TEST_A_PASSWORD="$PA" TEST_B_PASSWORD="$PB"
+          node scripts/preprod-apply.js status > /dev/null
+          node scripts/preprod-apply.js seed
+          export TEST_A_EMAIL=preprod-a@facturapro-test.invalid TEST_B_EMAIL=preprod-b@facturapro-test.invalid
+          export PREPROD_URL="https://$(node -p "require('./scripts/preprod-target.json').preprodRef").supabase.co"
+          export PREPROD_ANON_KEY="$(node -p "require('./scripts/preprod-target.json').anonKey")"
+          node tests/preprod/check.js 2>&1 | tee reports/check.txt | tail -8
+          # jeu de données plus riche pour la preuve des numéros (A : +5 émises, B : +4 émises), ajouté aux factures existantes
+          node tests/preprod/seed-invoices.js
+          { echo '### Données de test préparées (check.js, exécution réelle sur Supabase préproduction)'; echo; echo '```'; tail -3 reports/check.txt; echo '```'; echo; } >> reports/backup.md
+      - name: Sauvegarde, restauration locale, contrôles
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          LOCAL_PGHOST: 127.0.0.1
+          LOCAL_PGPORT: '5432'
+          LOCAL_PGUSER: postgres
+          LOCAL_PGPASSWORD: local-throwaway-not-a-secret
+          REPORT_PATH: reports/backup.md
+        run: node scripts/preprod-backup.js
+      - name: Nettoyer les comptes de test de la préproduction
+        if: always()
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/backup.md
+        run: node scripts/preprod-apply.js cleanup
+      - name: Analyse de secrets (rapport à publier, arbre Git, historique complet, branche preprod-reports)
+        id: scan
+        if: always()
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+        run: |
+          RC=0; git ls-remote --exit-code --heads origin preprod-reports >/dev/null || RC=$?
+          if [ "$RC" -eq 0 ]; then git fetch origin preprod-reports:refs/remotes/origin/preprod-reports; elif [ "$RC" -ne 2 ]; then echo "::error::Lecture du dépôt distant impossible (code $RC)."; exit 1; fi
+          B=""; git rev-parse --verify -q origin/preprod-reports >/dev/null && B="--branch origin/preprod-reports"
+          set +e
+          node scripts/scan-secrets.js --file reports/backup.md > reports/scan1.txt; R1=$?
+          node scripts/scan-secrets.js --tree --history $B > reports/scan2.txt; R2=$?
+          { echo; echo '### Analyse de secrets'; echo; echo 'Rapport lui-même :'; echo '```'; cat reports/scan1.txt; echo '```'; echo 'Arbre Git, historique complet (toutes branches), branche preprod-reports :'; echo '```'; cat reports/scan2.txt; echo '```'; } >> reports/backup.md
+          cat reports/scan1.txt reports/scan2.txt
+          echo "report_clean=$([ $R1 -eq 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          echo "repo_rc=$R2" >> "$GITHUB_OUTPUT"
+      - name: Publier le rapport (branche preprod-reports, jamais main) — uniquement si le rapport ne contient aucun identifiant
+        if: always() && steps.scan.outputs.report_clean == 'yes'
+        run: |
+          [ -f reports/backup.md ] || exit 0
+          mkdir -p /tmp/rep && cp reports/backup.md "/tmp/rep/backup-${GITHUB_RUN_ID}.md"
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin preprod-reports >/dev/null 2>&1; then
+            git fetch origin preprod-reports && git checkout -f -B preprod-reports origin/preprod-reports
+          else
+            git checkout --orphan preprod-reports && git rm -rf --ignore-unmatch . >/dev/null
+          fi
+          mkdir -p reports && cp /tmp/rep/* reports/ && git rm -q --cached --ignore-unmatch reports/backup.md reports/check.txt reports/prep.md reports/run.md reports/scan.txt reports/scan1.txt reports/scan2.txt && git add "reports/backup-${GITHUB_RUN_ID}.md" && git commit -m "Rapport sauvegarde/restauration run ${GITHUB_RUN_ID}" && git push origin preprod-reports
+      - name: Échec du job si un identifiant a été trouvé dans le dépôt ou la branche des rapports
+        if: always() && steps.scan.outputs.repo_rc != '0'
+        run: echo "::error::Analyse de secrets positive (voir le rapport)." && exit 1
