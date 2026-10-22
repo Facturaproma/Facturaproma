@@ -93,6 +93,6 @@ jobs:
           if git ls-remote --exit-code --heads origin preprod-reports >/dev/null 2>&1; then
             git fetch origin preprod-reports && git checkout -f -B preprod-reports origin/preprod-reports
           else
-            git checkout --orphan preprod-reports && git rm -rf . >/dev/null 2>&1 || true
+            git checkout --orphan preprod-reports && git rm -rf --ignore-unmatch . >/dev/null
           fi
           mkdir -p reports && cp /tmp/rep/* reports/ && git rm -q --cached --ignore-unmatch reports/backup.md reports/check.txt reports/prep.md reports/run.md reports/scan.txt reports/scan1.txt reports/scan2.txt && git add "reports/run-${GITHUB_RUN_ID}.md" && git commit -m "Rapport préproduction run ${GITHUB_RUN_ID}" && git push origin preprod-reports

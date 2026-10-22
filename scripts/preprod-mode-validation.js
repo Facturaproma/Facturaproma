@@ -60,6 +60,7 @@ async function foreignHash(c) {
     const cols = (await c.query('SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2', [s, t])).rows.map((r) => r.column_name);
     let where = 'TRUE';
     if (fq === 'auth.users') where = 'NOT (email = ANY($1::text[]))';
+    else if (fq === 'public.admin_codes') where = "code NOT LIKE 'MODE-TEST-%'";
     else if (fq === 'auth.audit_log_entries') where = `COALESCE(payload->>'actor_username','') NOT LIKE '%@facturapro-%.invalid'`;
     else if (fq === 'auth.mfa_amr_claims') where = 'NOT (session_id IN (SELECT id FROM auth.sessions WHERE user_id::text = ANY($1::text[])))';
     else if (cols.includes('user_id')) where = 'user_id IS NULL OR NOT (user_id::text = ANY($1::text[]))';
@@ -229,7 +230,7 @@ async function test() {
   }
   for (const k of ['c', 'd', 'x', 'y', 'e', 'o']) {
     await c.query(`INSERT INTO public.doc_counters(user_id, doc_type, last_value) VALUES ($1::uuid,'invoice',1) ON CONFLICT (user_id, doc_type) DO UPDATE SET last_value = GREATEST(public.doc_counters.last_value, 1)`, [us[k]]);
-    await c.query(`INSERT INTO public.licenses(user_id, type, status, expires_at) VALUES ($1::uuid,'annual','active', now() + interval '100 days') ON CONFLICT DO NOTHING`, [us[k]]).catch(() => {});
+    await c.query(`INSERT INTO public.licenses(user_id, type, status, expires_at) VALUES ($1::uuid,'annual','active', now() + interval '100 days') ON CONFLICT (user_id) DO NOTHING`, [us[k]]);
     await c.query(`INSERT INTO public.user_data(user_id, key, value) VALUES ($1::uuid,'invoices',$2::jsonb), ($1::uuid,'docLog',$3::jsonb) ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value`,
       [us[k], jstr([{ id: 'i1', type: 'invoice', number: FN(1), status: 'sent', date: `${Y}-03-01`, clientName: 'Client', items: [], totalHT: 10, totalTVA: 2, totalTTC: 12 },
         { id: 'd1', type: 'invoice', number: 'BRO-CCCCCC', status: 'draft', totalTTC: 5 }, { id: 'd2', type: 'invoice', number: 'BRO-DDDDDD', status: 'draft', totalTTC: 6 }]),
@@ -239,6 +240,49 @@ async function test() {
   const ud0 = async () => Object.fromEntries(await Promise.all(Object.entries(us).map(async ([k, id]) => [k, (await q1("SELECT md5(coalesce(string_agg(key||value::text,'|' ORDER BY key COLLATE \"C\"),'')) h FROM public.user_data WHERE user_id=$1::uuid AND key IN ('invoices','quotes','payments','docLog')", [id])).h])));
   const legacyHash0 = await ud0();
   const noMode = async () => (await q1('SELECT count(*)::int n FROM public.doc_store_mode')).n;
+
+  // ---------- licences ----------
+  out('\n### 7b. Licences : audit sur le vrai Supabase (comptes jetables)');
+  const pk = await q1("SELECT array_agg(a.attname::text ORDER BY a.attnum) cols FROM pg_constraint c JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum = ANY(c.conkey) WHERE c.conrelid='public.licenses'::regclass AND c.contype='p'");
+  ck('licenses : clé primaire réelle = (user_id) seule → une seule licence par utilisateur, garantie par la base', jstr(pk.cols) === jstr(['user_id']), jstr(pk.cols));
+  const uq = await q("SELECT i.indexrelid::regclass::text n, i.indisunique u, pg_get_indexdef(i.indexrelid) d FROM pg_index i WHERE i.indrelid='public.licenses'::regclass");
+  out('- index réels de licenses : ' + uq.map((x) => x.d.replace(/^CREATE (UNIQUE )?INDEX /, (m, u) => (u ? 'unique ' : '') + 'index ')).join(' ; '));
+  const fk = await q1("SELECT count(*)::int n FROM pg_constraint WHERE conrelid='public.licenses'::regclass AND contype='f' AND confrelid='auth.users'::regclass AND confdeltype='c'");
+  ck('licenses.user_id → auth.users ON DELETE CASCADE (suppression de compte sans licence orpheline)', fk.n === 1);
+  const chk = (await q("SELECT pg_get_constraintdef(oid) d FROM pg_constraint WHERE conrelid='public.licenses'::regclass AND contype='c'")).map((x) => x.d).join(' ');
+  ck("types de licence valides (CHECK) : trial, monthly, semestrial, annual, business, lifetime — « annual » conservé", ['trial', 'monthly', 'semestrial', 'annual', 'business', 'lifetime'].every((t) => chk.includes("'" + t + "'")), chk.slice(0, 300));
+  const rl = await q1("SELECT c.relrowsecurity rls, (SELECT string_agg(policyname, ',' ORDER BY policyname) FROM pg_policies WHERE schemaname='public' AND tablename='licenses') pol, has_table_privilege('anon','public.licenses','SELECT') a1, has_table_privilege('anon','public.licenses','INSERT') a2 FROM pg_class c WHERE c.oid='public.licenses'::regclass");
+  ck('licenses : RLS active, politiques = licenses_admin_all + licenses_select_own, aucun accès pour anon', rl.rls && rl.pol === 'licenses_admin_all,licenses_select_own' && !rl.a1 && !rl.a2, jstr(rl));
+  const dup = await tryq("INSERT INTO public.licenses(user_id, type) VALUES ($1::uuid,'monthly')", [us.a]);
+  ck('2e licence pour le même utilisateur (INSERT direct) : refusée par la base (23505)', dup && dup.code === '23505', dup && (dup.code + ' ' + dup.message));
+  const badT = await tryq("INSERT INTO public.licenses(user_id, type) VALUES ($1::uuid,'inconnu')", [us.e]);
+  ck('type de licence invalide : refusé (23514)', badT && badT.code === '23514', badT && (badT.code + ' ' + badT.message));
+  await c.query("INSERT INTO public.licenses(user_id, type) VALUES ($1::uuid,'monthly') ON CONFLICT (user_id) DO NOTHING", [us.c]);
+  ck('insertions répétées avec ON CONFLICT DO NOTHING : 1 seule ligne, la licence « annual » existante est conservée', (await q1("SELECT count(*)::int n, min(type) t FROM public.licenses WHERE user_id=$1::uuid", [us.c])).n === 1 && (await q1("SELECT type t FROM public.licenses WHERE user_id=$1::uuid", [us.c])).t === 'annual');
+  const E = await login('e');
+  await c.query('DELETE FROM public.licenses WHERE user_id=$1::uuid', [us.e]);   // compte jetable créé par cette opération
+  const ml = await Promise.all(Array.from({ length: 6 }, () => rpc(E.tok, 'my_license')));
+  ck('my_license appelée 6 fois en parallèle sur un compte sans licence : 6 réponses ok, 1 seule ligne créée (essai)', ml.every((x) => x.status === 200 && x.body.ok) && (await q1('SELECT count(*)::int n FROM public.licenses WHERE user_id=$1::uuid', [us.e])).n === 1 && (await q1('SELECT type t FROM public.licenses WHERE user_id=$1::uuid', [us.e])).t === 'trial', jstr(ml.map((x) => x.status)));
+  const snap = async (id) => (await q1("SELECT md5(l::text) h FROM public.licenses l WHERE user_id=$1::uuid", [id])).h;
+  const sA = await snap(us.a), sB = await snap(us.b);
+  const own = await api('GET', `/rest/v1/licenses?select=user_id,type&user_id=eq.${A.id}`, A.tok), oth = await api('GET', `/rest/v1/licenses?select=user_id&user_id=eq.${B.id}`, A.tok), allv = await api('GET', '/rest/v1/licenses?select=user_id', A.tok);
+  ck('RLS licences (API réelle) : a lit sa licence (1), pas celle de b, et la liste complète ne contient que la sienne', own.body.length === 1 && oth.body.length === 0 && allv.body.length === 1, jstr([own.body.length, oth.body.length, allv.body.length]));
+  const w1 = await api('POST', '/rest/v1/licenses', A.tok, { user_id: A.id, type: 'lifetime' }, { Prefer: 'resolution=merge-duplicates' });
+  const w2 = await api('PATCH', `/rest/v1/licenses?user_id=eq.${A.id}`, A.tok, { type: 'lifetime', expires_at: null }, { Prefer: 'return=representation' });
+  const w3 = await api('PATCH', `/rest/v1/licenses?user_id=eq.${B.id}`, A.tok, { type: 'lifetime' }, { Prefer: 'return=representation' });
+  const w4 = await api('DELETE', `/rest/v1/licenses?user_id=eq.${A.id}`, A.tok, undefined, { Prefer: 'return=representation' });
+  ck('un utilisateur ne peut ni créer, ni modifier (sa licence ou celle d\'un autre), ni supprimer une licence par l\'API ; les lignes sont inchangées', denied(w1) && !(Array.isArray(w2.body) && w2.body.length) && !(Array.isArray(w3.body) && w3.body.length) && !(Array.isArray(w4.body) && w4.body.length) && (await snap(us.a)) === sA && (await snap(us.b)) === sB, jstr([w1.status, w2.status, w3.status, w4.status]));
+  await c.query("DELETE FROM public.admin_codes WHERE code LIKE 'MODE-TEST-%'");
+  await c.query("INSERT INTO public.admin_codes(code, type, client_email, status) VALUES ('MODE-TEST-AAAA01','annual',$1,'pending'), ('MODE-TEST-BBBB02','annual',$2,'pending'), ('MODE-TEST-CCCC03','monthly',NULL,'pending')", [EMAIL('a'), EMAIL('b')]);
+  const inv = await rpc(A.tok, 'activate_license', { p_code: 'code-inexistant' }), wrong = await rpc(A.tok, 'activate_license', { p_code: 'MODE-TEST-BBBB02' });
+  ck('activate_license : code inexistant → invalid ; code destiné à un autre e-mail → wrong_email ; licence inchangée', inv.body.reason === 'invalid' && wrong.body.reason === 'wrong_email' && (await snap(us.a)) === sA, jstr([inv.body, wrong.body]));
+  const act = await Promise.all(Array.from({ length: 5 }, () => rpc(A.tok, 'activate_license', { p_code: 'MODE-TEST-AAAA01' })));
+  const okAct = act.filter((x) => x.body.ok), la = await q1("SELECT type, status, code, (expires_at - now()) > interval '364 days' AND (expires_at - now()) < interval '366 days' ok365 FROM public.licenses WHERE user_id=$1::uuid", [us.a]);
+  ck('activate_license : même code activé 5 fois en parallèle → 1 seule réussite, les autres « used » ; licence « annual » ~365 jours, 1 seule ligne', okAct.length === 1 && act.filter((x) => x.body.reason === 'used').length === 4 && la.type === 'annual' && la.status === 'active' && la.ok365 === true && (await q1('SELECT count(*)::int n FROM public.licenses WHERE user_id=$1::uuid', [us.a])).n === 1, jstr(act.map((x) => x.body.reason || 'ok')) + jstr(la));
+  const act2 = await rpc(B.tok, 'activate_license', { p_code: 'MODE-TEST-BBBB02' });
+  ck('activate_license : code « annual » valide pour b → licence annual de b, 1 seule ligne ; la licence de a n\'a pas bougé', act2.body.ok === true && (await q1("SELECT type t FROM public.licenses WHERE user_id=$1::uuid", [us.b])).t === 'annual' && (await q1('SELECT count(*)::int n FROM public.licenses WHERE user_id=$1::uuid', [us.b])).n === 1);
+  ck('licences : exactement une ligne par compte de test (8 comptes, 8 lignes)', (await q1('SELECT count(*)::int n, count(DISTINCT user_id)::int d FROM public.licenses WHERE user_id::text = ANY($1)', [Object.values(us)])).n === 8);
+  await checkForeign(c, 'après les contrôles de licences');
 
   // ---------- autorisation ----------
   out('\n### 8. Autorisation (contrôles côté serveur sur le vrai Supabase)');
@@ -378,22 +422,59 @@ async function test() {
 
   // ---------- concurrence réelle : bascules pendant des écritures ----------
   out('\n### 14. Concurrence réelle sur Supabase : bascules pendant des écritures');
-  const asUser = async (uid, fn) => {   // canal SQL « authenticated » (rôle et jeton imités sur la vraie base)
-    const { connect } = require('./preprod-db'); const { client } = await connect();
-    try { await client.query('BEGIN'); await client.query('SET LOCAL ROLE authenticated'); await client.query("SELECT set_config('request.jwt.claim.sub', $1, true), set_config('request.jwt.claims', $2, true)", [uid, jstr({ sub: uid, role: 'authenticated' })]); const x = await fn(client); await client.query('COMMIT'); return x; }
-    catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { await client.end().catch(() => {}); }
-  };
-  const W = 24;
   const flipRetry = async (uid, mode) => { for (let i = 0; i < 6; i++) { const x = await flip(uid, mode); if (!x.error || !/deadlock/i.test(x.error)) return x; } return { error: 'trop de blocages' }; };
-  // x : legacy → documents, pendant 24 écritures d'un ancien appareil
-  const lw = Promise.allSettled(Array.from({ length: W }, async (_, i) => { await sleep(i * 40); return asUser(us.x, (cl) => cl.query("UPDATE public.user_data SET value = value || $1::jsonb WHERE user_id=$2::uuid AND key='invoices'", [jstr([{ id: 'w' + i, type: 'invoice', number: 'BRO-W' + i, status: 'draft', totalTTC: i }]), us.x])); }));
-  await sleep(450);
-  const fx = await flipRetry(us.x, 'documents'); const wx = await lw;
-  const okW = wx.map((x, i) => ({ x, i })).filter((z) => z.x.status === 'fulfilled').map((z) => 'w' + z.i), refW = wx.filter((x) => x.status === 'rejected');
-  const inD = new Set((await q('SELECT id FROM public.documents WHERE user_id=$1::uuid', [us.x])).map((z) => z.id));
-  const lost = okW.filter((id) => !inD.has(id));
-  ck(`x : legacy → documents pendant ${W} écritures : ${okW.length} acceptées avant le verrou, ${refW.length} refusées après ; bascule ${fx.ok ? 'faite' : 'arrêtée (' + (fx.reason || fx.error) + ')'}`, fx.ok === true && lost.length === 0 && okW.length > 0 && refW.length > 0, `perdues: ${lost.join(',')} ${jstr(fx).slice(0, 200)}`);
-  ck('x : écritures refusées = SQLSTATE 42501 / MODE_NOUVEAU_STOCKAGE (ou interblocage rejouable), 0 perdue', refW.every((z) => z.reason.code === '42501' || /deadlock/i.test(z.reason.message)) && lost.length === 0, refW.map((z) => z.reason.code).join(','));
+  const W = 24;
+  // x : legacy → documents pendant des écritures concurrentes d'un ancien appareil. Chaque écrivain garde UNE connexion (limite du pooleur) ; SQLSTATE et message de chaque erreur sont enregistrés.
+  const INFRA_RE = /max clients|pool|too many|terminat|timeout|timed out|ECONN|EMAXCONN|connection|reset|socket/i;
+  const classify = (e) => {
+    if (e.code === '42501' && /MODE_NOUVEAU_STOCKAGE/.test(e.message)) return 'refus_attendu';
+    if (e.code === '40P01' || e.code === '40001') return 'sql_rejouable';
+    if (['53300', '08006', '08003', '08001', '57P01', '57P03', '08000'].includes(e.code) || INFRA_RE.test(e.message || '')) return 'infrastructure';
+    return 'inattendu';
+  };
+  const raceX = async (level, writers) => {
+    const { connect } = require('./preprod-db');
+    const conns = [], recs = [];
+    let stop = false;
+    try {
+      for (let i = 0; i < writers; i++) conns.push((await connect()).client);
+      const run = conns.map(async (cl, w) => {
+        for (let s = 0; s < 60 && !stop; s++) {
+          const id = `L${level}w${w}s${s}`;
+          try {
+            await cl.query('BEGIN'); await cl.query('SET LOCAL ROLE authenticated');
+            await cl.query("SELECT set_config('request.jwt.claim.sub', $1, true), set_config('request.jwt.claims', $2, true)", [us.x, jstr({ sub: us.x, role: 'authenticated' })]);
+            await cl.query("UPDATE public.user_data SET value = value || $1::jsonb WHERE user_id=$2::uuid AND key='invoices'", [jstr([{ id, type: 'invoice', number: 'BRO-' + id.toUpperCase(), status: 'draft', totalTTC: s }]), us.x]);
+            await cl.query('COMMIT'); recs.push({ id, ok: true });
+          } catch (e) { await cl.query('ROLLBACK').catch(() => {}); recs.push({ id, ok: false, code: e.code || '', message: String(e.message).slice(0, 160), kind: classify({ code: e.code, message: String(e.message) }) }); }
+          await sleep(15);
+        }
+      });
+      await sleep(500);
+      const f = await flipRetry(us.x, 'documents');
+      await sleep(400); stop = true; await Promise.all(run);
+      return { recs, flip: f, opened: conns.length };
+    } catch (e) { stop = true; return { recs, flip: null, opened: conns.length, setupError: `${e.code || ''} ${String(e.message).slice(0, 160)}` }; }
+    finally { for (const cl of conns) await cl.end().catch(() => {}); }
+  };
+  for (const [level, writers] of [[1, 2], [2, 4], [3, 8]]) {
+    const R = await raceX(level, writers);
+    const acc = R.recs.filter((z) => z.ok), ref = R.recs.filter((z) => !z.ok);
+    const dist = {}; for (const z of ref) { const k = `${z.kind} ${z.code} ${z.message.replace(/\s+/g, ' ').slice(0, 90)}`; dist[k] = (dist[k] || 0) + 1; }
+    out(`- (palier ${level}, ${writers} écrivains, connexions ouvertes ${R.opened}) acceptées ${acc.length}, refusées ${ref.length}. Détail des refus (type SQLSTATE message) : ${Object.entries(dist).map(([k, n]) => n + '× ' + k).join(' ; ') || 'aucun'}`);
+    if (R.setupError) { ck(`x palier ${level} : connexions parallèles ouvertes (infrastructure)`, false, R.setupError); break; }
+    const inD = new Set((await q('SELECT id FROM public.documents WHERE user_id=$1::uuid', [us.x])).map((z) => z.id));
+    const lost = acc.filter((z) => !inD.has(z.id)).map((z) => z.id);
+    const bad = ref.filter((z) => z.kind === 'infrastructure' || z.kind === 'inattendu');
+    ck(`x palier ${level} (${writers} écrivains) : bascule legacy → documents ${R.flip && R.flip.ok ? 'faite' : 'NON faite ' + jstr(R.flip).slice(0, 150)} ; ${acc.length} écritures acceptées, toutes retrouvées dans documents (${lost.length} perdue)`, R.flip && R.flip.ok === true && acc.length > 0 && lost.length === 0, `perdues: ${lost.slice(0, 5).join(',')}`);
+    ck(`x palier ${level} : refus tous explicites et attendus (42501 MODE_NOUVEAU_STOCKAGE) — ${ref.length} refus ; erreurs d'infrastructure ou inattendues : ${bad.length}`, ref.length > 0 && bad.length === 0, bad.slice(0, 3).map((z) => z.kind + ' ' + z.code + ' ' + z.message).join(' | '));
+    const back = await flipRetry(us.x, 'legacy');
+    const inL = new Set(((await q1("SELECT value v FROM public.user_data WHERE user_id=$1::uuid AND key='invoices'", [us.x])).v || []).map((e) => e.id));
+    const lost2 = acc.filter((z) => !inL.has(z.id)).map((z) => z.id);
+    ck(`x palier ${level} : retour vers legacy fait, les ${acc.length} écritures acceptées sont dans user_data.invoices (${lost2.length} perdue)`, back.ok === true && lost2.length === 0, jstr(back).slice(0, 150) + ' ' + lost2.slice(0, 5).join(','));
+    if (bad.length || lost.length || lost2.length || !(R.flip && R.flip.ok)) break;   // arrêt : ne pas augmenter la charge sur un échec
+  }
+  r = await flipRetry(us.x, 'documents'); ck('x : état final en documents (aucun écrivain)', r.ok === true || r.unchanged === true, jstr(r).slice(0, 150));
   // y : documents → legacy, pendant 24 upsert_document par l'API réelle
   const Y_ = await login('y');
   r = await flip(us.y, 'documents'); ck('y : bascule initiale vers documents', r.ok === true, jstr(r).slice(0, 200));
@@ -404,6 +485,7 @@ async function test() {
   const inL = new Set(((await q1("SELECT value v FROM public.user_data WHERE user_id=$1::uuid AND key='invoices'", [us.y])).v || []).map((e) => e.id));
   const lost2 = okN.filter((id) => !inL.has(id));
   ck(`y : documents → legacy pendant ${W} écritures (API) : ${okN.length} acceptées avant le verrou, ${refN.length} refusées après ; retour ${fy.ok ? 'fait' : 'arrêté'}`, fy.ok === true && lost2.length === 0 && okN.length > 0 && refN.length > 0, `perdues: ${lost2.join(',')} ${jstr(fy).slice(0, 200)}`);
+  { const d = {}; for (const z of refN) { const k = (z.reason.st || '') + ' ' + z.reason.message.replace(/\s+/g, ' ').slice(0, 110); d[k] = (d[k] || 0) + 1; } out('- (y) détail des refus : ' + (Object.entries(d).map(([k, n]) => n + '× ' + k).join(' ; ') || 'aucun')); }
   ck('y : écritures refusées = MODE_ANCIEN_STOCKAGE (ou interblocage rejouable) ; 0 acceptée perdue', refN.every((z) => /MODE_ANCIEN_STOCKAGE|deadlock/i.test(z.reason.message)) && lost2.length === 0, refN.map((z) => z.reason.message.slice(0, 60)).join('|').slice(0, 300));
   const dd = await Promise.all([flip(us.b, 'documents'), flip(us.b, 'documents'), flip(us.b, 'documents')]);
   ck('b : 3 bascules simultanées : une seule effective (les autres : unchanged ou en attente), pas de doublon', dd.filter((x) => x.ok && !x.unchanged).length === 1 && dd.every((x) => x.ok) && (await q1('SELECT count(*)::int n FROM public.documents WHERE user_id=$1::uuid', [us.b])).n === 3, jstr(dd).slice(0, 300));
@@ -443,6 +525,8 @@ async function cleanup() {
   await c.query('BEGIN');
   await c.query('DELETE FROM public._mig_source_backup WHERE user_id::text = ANY($1)', [uids]);
   await c.query('DELETE FROM public._mig_conflicts WHERE user_id::text = ANY($1)', [uids]);
+  await c.query('DELETE FROM public.code_attempts WHERE user_id::text = ANY($1)', [uids]);   // pas de clé étrangère : à supprimer explicitement
+  await c.query("DELETE FROM public.admin_codes WHERE code LIKE 'MODE-TEST-%'");
   await c.query('DELETE FROM public._mig_runs');
   const del = await c.query('DELETE FROM auth.users WHERE id::text = ANY($1) AND email = ANY($2)', [uids, EMAILS]);
   await c.query('COMMIT');
@@ -450,7 +534,8 @@ async function cleanup() {
   const left = await c.query(`SELECT (SELECT count(*) FROM auth.users WHERE email = ANY($1))::int u, (SELECT count(*) FROM public.documents)::int d, (SELECT count(*) FROM public.doc_payments)::int p, (SELECT count(*) FROM public.doc_history)::int h,
       (SELECT count(*) FROM public.doc_deleted)::int g, (SELECT count(*) FROM public.doc_store_mode)::int m, (SELECT count(*) FROM public.doc_store_testers)::int t, (SELECT count(*) FROM public._mig_source_backup)::int b,
       (SELECT count(*) FROM public._mig_conflicts)::int cf, (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ud,
-      (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_dc, (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_lic`, [EMAILS]);
+      (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_dc, (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_lic,
+      (SELECT count(*) FROM public.code_attempts WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_att, (SELECT count(*) FROM public.admin_codes WHERE code LIKE 'MODE-TEST-%')::int test_codes`, [EMAILS]);
   ck('plus aucun compte de test ni ligne résiduelle ou orpheline (documents, paiements, journal, tombes, modes, liste, sauvegardes, conflits, user_data, compteurs, licences)', Object.values(left.rows[0]).every((v) => v === 0), jstr(left.rows[0]));
   await checkForeign(c, 'après nettoyage');
   const sha17 = (await c.query("SELECT sha256 FROM public._fp_rehearsal WHERE name='install:17_mode_stockage.sql'")).rows[0];
