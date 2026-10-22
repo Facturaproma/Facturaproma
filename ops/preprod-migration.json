@@ -1,5 +1,5 @@
 {
   "_comment": "Pousser une modification de CE fichier sur dev/fondations déclenche « preprod-migration » (PRÉPRODUCTION uniquement, comptes de test jetables mig-a…mig-e). phase = prepare (cible, sauvegardes, données de test, installation sql/15+16, dry-run : s'arrête avant toute copie) | rehearse (sauvegarde, copie, droits, concurrence, retour arrière) | cleanup (supprime uniquement les comptes de test). Aucune écriture en production, aucun déploiement.",
-  "phase": "prepare",
-  "nonce": "3"
+  "phase": "rehearse",
+  "nonce": "4"
 }
