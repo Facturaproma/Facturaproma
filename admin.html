@@ -564,6 +564,11 @@
         .page { display: none; }
         .page.active { display: block; }
 
+        /* Barre de période des rapports : reste visible pendant le défilement */
+        .report-filter-bar { position: sticky; top: 0; z-index: 30; background: var(--bg, #f7f5ef); padding: 10px 0; margin: -10px 0 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--border, #e5e2da); }
+        .report-filter-bar .period-label { font-size: 12px; color: var(--ink-mute); font-weight: 600; }
+        @media (max-width: 768px) { .report-filter-bar { top: 52px; } }
+
         @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%); transition: transform 0.25s; z-index: 250; width: 270px; }
             .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.2); }
@@ -1050,17 +1055,28 @@
             <div class="topbar">
                 <h1>📊 Rapports & Ventes</h1>
                 <div class="actions">
-                    <select id="reportPeriod" class="search-input" style="width: 160px;" onchange="renderReports()">
-                        <option value="all">Tout</option>
-                        <option value="today">Aujourd'hui</option>
-                        <option value="week">7 derniers jours</option>
-                        <option value="month" selected>Ce mois</option>
-                        <option value="quarter">Ce trimestre</option>
-                        <option value="year">Cette année</option>
-                    </select>
                     <button class="btn btn-secondary btn-sm" onclick="loadAllData()">🔄</button>
                     <button class="btn btn-primary btn-sm" onclick="exportReportCSV()">📥 Exporter CSV</button>
                 </div>
+            </div>
+
+            <div class="report-filter-bar">
+                <select id="reportPeriod" class="search-input" style="width: 190px;" onchange="onReportPeriodChange()" aria-label="Période des rapports">
+                    <option value="all">Tout l'historique</option>
+                    <option value="today">Aujourd'hui</option>
+                    <option value="week">7 derniers jours</option>
+                    <option value="month" selected>Ce mois</option>
+                    <option value="lastmonth">Mois dernier</option>
+                    <option value="quarter">Ce trimestre</option>
+                    <option value="year">Cette année</option>
+                    <option value="custom">Dates personnalisées…</option>
+                </select>
+                <span id="reportCustomDates" style="display:none; gap:6px; align-items:center;">
+                    <input type="date" id="reportFrom" class="search-input" style="width: 150px;" onchange="renderReports()" aria-label="Du">
+                    <span>→</span>
+                    <input type="date" id="reportTo" class="search-input" style="width: 150px;" onchange="renderReports()" aria-label="Au">
+                </span>
+                <span class="period-label" id="reportPeriodLabel"></span>
             </div>
 
             <!-- KPIs principaux -->
@@ -1088,11 +1104,11 @@
             </div>
 
             <!-- Entonnoir de conversion -->
-            <!-- Rapprochement codes / paiements (toute la période, indépendant du filtre) -->
+            <!-- Rapprochement codes / paiements : suit la période choisie ci-dessus -->
             <div class="card">
                 <div class="card-header">
                     <h2>⚖️ Rapprochement codes ↔ paiements</h2>
-                    <span style="font-size: 12px; color: var(--ink-mute);">Tout l'historique · attendu = codes activés × prix de l'offre</span>
+                    <span style="font-size: 12px; color: var(--ink-mute);" id="recoScope">attendu = codes activés × prix de l'offre</span>
                 </div>
                 <div id="recoBanner"></div>
                 <div style="overflow-x:auto;">
@@ -5235,6 +5251,11 @@ function getDateRange(period) {
             start.setDate(1);
             start.setHours(0, 0, 0, 0);
             break;
+        case 'lastmonth': {
+            const s0 = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+            const e0 = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            return { start: s0, end: e0 };
+        }
         case 'quarter':
             const q = Math.floor(now.getMonth() / 3);
             start.setMonth(q * 3, 1);
@@ -5244,11 +5265,30 @@ function getDateRange(period) {
             start.setMonth(0, 1);
             start.setHours(0, 0, 0, 0);
             break;
+        case 'custom': {
+            const f = document.getElementById('reportFrom')?.value, t = document.getElementById('reportTo')?.value;
+            const s1 = f ? new Date(f + 'T00:00:00') : new Date(0);
+            const e1 = t ? new Date(t + 'T23:59:59.999') : now;
+            return { start: s1, end: e1 };
+        }
         case 'all':
         default:
             return null;
     }
     return { start, end: now };
+}
+
+function onReportPeriodChange() {
+    const custom = document.getElementById('reportPeriod').value === 'custom';
+    document.getElementById('reportCustomDates').style.display = custom ? 'inline-flex' : 'none';
+    renderReports();
+}
+
+function reportPeriodText(range) {
+    if (!range) return 'Tout l\'historique';
+    const f = (d) => d.toLocaleDateString('fr-FR');
+    if (range.start.getTime() === 0) return `Jusqu'au ${f(range.end)}`;
+    return `Du ${f(range.start)} au ${f(range.end)}`;
 }
 
 function isInRange(dateStr, range) {
@@ -5261,6 +5301,8 @@ function renderReports() {
     const period = document.getElementById('reportPeriod')?.value || 'month';
     const statusFilter = document.getElementById('rpStatusFilter')?.value || 'all';
     const range = getDateRange(period);
+    const lbl = document.getElementById('reportPeriodLabel');
+    if (lbl) lbl.textContent = '📅 ' + reportPeriodText(range);
     
     // Filtrer codes selon période
     const filteredCodes = allCodes.filter(c => isInRange(c.created_at, range));
@@ -5375,7 +5417,7 @@ function renderReports() {
     // Top clients
     // ═══════════════════════════════════════════
     renderTopClients(filteredCodes, filteredPayments);
-    renderReconciliation();
+    renderReconciliation(range);
 }
 
 // ============================================
@@ -5388,24 +5430,29 @@ function paymentOfferKey(p) {
     return p.type;
 }
 
-function computeReconciliation() {
+function computeReconciliation(range) {
     const offers = {};
     const get = k => (offers[k] = offers[k] || { gen: 0, pending: 0, used: 0, revoked: 0, expected: 0, received: 0 });
     const emails = {};
     const em = e => { const k = (e || '').trim().toLowerCase() || '(sans e-mail)'; return (emails[k] = emails[k] || { email: k, codes: [], expected: 0, received: 0, pay: 0 }); };
 
+    // Sur une période : « générés » = codes créés, « activés » = codes activés (date d'activation), « reçu » = paiements datés dans la période
     for (const c of allCodes) {
-        const k = codeOfferKey(c), o = get(k);
-        o.gen++;
-        if (c.status === 'pending') o.pending++;
-        else if (c.status === 'revoked') o.revoked++;
-        else if (c.status === 'used') {
-            const price = TIER_PRICES[k] || 0;
+        const k = codeOfferKey(c);
+        if (isInRange(c.created_at, range)) {
+            const o = get(k);
+            o.gen++;
+            if (c.status === 'pending') o.pending++;
+            else if (c.status === 'revoked') o.revoked++;
+        }
+        if (c.status === 'used' && isInRange(c.activated_at || c.created_at, range)) {
+            const price = TIER_PRICES[k] || 0, o = get(k);
             o.used++; o.expected += price;
             const e = em(c.client_email); e.codes.push(k); e.expected += price;
         }
     }
     for (const p of allPayments) {
+        if (!isInRange(p.payment_date, range)) continue;
         const amt = parseFloat(p.amount) || 0;
         get(paymentOfferKey(p)).received += amt;
         const e = em(p.client_email); e.received += amt; e.pay++;
@@ -5413,10 +5460,13 @@ function computeReconciliation() {
     return { offers, clients: Object.values(emails) };
 }
 
-function renderReconciliation() {
+function renderReconciliation(range) {
     const tb = document.getElementById('recoOffers');
     if (!tb) return;
-    const { offers, clients } = computeReconciliation();
+    if (range === undefined) range = getDateRange(document.getElementById('reportPeriod')?.value || 'month');
+    const { offers, clients } = computeReconciliation(range);
+    const scope = document.getElementById('recoScope');
+    if (scope) scope.textContent = reportPeriodText(range) + ' · attendu = codes activés × prix de l\'offre' + (range ? ' · un paiement peut concerner un code d\'une autre période : choisissez « Tout l\'historique » pour un rapprochement complet' : '');
     const fmt = n => (Math.round(n * 100) / 100).toLocaleString('fr-FR');
     const gap = n => n === 0 ? '<span class="badge badge-success">0</span>'
         : n < 0 ? `<span class="badge badge-danger">${fmt(n)} DH manquant</span>`
