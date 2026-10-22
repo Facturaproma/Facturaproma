@@ -6019,11 +6019,12 @@ async function saveSettings() {
     try {
         for (const [key, value] of Object.entries(settings)) {
             if (value) {
-                await supaClient.from('admin_settings').upsert({
+                const { error: upErr } = await supaClient.from('admin_settings').upsert({
                     key,
                     value,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'key' });
+                if (upErr) throw upErr;   // ne plus afficher « enregistré » si l'écriture a échoué
             }
         }
         

@@ -37,6 +37,7 @@ function makeBackend(db) {
       await c.query('BEGIN');
       await c.query('SET LOCAL ROLE authenticated');
       await c.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [uid]);
+      await c.query("SELECT set_config('request.jwt.claim.email', coalesce((SELECT email FROM auth.users WHERE id = $1::uuid), ''), true)", [uid]);   // comme Supabase : le jeton porte l'e-mail (auth.jwt()->>'email')
       const r = await fn(c);
       await c.query('COMMIT');
       return r;
@@ -48,7 +49,8 @@ function makeBackend(db) {
   const session = (id, email) => ({ access_token: 'tok_' + id, user: { id, email }, expires_at: Math.floor(Date.now() / 1000) + 3600 });
   const RPC = { my_license: [], activate_license: ['p_code'], next_doc_number: ['p_type', 'p_floor'],
     get_doc_mode: [], upsert_document: ['p_doc', 'p_expected_version', 'p_op_id'], delete_document: ['p_type', 'p_id', 'p_expected_version', 'p_op_id'],
-    record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'], get_contact_info: [] };
+    record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'], get_contact_info: [], admin_whoami: [] };
+  const GENERIC = ['subscription_requests', 'admin_codes', 'admin_settings', 'licenses', 'admins'];
   const JSONB_PARAMS = ['p_doc', 'p_payment', 'p_entries'];
   const DOC_TABLES = { documents: 'doc_type, id, version, body, created_at', doc_payments: 'id, body, created_at', doc_history: 'seq, ts, body' };
   const DOC_ORDER = { documents: 'created_at, id', doc_payments: 'created_at, id', doc_history: 'seq' };
@@ -82,6 +84,24 @@ function makeBackend(db) {
           const [from, to] = a.range || [0, 999];
           const r = await asUser(uid, c => c.query(`SELECT ${DOC_TABLES[a.table]} FROM public.${a.table} WHERE user_id = $1 ORDER BY ${DOC_ORDER[a.table]} OFFSET $2 LIMIT $3`, [a.filters.user_id, from, to - from + 1]));
           return { data: r.rows, error: null };
+        }
+        if (GENERIC.includes(a.table)) {   // tables du parcours client (demandes, codes, réglages, licences, admins) : lecture/écriture SOUS RLS, comme PostgREST
+          const f = Object.entries(a.filters || {});
+          const where = f.length ? ' WHERE ' + f.map(([k], i) => `"${k}" = $${i + 1}`).join(' AND ') : '';
+          const fv = f.map(([, v]) => v);
+          if (a.op === 'select') { const r = await asUser(uid, c => c.query(`SELECT * FROM public.${a.table}${where}`, fv)); return { data: r.rows, error: null }; }
+          if (a.op === 'insert') {
+            const ks = Object.keys(a.row);
+            await asUser(uid, c => c.query(`INSERT INTO public.${a.table}(${ks.map(k => '"' + k + '"').join(',')}) VALUES (${ks.map((_, i) => '$' + (i + 1)).join(',')})`, ks.map(k => a.row[k])));
+            return { data: null, error: null };
+          }
+          if (a.op === 'update') {
+            const ks = Object.keys(a.row);
+            const w2 = f.length ? ' WHERE ' + f.map(([k], i) => `"${k}" = $${ks.length + i + 1}`).join(' AND ') : '';
+            await asUser(uid, c => c.query(`UPDATE public.${a.table} SET ${ks.map((k, i) => '"' + k + '" = $' + (i + 1)).join(',')}${w2}`, [...ks.map(k => a.row[k]), ...fv]));
+            return { data: null, error: null };
+          }
+          if (a.op === 'delete') { await asUser(uid, c => c.query(`DELETE FROM public.${a.table}${where}`, fv)); return { data: null, error: null }; }
         }
         if (a.table !== 'user_data') return { data: null, error: { message: 'table non gérée dans le test' } };
         if (a.op === 'select') {

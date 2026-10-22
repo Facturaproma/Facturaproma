@@ -35,7 +35,7 @@ jobs:
         id: phase
         run: |
           PHASE="$(node -p "require('./ops/preprod-ui.json').phase")"
-          case "$PHASE" in idle|test|cleanup|inspect) ;; *) echo "::error::Phase inconnue."; exit 1;; esac
+          case "$PHASE" in idle|test|cleanup|inspect|journey|journey-cleanup) ;; *) echo "::error::Phase inconnue."; exit 1;; esac
           echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
           echo "Phase demandée : $PHASE ; Node $(node -v)"
           case "$(node -v)" in v22.*|v24.*) ;; *) echo "::error::Node 22 ou plus requis."; exit 1;; esac
@@ -43,10 +43,10 @@ jobs:
         if: steps.phase.outputs.phase != 'idle'
         run: npm install --no-save --ignore-scripts pg@8 @supabase/supabase-js@2.118.0 playwright-core@1.64.1
       - name: Chromium (phase test)
-        if: steps.phase.outputs.phase == 'test'
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
         run: npx playwright-core install --with-deps chromium
       - name: Client PostgreSQL 17
-        if: steps.phase.outputs.phase == 'test'
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
@@ -73,7 +73,7 @@ jobs:
           REPORT_PATH: reports/ui.md
         run: node scripts/preprod-ui-validation.js guardtests
       - name: 2. Sauvegarde AVANT les essais, restaurée et vérifiée (test)
-        if: steps.phase.outputs.phase == 'test'
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
         env:
           PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
           LOCAL_PGHOST: 127.0.0.1
@@ -86,7 +86,7 @@ jobs:
           printf '\n### Sauvegarde préalable\n\n' >> reports/ui.md
           node scripts/preprod-backup.js
       - name: 3. Build de préproduction (copie locale, jamais déployée)
-        if: steps.phase.outputs.phase == 'test'
+        if: steps.phase.outputs.phase == 'test' || steps.phase.outputs.phase == 'journey'
         run: node scripts/make-preprod-build.js
       - name: 4. Essais réels sur comptes jetables (test) — aucun nettoyage automatique
         if: steps.phase.outputs.phase == 'test'
@@ -94,6 +94,18 @@ jobs:
           PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
           REPORT_PATH: reports/ui.md
         run: node scripts/preprod-ui-validation.js test
+      - name: 4c. Parcours du premier client (journey) — SQL 18 + comptes jetables ui-j* + navigateur réel — AUCUN nettoyage automatique
+        if: steps.phase.outputs.phase == 'journey'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-journey.js journey
+      - name: 5b. Nettoyage du parcours client uniquement (journey-cleanup)
+        if: steps.phase.outputs.phase == 'journey-cleanup'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-journey.js journey-cleanup
       - name: 4b. Inspection en LECTURE SEULE (inspect) — rien n'est écrit, supprimé ni basculé
         if: steps.phase.outputs.phase == 'inspect'
         env:
