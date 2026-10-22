@@ -473,7 +473,76 @@ async function cleanup() {
   out(`- Comptes restants dans la préproduction : ${(await q1('SELECT count(*)::int n FROM auth.users')).n}.`);
 }
 
-const CMDS = { guardtests, test, cleanup };
+// ---------------------------------------------------------------- inspect : LECTURE SEULE (session forcée en lecture seule ; aucune suppression, aucune bascule, aucun essai)
+const BASELINE_ROWS = { 'public._fp_env': 1, 'public._fp_migrations': 10, 'public._fp_rehearsal': 7, 'public.admins': 1, 'auth.schema_migrations': 82 };   // lignes préexistantes de la préproduction (sauvegarde du 22/10 : 51 tables, 101 lignes)
+async function inspect() {
+  CTX = await makeCtx();
+  if (CTX.dry) await createAccounts();   // répétition locale seulement : comptes simulés pour exercer les requêtes
+  await CTX.adm.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+  const ro = await q1('SHOW transaction_read_only');
+  let writeErr = '';
+  try { await CTX.adm.query('UPDATE public.licenses SET status = status WHERE FALSE'); } catch (e) { writeErr = e.code || String(e.message).slice(0, 80); }
+  rec('I0', 'session administrateur forcée en LECTURE SEULE (toute écriture est impossible)', 'transaction_read_only = on, tentative d\'écriture refusée (25006)', `transaction_read_only = ${ro.transaction_read_only} ; tentative d'écriture : ${writeErr || 'ACCEPTÉE'}`, ro.transaction_read_only === 'on' && writeErr === '25006', { fatal: true, sqlstate: writeErr });
+  out('### I. Comptes de la campagne (adresses exactes)');
+  const us = await q(`SELECT u.id::text id, u.email, to_jsonb(u)->>'created_at' created_at, to_jsonb(u)->>'last_sign_in_at' last_sign_in FROM auth.users u WHERE u.email = ANY($1) ORDER BY u.email`, [EMAILS]);
+  const uids = us.map((x) => x.id);
+  out('| Compte | UUID | créé (UTC) | dernière connexion |\n|---|---|---|---|\n' + us.map((r) => `| ${r.email} | ${r.id} | ${r.created_at} | ${r.last_sign_in || '—'} |`).join('\n'));
+  const all = await q1('SELECT count(*)::int n FROM auth.users');
+  rec('I1', 'exactement les 6 comptes prévus existent (et aucun autre compte dans la base)', `6 comptes ui-*, ${EMAILS.length} adresses, total 6`, `${us.length} comptes trouvés, ${all.n} comptes au total`, us.length === EMAILS.length && all.n === us.length);
+  out('\n### II. Mode, licence et données par compte');
+  const per = await q(`SELECT u.email,
+      COALESCE((SELECT m.mode FROM public.doc_store_mode m WHERE m.user_id=u.id),'legacy') mode,
+      (SELECT count(*) FROM public.doc_store_testers t WHERE t.user_id=u.id)::int testeur,
+      COALESCE((SELECT l.status FROM public.licenses l WHERE l.user_id=u.id),'—') licence,
+      (SELECT count(*) FROM public.documents d WHERE d.user_id=u.id)::int docs,
+      (SELECT count(*) FROM public.documents d WHERE d.user_id=u.id AND d.doc_type='quote')::int devis,
+      (SELECT count(*) FROM public.doc_payments d WHERE d.user_id=u.id)::int pays,
+      (SELECT count(*) FROM public.doc_history d WHERE d.user_id=u.id)::int hist,
+      (SELECT count(*) FROM public.doc_deleted d WHERE d.user_id=u.id)::int suppr,
+      (SELECT count(*) FROM public.doc_events d WHERE d.user_id=u.id)::int evts,
+      COALESCE((SELECT c.last_value::text FROM public.doc_counters c WHERE c.user_id=u.id AND c.doc_type='invoice' LIMIT 1),'—') compteur,
+      (SELECT count(*) FROM public.user_data d WHERE d.user_id=u.id)::int ud,
+      (SELECT count(*) FROM public.code_attempts d WHERE d.user_id=u.id)::int att,
+      (SELECT count(*) FROM public._mig_source_backup d WHERE d.user_id=u.id)::int mbk,
+      (SELECT count(*) FROM public._mig_conflicts d WHERE d.user_id=u.id)::int mcf
+    FROM auth.users u WHERE u.email = ANY($1) ORDER BY u.email`, [EMAILS]);
+  out('| Compte | mode | testeur | licence | documents (dont devis) | paiements | journal | supprimés | événements | compteur facture | user_data | tentatives code | sauv. migration | conflits migration |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n' +
+    per.map((r) => `| ${r.email.split('@')[0]} | ${r.mode} | ${r.testeur} | ${r.licence} | ${r.docs} (${r.devis}) | ${r.pays} | ${r.hist} | ${r.suppr} | ${r.evts} | ${r.compteur} | ${r.ud} | ${r.att} | ${r.mbk} | ${r.mcf} |`).join('\n'));
+  const modeRows = await q('SELECT u.email, to_jsonb(m) j FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id ORDER BY u.email');
+  out('\nLignes `doc_store_mode` (identité du mode, dates) : ' + (modeRows.map((r) => `${r.email.split('@')[0]}=${clip(jstr(r.j), 220)}`).join(' ; ') || 'aucune'));
+  const strangeModes = await q1('SELECT (SELECT count(*) FROM public.doc_store_mode WHERE NOT (user_id::text = ANY($1)))::int m, (SELECT count(*) FROM public.doc_store_testers WHERE NOT (user_id::text = ANY($1)))::int t', [uids]);
+  rec('I2', 'modes et testeurs : uniquement des comptes de la campagne', 'aucune ligne étrangère', jstr(strangeModes), strangeModes.m === 0 && strangeModes.t === 0);
+  out('\n### III. Balayage de TOUTES les tables (public + auth) : lignes de la campagne / lignes préexistantes');
+  const tabs = await q(`SELECT n.nspname s, c.relname t FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p') AND n.nspname IN ('public','auth') ORDER BY 1, 2`);
+  const sweep = []; let unexplained = [];
+  for (const { s: sc, t } of tabs) {
+    const fq = `${sc}.${t}`;
+    const cols = (await q('SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2', [sc, t])).map((r) => r.column_name);
+    let mine = null;   // condition « appartient à la campagne »
+    if (fq === 'auth.users') mine = 'email = ANY($1::text[])';
+    else if (fq === 'auth.audit_log_entries') mine = `COALESCE(payload->>'actor_username','') LIKE '%@facturapro-test.invalid'`;
+    else if (fq === 'auth.mfa_amr_claims') mine = 'session_id IN (SELECT id FROM auth.sessions WHERE user_id::text = ANY($1::text[]))';
+    else if (fq === 'public.admin_codes') mine = "code LIKE 'MODE-TEST-%'";
+    else if (cols.includes('user_id')) mine = 'user_id::text = ANY($1::text[])';
+    const r = await q1(`SELECT count(*)::int total${mine ? `, count(*) FILTER (WHERE ${mine})::int mine` : ', 0::int mine'} FROM "${sc}"."${t}"`, mine && mine.includes('$1') ? [fq === 'auth.users' ? EMAILS : uids] : []);
+    const pre = r.total - r.mine, exp = BASELINE_ROWS[fq] || 0;
+    sweep.push({ fq, total: r.total, mine: r.mine, pre, exp, attributable: !!mine });
+    if (pre !== exp) unexplained.push(`${fq} (préexistantes ${pre}, attendu ${exp})`);
+  }
+  const shown = sweep.filter((x) => x.total || x.exp);
+  out('| Table | total | lignes de la campagne | autres lignes | attendu avant campagne |\n|---|---|---|---|---|\n' + shown.map((x) => `| ${x.fq} | ${x.total} | ${x.mine}${x.attributable ? '' : ' (non attribuable)'} | ${x.pre} | ${x.exp} |`).join('\n'));
+  out(`\n${tabs.length} tables examinées, ${tabs.length - shown.length} vides.`);
+  rec('I3', 'les lignes qui ne sont pas à la campagne correspondent EXACTEMENT à l\'état préexistant (sauvegarde : 101 lignes)', 'aucune différence', unexplained.length ? 'différences : ' + unexplained.join(' ; ') : 'aucune différence', unexplained.length === 0);
+  const orph = await q1(`SELECT (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int user_data, (SELECT count(*) FROM public.documents WHERE user_id NOT IN (SELECT id FROM auth.users))::int documents, (SELECT count(*) FROM public.doc_payments WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_payments, (SELECT count(*) FROM public.doc_history WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_history, (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int licenses, (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_counters`);
+  rec('I4', 'aucune ligne orpheline (sans compte propriétaire)', 'tout à 0', jstr(orph), Object.values(orph).every((v) => v === 0));
+  const mr = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
+  rec('I5', '_mig_runs vide (aucune migration de données exécutée)', '0', String(mr), mr === 0);
+  out('\n### IV. Empreinte des données préexistantes');
+  await checkForeign('inspection en lecture seule', 'I6');
+  out('\n**Lecture seule : rien n\'a été supprimé, basculé ni modifié.**');
+}
+
+const CMDS = { guardtests, test, cleanup, inspect };
 (async () => {
   const cmd = process.argv[2];
   if (!CMDS[cmd]) { console.error('Commande : ' + Object.keys(CMDS).join(' | ')); process.exit(2); }

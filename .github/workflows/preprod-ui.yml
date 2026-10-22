@@ -1,5 +1,5 @@
 # VALIDATION ISOLÉE du nouveau stockage (docstore.js + app.html) sur la PRÉPRODUCTION Supabase (jamais la production), comptes de test jetables uniquement.
-# Phase pilotée par ops/preprod-ui.json : idle | test | cleanup. test = contrôle de cible + sauvegarde restaurée et vérifiée + essais réels ; AUCUN nettoyage automatique
+# Phase pilotée par ops/preprod-ui.json : idle | inspect (LECTURE SEULE : session forcée en lecture seule, aucun essai, aucune suppression) | test | cleanup. test = contrôle de cible + sauvegarde restaurée et vérifiée + essais réels ; AUCUN nettoyage automatique
 # (le nettoyage est la phase séparée « cleanup », lancée seulement après analyse des résultats). Aucun mot de passe ni URL de connexion dans les journaux ni les rapports.
 name: preprod-ui
 on:
@@ -35,7 +35,7 @@ jobs:
         id: phase
         run: |
           PHASE="$(node -p "require('./ops/preprod-ui.json').phase")"
-          case "$PHASE" in idle|test|cleanup) ;; *) echo "::error::Phase inconnue."; exit 1;; esac
+          case "$PHASE" in idle|test|cleanup|inspect) ;; *) echo "::error::Phase inconnue."; exit 1;; esac
           echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
           echo "Phase demandée : $PHASE ; Node $(node -v)"
           case "$(node -v)" in v22.*|v24.*) ;; *) echo "::error::Node 22 ou plus requis."; exit 1;; esac
@@ -94,6 +94,12 @@ jobs:
           PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
           REPORT_PATH: reports/ui.md
         run: node scripts/preprod-ui-validation.js test
+      - name: 4b. Inspection en LECTURE SEULE (inspect) — rien n'est écrit, supprimé ni basculé
+        if: steps.phase.outputs.phase == 'inspect'
+        env:
+          PREPROD_DB_URL: ${{ secrets.PREPROD_DB_URL }}
+          REPORT_PATH: reports/ui.md
+        run: node scripts/preprod-ui-validation.js inspect
       - name: 5. Nettoyage des comptes de la campagne uniquement (cleanup)
         if: steps.phase.outputs.phase == 'cleanup'
         env:
