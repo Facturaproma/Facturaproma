@@ -9152,20 +9152,46 @@ function renderReportInvoices() {
     }
 }
 
-function sendDocWhatsApp(id, type) {
+// Texte du message WhatsApp d'un devis / d'une facture (pure : testable). Un brouillon porte un numéro provisoire BRO-… :
+// on ne le présente pas comme la facture définitive.
+function whatsappDocMessage(doc, isQuote, company) {
+    const provisional = !isQuote && isDraftNumber(doc.number);
+    const label = isQuote ? 'le devis' : (provisional ? 'le brouillon de facture' : 'la facture');
+    const ref = provisional ? '(numéro définitif attribué à l\'émission)' : doc.number;
+    const dueLine = (!isQuote && doc.dueDate) ? `• Échéance : ${formatDate(doc.dueDate)}\n` : '';
+    return `Bonjour,\n\nVeuillez trouver ci-joint ${label} ${ref}.\n\n` +
+        `• Montant TTC : ${formatCurrency(doc.totalTTC)}\n` +
+        `• Date : ${formatDate(doc.date)}\n` + dueLine + '\n' +
+        `${(!isQuote && !provisional && company.rib) ? `Règlement par virement :\nRIB : ${company.rib}\n\n` : ''}` +
+        `Cordialement,\n${company.name || ''}`;
+}
+
+async function sendDocWhatsApp(id, type) {
     const isQuote = type === 'quote';
     const doc = Storage.get(isQuote ? 'quotes' : 'invoices', []).find(d => d.id === id);
     if (!doc) return;
     const client = Storage.get('clients', []).find(c => c.id === doc.clientId);
     const company = Storage.get('company', {});
-    const label = isQuote ? 'le devis' : 'la facture';
-    const dueLine = (!isQuote && doc.dueDate) ? `• Échéance : ${formatDate(doc.dueDate)}\n` : '';
-    const msg = `Bonjour,\n\nVeuillez trouver ci-joint ${label} ${doc.number}.\n\n` +
-        `• Montant TTC : ${formatCurrency(doc.totalTTC)}\n` +
-        `• Date : ${formatDate(doc.date)}\n` + dueLine + '\n' +
-        `${(!isQuote && company.rib) ? `Règlement par virement :\nRIB : ${company.rib}\n\n` : ''}` +
-        `Cordialement,\n${company.name || ''}`;
-    // 1) PDF téléchargé, à joindre dans WhatsApp  2) conversation ouverte avec le message prêt
+    const msg = whatsappDocMessage(doc, isQuote, company);
+
+    // 1) Téléphone / navigateur compatible : feuille de partage avec le PDF EN PIÈCE JOINTE (choisir WhatsApp puis le contact)
+    try {
+        if (navigator.share && navigator.canShare) {
+            const r = await generatePDF(id, type, { asBlob: true });
+            if (r) {
+                const file = new File([r.blob], r.filename, { type: 'application/pdf' });
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], text: msg, title: doc.number });
+                    showToast('Document prêt à envoyer ✓', 'success');
+                    return;
+                }
+            }
+        }
+    } catch (e) {
+        if (e && e.name === 'AbortError') return;      // partage annulé par l'utilisateur : on ne fait rien de plus
+        console.warn('Partage direct indisponible, repli WhatsApp', e);
+    }
+    // 2) Repli : PDF téléchargé, à joindre dans WhatsApp, + conversation ouverte avec le message prêt
     generatePDF(id, type);
     const phone = (client?.phone || '').replace(/\D/g, '');
     const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
@@ -11958,7 +11984,7 @@ async function enableArabicPdf(pdf) {
     };
 }
 
-async function generatePDF(id, type) {
+async function generatePDF(id, type, opts) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
     const doc_data = collection.find(d => d.id === id);
     if (!doc_data) return;
@@ -12287,7 +12313,10 @@ async function generatePDF(id, type) {
         });
     }
     
-    pdf.save(`${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`);
+    const pdfFileName = `${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`;
+    // Partage direct (WhatsApp, e-mail…) : on renvoie le fichier sans le télécharger
+    if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: pdfFileName };
+    pdf.save(pdfFileName);
     
     // Show upgrade message for trial users
     if (licenseInfo.type === 'trial') {
