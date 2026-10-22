@@ -14,9 +14,18 @@ Cible unique : Supabase de **préproduction** `njjaomichdlnoscrnxlz`. Comptes je
 
 État au moment de la rédaction : les contrôles `N1`–`N10` ont été exécutés en RÉEL (run 39774301049, 47/48 ; l'unique échec était la connexion du navigateur). Les contrôles `F1`–`F5` (section F) et les tests navigateur `B`/`U` sont **NON EXÉCUTÉS en réel** ; `F1`–`F4` ont été joués en SIMULÉ (67/67 en répétition locale).
 
-## Exception documentée : la ligne `_mig_runs` cff4cac4
+> Mise à jour : la campagne réelle du run 39779883156 a exécuté `N1`–`N10`, `F1`–`F5` et les tests navigateur `B`/`U` en RÉEL (94/94), puis le nettoyage du run 39781605171 (9/9).
 
-La ligne historique `cff4cac4…` (11:58:03.125 UTC, campagne du run 39774301049) est **conservée** : son rattachement n'est qu'une inférence. Elle n'est ni supprimée ni modifiée. Le contrôle de départ `P1` la **tolère, elle seule**, et seulement si tous ses traits correspondent (préfixe, mode `apply`, statut `applied`, instant à la milliseconde, rapport sans compte à migrer). Toute autre ligne, ou une ligne qui lui ressemble sans tous ses traits, fait **échouer** `P1` (tests `K1`–`K6`, SIMULÉ). Le nettoyage ignore cette ligne.
+## Exceptions documentées : les lignes `_mig_runs` cff4cac4 et fe82bee1
+
+Deux lignes globales de `_mig_runs` ont été **conservées** aux nettoyages, car leur rattachement à une campagne de test est **incomplet** (classe C : proximité d'horodatage et séquence de transactions, aucune preuve A « compte cité » ni B « même transaction qu'une ligne de la campagne ») :
+
+| Ligne | Instant (UTC) | Campagne | Traits exigés |
+|---|---|---|---|
+| `cff4cac4…` | 2026-10-22 11:58:03.125 | run 39774301049 | mode `apply`, statut `applied`, instant à la milliseconde, rapport sans compte (`accounts: []`) |
+| `fe82bee1…` | 2026-10-22 12:39:23.842 | run 39779883156 | mode `apply`, statut `applied`, instant à la milliseconde, rapport sans compte (`accounts: []`) |
+
+Elles ne sont ni supprimées ni modifiées. Le contrôle de départ `P1` les **tolère, elles seules**, et seulement si **tous** leurs traits correspondent. Chaque exception ne couvre qu'**une** ligne (un doublon exact reste « inattendu »). Toute autre ligne, une troisième ligne, ou une ligne qui leur ressemble avec un trait différent (instant, mode, statut, rapport, préfixe) fait **échouer** `P1` (tests `K1`–`K7b`, SIMULÉ). Le nettoyage et l'inspection ignorent ces deux lignes.
 
 ## Diagnostic du blocage « Connexion... » (navigateur, run 39774301049)
 
@@ -43,7 +52,7 @@ La ligne historique `cff4cac4…` (11:58:03.125 UTC, campagne du run 39774301049
 
 ## Plan exact de la prochaine campagne réelle (sur autorisation)
 
-Préalable : cette campagne **ne peut démarrer** que sur une préproduction sans compte `ui-*` (le harnais refuse sinon) et avec, pour seule ligne `_mig_runs`, l'exception documentée.
+Préalable : cette campagne **ne peut démarrer** que sur une préproduction sans compte `ui-*` (le harnais refuse sinon) et avec, pour seules lignes `_mig_runs`, les deux exceptions documentées (cff4cac4, fe82bee1).
 
 1. **Autorisation explicite** de lancer la phase `test` (ce qui crée 6 comptes jetables, en bascule 4 vers `documents`, écrit des documents fictifs).
 2. Le workflow `preprod-ui` (branche `validation/integration-documents`, environnement `preprod`, Node 22) : contrôle de cible et anti-production → sauvegarde restaurée et vérifiée → `P1`–`P6` (état initial, empreinte `6393652c285d`) → `N1`–`N10` → **`F1`–`F5`** → navigateur `B`/`U` → `F1` (empreinte finale).
@@ -53,7 +62,7 @@ Préalable : cette campagne **ne peut démarrer** que sur une préproduction san
 
 ## Limites connues (à ne pas masquer)
 
-* Les tests navigateur n'ont **jamais** tourné en réel : leurs résultats sont inconnus.
-* `F1`–`F5` n'ont tourné qu'en SIMULÉ ; certains messages d'erreur réels peuvent différer (formes d'erreur PostgREST).
+* Les tests navigateur ont tourné en réel une seule fois (run 39779883156, 94/94) avec le script hCaptcha **bloqué dans le navigateur de test** : le chemin avec jeton hCaptcha réel n'est donc pas couvert, et la cause du blocage « Connexion... » du run précédent reste une hypothèse non observée directement.
+* `F1`–`F5` ont tourné en réel une fois (94/94) ; les messages d'erreur ne sont validés que pour les cas couverts.
 * Le changement D1 (envoi réel de la file hors ligne du mode historique) concerne **tous** les comptes une fois fusionné ; à valider séparément en conditions réelles avant toute mise en production.
 * `backup.yml:80` masque une erreur par `|| echo ::warning::` (non modifié, à corriger plus tard).

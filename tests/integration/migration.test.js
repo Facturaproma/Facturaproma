@@ -80,6 +80,10 @@ const sel = async (sql, p = []) => (await pool.query(sql, p)).rows;
   // C5 : coupure réseau AVANT validation : rien n'est enregistré, la reprise aboutit une seule fois
   const adm = new Client({ database: DB }); await adm.connect();
   const cl = new Client({ database: DB }); await cl.connect();
+  // La connexion de `cl` est coupée VOLONTAIREMENT ci-dessous : selon le timing, pg signale la socket fermée (EPIPE / ECONNRESET / « terminating connection »)
+  // par un événement « error » du client EN PLUS du rejet de la requête. On absorbe UNIQUEMENT ces erreurs de coupure attendues ; toute autre erreur est conservée et fait échouer le test.
+  const cutEvents = [], unexpectedClientErrors = [];
+  cl.on('error', (e) => { (e && (e.code === 'EPIPE' || e.code === 'ECONNRESET' || e.code === '57P01' || /terminating connection|Connection terminated/i.test(e.message || '')) ? cutEvents : unexpectedClientErrors).push(e); });
   const pid = (await cl.query('SELECT pg_backend_pid() p')).rows[0].p;
   await cl.query('BEGIN'); await cl.query('SET LOCAL ROLE authenticated'); await cl.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [U]);
   await cl.query('SELECT public.upsert_document($1::jsonb,$2,$3)', [JSON.stringify({ id: 'cut1', type: 'invoice', number: 'BRO-CUT1', status: 'draft' }), null, 'cut-op-1']);
@@ -120,6 +124,7 @@ const sel = async (sql, p = []) => (await pool.query(sql, p)).rows;
   const rb = (await pool.query('SELECT public.fp_mig_rollback($1, false) r', [U2])).rows[0].r;
   ck('aperçu de retour arrière après écritures concurrentes : 20 éléments à reprendre dans l\'ancien tableau', rb.changes.some(c => c.key === 'invoices' && c.after === 220 && c.appended === 20), JSON.stringify(rb.changes));
 
+  ck('coupure volontaire (C5) : aucune erreur de client INATTENDUE sur toute la durée du test (seules les erreurs de coupure attendues ont été absorbées)', unexpectedClientErrors.length === 0, unexpectedClientErrors.map((e) => e.code + ' ' + e.message).join(' | '));
   await adm.end(); await pool.end();
   ps('postgres', ['-c', `DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`]);
   const n = res.filter(Boolean).length; console.log(`\n${n}/${res.length} tests de concurrence/migration réussis en ${((Date.now() - T0) / 1000).toFixed(1)} s`); process.exit(n === res.length ? 0 : 1);

@@ -45,7 +45,7 @@ async function makeCtx() {
     const dbName = createDb({ docs: true }); const be = makeBackend(dbName);
     const q = async (s, p) => { const rows_ = await be.sql(s, p); return { rows: rows_, rowCount: rows_.length }; };
     const adm = { query: q, end: async () => {} };
-    if (process.env.UI_DRY_KNOWNROW === '1') await q('INSERT INTO public._mig_runs(run_id, mode, status, started_at, report) VALUES ($1::uuid,$2,$3,$4::timestamptz,$5::jsonb)', ['cff4cac4-0000-4000-8000-000000000001', 'apply', 'applied', '2026-10-22 11:58:03.125123+00', '{"dry_run": {"accounts": []}}']);   // répétition locale : ligne historique connue présente dès le départ
+    if (process.env.UI_DRY_KNOWNROW === '1') for (const [id, at] of [['cff4cac4-0000-4000-8000-000000000001', '2026-10-22 11:58:03.125123+00'], ['fe82bee1-0000-4000-8000-000000000001', '2026-10-22 12:39:23.842456+00']]) await q('INSERT INTO public._mig_runs(run_id, mode, status, started_at, report) VALUES ($1::uuid,$2,$3,$4::timestamptz,$5::jsonb)', [id, 'apply', 'applied', at, '{"dry_run": {"accounts": []}}']);   // répétition locale : lignes historiques connues présentes dès le départ
     return { dry: true, adm, be, dropDb: () => { try { be.close(); } catch {} dropDb(dbName); }, url: 'https://' + T.preprodRef + '.supabase.co', key: T.anonKey };
   }
   const { connect } = require('./preprod-db');
@@ -104,15 +104,22 @@ async function signIn(k) {
   return { c, uid: r.data.user.id, email: EMAIL(k), k };
 }
 
-// ---------------------------------------------------------------- EXCEPTION DOCUMENTÉE : une seule ligne historique de `_mig_runs`
-// La ligne cff4cac4… (bascule de ui-g, campagne du run 39774301049, 2026-10-22 11:58:03.125 UTC) a été CONSERVÉE au nettoyage : son rattachement n'est qu'une inférence (horodatage et séquence de transactions), pas une preuve.
-// Elle n'est ni supprimée ni modifiée. Les contrôles de départ la TOLÈRENT, elle seule, et seulement si TOUS ses traits correspondent (préfixe d'identifiant, mode, statut, instant à la milliseconde, rapport sans compte à migrer).
-// Toute autre ligne de `_mig_runs`, ou une ligne qui ressemble à celle-ci mais dont un trait diffère, fait ÉCHOUER le contrôle.
-const KNOWN_RUN = { prefix: 'cff4cac4', mode: 'apply', status: 'applied', ms: Date.parse('2026-10-22T11:58:03.125Z') };
-const isKnownRun = (r) => String(r.run_id).startsWith(KNOWN_RUN.prefix) && r.mode === KNOWN_RUN.mode && r.status === KNOWN_RUN.status && Math.floor(new Date(r.started_at).getTime()) === KNOWN_RUN.ms && /"accounts":\s*\[\s*\]/.test(r.rep || '');
+// ---------------------------------------------------------------- EXCEPTIONS DOCUMENTÉES : deux lignes historiques de `_mig_runs`
+// Ces deux lignes ont été CONSERVÉES aux nettoyages : leur rattachement à une campagne de test est INCOMPLET (classe C : proximité d'horodatage et séquence de transactions, aucune preuve A ni B).
+//   - cff4cac4… : bascule de ui-g, campagne du run 39774301049, 2026-10-22 11:58:03.125 UTC
+//   - fe82bee1… : campagne du run 39779883156, 2026-10-22 12:39:23.842 UTC (114 ms après l'ajout de ui-g comme testeur ; rapport sans compte)
+// Elles ne sont ni supprimées ni modifiées. Les contrôles de départ les TOLÈRENT, elles seules, et seulement si TOUS leurs traits correspondent (préfixe d'identifiant, mode, statut, instant à la milliseconde, rapport sans compte à migrer).
+// Chaque exception ne couvre qu'UNE ligne : un doublon exact, toute autre ligne, ou une ligne qui leur ressemble mais dont un trait diffère, fait ÉCHOUER le contrôle.
+const KNOWN_RUNS = [
+  { prefix: 'cff4cac4', mode: 'apply', status: 'applied', ms: Date.parse('2026-10-22T11:58:03.125Z') },
+  { prefix: 'fe82bee1', mode: 'apply', status: 'applied', ms: Date.parse('2026-10-22T12:39:23.842Z') },
+];
+const matchesKnown = (r, k) => String(r.run_id).startsWith(k.prefix) && r.mode === k.mode && r.status === k.status && Math.floor(new Date(r.started_at).getTime()) === k.ms && /"accounts":\s*\[\s*\]/.test(r.rep || '');
 async function migRuns() {
   const rows_ = await q('SELECT run_id::text run_id, mode, status, started_at, finished_at, xmin::text::bigint x, report::text rep FROM public._mig_runs ORDER BY started_at');
-  return { known: rows_.filter(isKnownRun), others: rows_.filter((r) => !isKnownRun(r)) };
+  const used = new Set(), known = [];
+  for (const k of KNOWN_RUNS) { const r = rows_.find((x) => !used.has(x.run_id) && matchesKnown(x, k)); if (r) { used.add(r.run_id); known.push(r); } }   // une exception = UNE ligne ; un doublon reste « inattendu »
+  return { known, others: rows_.filter((r) => !used.has(r.run_id)) };
 }
 
 // ---------------------------------------------------------------- empreinte des données préexistantes (identique à la campagne précédente)
@@ -523,7 +530,7 @@ async function test() {
   CTX = await makeCtx();
   out(`### 2. Préparation (${NATURE})`);
   const mr0 = await migRuns();
-  rec('P1', 'aucune ligne _mig_runs inattendue (seule exception documentée et tolérée : la ligne historique cff4cac4, jamais supprimée ni modifiée)', '0 ligne inattendue (la ligne connue est tolérée)', `${mr0.others.length} ligne(s) inattendue(s)${mr0.others.length ? ' : ' + mr0.others.map((r) => r.run_id.slice(0, 8)).join(',') : ''} ; ligne connue présente : ${mr0.known.length ? 'oui' : 'non'}`, mr0.others.length === 0 && mr0.known.length <= 1, { fatal: true });
+  rec('P1', 'aucune ligne _mig_runs inattendue (seules exceptions documentées et tolérées : les lignes historiques cff4cac4 et fe82bee1, jamais supprimées ni modifiées)', '0 ligne inattendue (les deux lignes connues sont tolérées)', `${mr0.others.length} ligne(s) inattendue(s)${mr0.others.length ? ' : ' + mr0.others.map((r) => r.run_id.slice(0, 8)).join(',') : ''} ; lignes connues présentes : ${mr0.known.length ? mr0.known.map((r) => r.run_id.slice(0, 8)).join(',') : 'aucune'}`, mr0.others.length === 0 && mr0.known.length <= KNOWN_RUNS.length, { fatal: true });
   if (!CTX.dry) {
     const hasMode = await q1("SELECT to_regclass('public.doc_store_mode') t");
     if (!hasMode.t) throw new Error('REFUS : sql/17 non installé.');
@@ -570,7 +577,7 @@ async function cleanup() {
   // _mig_runs (référence 0 avant la campagne ; table GLOBALE) : on ne supprime QUE les lignes dont le rattachement est PROUVÉ — A : le rapport cite un compte de la campagne ; B : écrite dans la même transaction (xmin identique) qu'une ligne d'un compte de la campagne.
   // Une ligne rattachée par la seule proximité d'horodatage (C) est CONSERVÉE et signalée.
   const mrC = await migRuns(); const runsList = mrC.others;   // la ligne historique connue est EXCLUE du périmètre : ni supprimée, ni modifiée
-  if (mrC.known.length) out('- Ligne `_mig_runs` historique connue (cff4cac4, exception documentée) : présente, hors périmètre, NON touchée.');
+  if (mrC.known.length) out('- Ligne(s) `_mig_runs` historique(s) connue(s) (' + mrC.known.map((r) => r.run_id.slice(0, 8)).join(', ') + ', exceptions documentées à rattachement incomplet) : présente(s), hors périmètre, NON touchée(s).');
   const anchors = await q(`SELECT u.email, 'mode' src, m.xmin::text::bigint x FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1)
       UNION ALL SELECT u.email, 'testeur', t.xmin::text::bigint FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)
       UNION ALL SELECT u.email, 'evenement', e.xmin::text::bigint FROM public.doc_events e JOIN auth.users u ON u.id=e.user_id WHERE u.email = ANY($1)
@@ -697,7 +704,7 @@ async function inspect() {
   const orph = await q1(`SELECT (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int user_data, (SELECT count(*) FROM public.documents WHERE user_id NOT IN (SELECT id FROM auth.users))::int documents, (SELECT count(*) FROM public.doc_payments WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_payments, (SELECT count(*) FROM public.doc_history WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_history, (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int licenses, (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_counters`);
   rec('I4', 'aucune ligne orpheline (sans compte propriétaire)', 'tout à 0', jstr(orph), Object.values(orph).every((v) => v === 0));
   const mrI = await migRuns();
-  out(`- Information : ${mrI.others.length} ligne(s) dans _mig_runs hors exception documentée (référence avant campagne : 0) — leur attribution est jugée par I7. Ligne historique connue cff4cac4 : ${mrI.known.length ? 'présente (tolérée, non touchée)' : 'absente'}.`);
+  out(`- Information : ${mrI.others.length} ligne(s) dans _mig_runs hors exception documentée (référence avant campagne : 0) — leur attribution est jugée par I7. Lignes historiques connues (cff4cac4, fe82bee1) : ${mrI.known.length ? mrI.known.map((r) => r.run_id.slice(0, 8)).join(', ') + ' présente(s) (tolérée(s), non touchée(s))' : 'absentes'}.`);
   out('\n### III bis. Lignes de `_mig_runs` : preuves de rattachement (référence 0 avant la campagne ; table exclue de l\'empreinte)');
   out('Méthode : une bascule (fp_doc_mode_set) écrit la ligne de mode ET la ligne `_mig_runs` dans UNE SEULE transaction ; deux lignes écrites par la même transaction portent le même `xmin`. Preuves, de la plus forte à la plus faible : (A) le rapport de la ligne cite un compte de la campagne ; (B) même transaction qu\'une ligne de mode / testeur / événement d\'un compte de la campagne (xmin identique) ; (C) simple proximité d\'horodatage — jamais considérée comme une preuve suffisante.');
   const first = us.reduce((m, r) => (!m || new Date(r.created_at) < new Date(m) ? r.created_at : m), null);
@@ -734,22 +741,45 @@ async function knownrun() {
   if (!DRY) throw new Error('knownrun : répétition locale uniquement (UI_DRYRUN=1).');
   CTX = await makeCtx();
   const ins = (id, mode, status, at, rep) => CTX.adm.query('INSERT INTO public._mig_runs(run_id, mode, status, started_at, report) VALUES ($1::uuid,$2,$3,$4::timestamptz,$5::jsonb)', [id, mode, status, at, rep]);
-  const KNOWN = ['cff4cac4-0000-4000-8000-000000000001', 'apply', 'applied', '2026-10-22 11:58:03.125123+00', '{"dry_run": {"ok": true, "accounts": []}}'];
+  const del = (like) => CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text LIKE $1', [like]);
+  const OK = '{"dry_run": {"ok": true, "accounts": []}}';
+  const A = ['cff4cac4-0000-4000-8000-000000000001', 'apply', 'applied', '2026-10-22 11:58:03.125123+00', OK];
+  const B = ['fe82bee1-0000-4000-8000-000000000001', 'apply', 'applied', '2026-10-22 12:39:23.842456+00', OK];
+  const st = (m) => `${m.others.length} inattendue(s) / ${m.known.length} connue(s)`;
+  const P1 = (m) => m.others.length === 0 && m.known.length <= KNOWN_RUNS.length;   // même condition que le contrôle P1
   let m = await migRuns();
-  rec('K1', 'aucune ligne : rien d\'inattendu', '0 inattendue, 0 connue', `${m.others.length} / ${m.known.length}`, m.others.length === 0 && m.known.length === 0);
-  await ins(...KNOWN); m = await migRuns();
-  rec('K2', 'la ligne historique exacte est tolérée (et elle seule)', '0 inattendue, 1 connue', `${m.others.length} / ${m.known.length}`, m.others.length === 0 && m.known.length === 1);
-  await ins('11111111-0000-4000-8000-000000000002', 'apply', 'applied', '2026-10-22 12:30:00+00', '{"dry_run": {"accounts": []}}'); m = await migRuns();
-  rec('K3', 'toute AUTRE ligne en plus de la ligne connue fait échouer le contrôle', '1 inattendue', `${m.others.length} inattendue(s), ${m.known.length} connue(s)`, m.others.length === 1 && m.known.length === 1);
-  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text LIKE $1', ['11111111%']);
-  await ins('cff4cac4-0000-4000-8000-000000000003', 'apply', 'applied', '2026-10-22 11:58:03.200+00', '{"dry_run": {"accounts": []}}'); m = await migRuns();
-  rec('K4', 'même préfixe mais instant différent : NON toléré', '1 inattendue', `${m.others.length} inattendue(s)`, m.others.length === 1 && m.known.length === 1);
-  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text LIKE $1', ['cff4cac4-0000-4000-8000-000000000003']);
-  await ins('cff4cac4-0000-4000-8000-000000000004', 'apply', 'applied', '2026-10-22 11:58:03.125+00', '{"dry_run": {"accounts": [{"user": "abcd1234"}]}}'); m = await migRuns();
-  rec('K5', 'même préfixe et même instant mais rapport avec compte à migrer : NON toléré', '1 inattendue', `${m.others.length} inattendue(s)`, m.others.length === 1);
-  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text LIKE $1', ['cff4cac4-0000-4000-8000-000000000004']);
-  await ins('cff4cac4-0000-4000-8000-000000000005', 'rollback', 'rollback_applied', '2026-10-22 11:58:03.125+00', '{"dry_run": {"accounts": []}}'); m = await migRuns();
-  rec('K6', 'même préfixe et instant mais mode/statut différents : NON toléré', '1 inattendue', `${m.others.length} inattendue(s)`, m.others.length === 1);
+  rec('K1', 'aucune ligne : P1 passe', 'P1 vrai (0 / 0)', st(m), P1(m) && m.known.length === 0);
+  await ins(...A); m = await migRuns();
+  rec('K2', 'la ligne cff4cac4 exacte est tolérée (et elle seule)', 'P1 vrai (0 / 1)', st(m), P1(m) && m.known.length === 1);
+  await ins(...B); m = await migRuns();
+  rec('K2b', 'les DEUX lignes connues exactes (cff4cac4 et fe82bee1) sont tolérées', 'P1 vrai (0 / 2)', st(m), P1(m) && m.known.length === 2);
+  await del('fe82bee1%'); await del('cff4cac4%'); await ins(...B); m = await migRuns();
+  rec('K2c', 'la ligne fe82bee1 exacte seule est tolérée', 'P1 vrai (0 / 1)', st(m), P1(m) && m.known.length === 1);
+  await ins(...A);
+  await ins('11111111-0000-4000-8000-000000000002', 'apply', 'applied', '2026-10-22 12:50:00+00', '{"dry_run": {"accounts": []}}'); m = await migRuns();
+  rec('K3', 'une TROISIÈME ligne inattendue fait ÉCHOUER P1', 'P1 faux (1 / 2)', st(m), !P1(m) && m.others.length === 1 && m.known.length === 2);
+  await del('11111111%');
+  // une ligne qui ressemble à une exception mais dont UN trait diffère : refusée
+  const variants = [
+    ['K4', 'cff4cac4 : instant différent', ['cff4cac4-0000-4000-8000-000000000003', 'apply', 'applied', '2026-10-22 11:58:03.200+00', OK], 'fe82bee1'],
+    ['K4b', 'fe82bee1 : instant différent', ['fe82bee1-0000-4000-8000-000000000003', 'apply', 'applied', '2026-10-22 12:39:23.900+00', OK], 'cff4cac4'],
+    ['K5', 'cff4cac4 : rapport avec compte à migrer', ['cff4cac4-0000-4000-8000-000000000004', 'apply', 'applied', '2026-10-22 11:58:03.125+00', '{"dry_run": {"accounts": [{"user": "abcd1234"}]}}'], 'fe82bee1'],
+    ['K5b', 'fe82bee1 : rapport avec compte à migrer', ['fe82bee1-0000-4000-8000-000000000004', 'apply', 'applied', '2026-10-22 12:39:23.842+00', '{"dry_run": {"accounts": [{"user": "abcd1234"}]}}'], 'cff4cac4'],
+    ['K6', 'cff4cac4 : mode/statut différents', ['cff4cac4-0000-4000-8000-000000000005', 'rollback', 'rollback_applied', '2026-10-22 11:58:03.125+00', OK], 'fe82bee1'],
+    ['K6b', 'fe82bee1 : mode/statut différents', ['fe82bee1-0000-4000-8000-000000000005', 'rollback', 'rollback_applied', '2026-10-22 12:39:23.842+00', OK], 'cff4cac4'],
+    ['K6c', 'préfixe inconnu avec l\'instant exact de fe82bee1', ['aaaaaaaa-0000-4000-8000-000000000006', 'apply', 'applied', '2026-10-22 12:39:23.842+00', OK], null],
+  ];
+  for (const [id, label, row] of variants) {
+    await ins(...row); m = await migRuns();
+    rec(id, `${label} : NON tolérée, P1 échoue`, 'P1 faux', st(m), !P1(m) && m.others.length >= 1);
+    await del(row[0]);
+  }
+  // doublon exact d'une exception : la deuxième ligne identique par ses traits reste inattendue
+  await ins('cff4cac4-0000-4000-8000-000000000007', 'apply', 'applied', '2026-10-22 11:58:03.125789+00', OK); m = await migRuns();
+  rec('K7', 'un DOUBLON exact de cff4cac4 (mêmes traits) fait échouer P1 : une exception = une ligne', 'P1 faux (1 / 2)', st(m), !P1(m) && m.others.length === 1 && m.known.length === 2);
+  await del('cff4cac4-0000-4000-8000-000000000007');
+  await ins('fe82bee1-0000-4000-8000-000000000008', 'apply', 'applied', '2026-10-22 12:39:23.842789+00', OK); m = await migRuns();
+  rec('K7b', 'un DOUBLON exact de fe82bee1 (mêmes traits) fait échouer P1', 'P1 faux (1 / 2)', st(m), !P1(m) && m.others.length === 1 && m.known.length === 2);
   CTX.dropDb();
 }
 
