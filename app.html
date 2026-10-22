@@ -726,6 +726,11 @@
             transition: all 0.2s;
         }
 
+        .req { color: #C0392B; font-weight: 700; }
+        .opt { color: var(--ink-mute); font-weight: 400; font-size: 12px; }
+        .field-error { color: #C0392B; font-size: 12px; font-weight: 600; margin: 2px 0 6px; line-height: 1.35; }
+        .field-hint { font-size: 11px; color: var(--ink-mute); margin-top: 3px; }
+        .field-invalid input, .field-invalid textarea { border-color: #C0392B !important; box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.12); }
         input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: var(--primary);
@@ -2809,48 +2814,49 @@
         <!-- Step 2: Company Info -->
         <div class="onboarding-step" id="onbStep2">
             <h1>Votre entreprise</h1>
-            <p class="subtitle">Ces infos apparaîtront sur vos factures.</p>
+            <p class="subtitle">Ces infos apparaîtront sur vos factures. Les champs marqués d'une <span class="req">*</span> rouge sont obligatoires ; les autres sont facultatifs et modifiables plus tard.</p>
 
             <div class="form-group">
-                <label>Nom de l'entreprise / Raison sociale *</label>
-                <input type="text" id="onbCompanyName" placeholder="Ex: SARL TechMaroc" required>
+                <label>Nom de l'entreprise / Raison sociale <span class="req">*</span> <span class="opt">(obligatoire)</span></label>
+                <input type="text" id="onbCompanyName" placeholder="Ex: SARL TechMaroc" required maxlength="120">
             </div>
 
             <div class="form-row">
                 <div>
-                    <label>ICE * (15 chiffres)</label>
-                    <input type="text" id="onbICE" placeholder="002345678000012" maxlength="15">
+                    <label>ICE <span class="req">*</span> <span class="opt">(obligatoire, 15 chiffres)</span></label>
+                    <input type="text" id="onbICE" placeholder="15 chiffres" maxlength="15" inputmode="numeric" oninput="onbCounter('onbICE', 15)">
+                    <div class="field-hint" id="hintonbICE">0 / 15 chiffres</div>
                 </div>
                 <div>
-                    <label id="lblIF">IF (Identifiant Fiscal)</label>
-                    <input type="text" id="onbIF" placeholder="40123456">
+                    <label id="lblIF">IF (Identifiant Fiscal) <span class="opt">(recommandé, chiffres)</span></label>
+                    <input type="text" id="onbIF" placeholder="40123456" maxlength="12" inputmode="numeric">
                 </div>
             </div>
 
             <div class="form-row">
                 <div>
-                    <label id="lblRC">RC (Registre Commerce)</label>
-                    <input type="text" id="onbRC" placeholder="123456">
+                    <label id="lblRC">RC (Registre Commerce) <span class="opt">(recommandé)</span></label>
+                    <input type="text" id="onbRC" placeholder="123456" maxlength="30">
                 </div>
                 <div>
-                    <label>CNSS</label>
-                    <input type="text" id="onbCNSS" placeholder="1234567">
+                    <label>CNSS <span class="opt">(optionnel, chiffres)</span></label>
+                    <input type="text" id="onbCNSS" placeholder="1234567" maxlength="12" inputmode="numeric">
                 </div>
             </div>
 
             <div class="form-group">
-                <label>Adresse</label>
-                <textarea id="onbAddress" placeholder="123 Boulevard Mohammed V, Casablanca 20000"></textarea>
+                <label>Adresse <span class="opt">(recommandé, apparaît sur vos factures)</span></label>
+                <textarea id="onbAddress" placeholder="123 Boulevard Mohammed V, Casablanca 20000" maxlength="250"></textarea>
             </div>
 
             <div class="form-row">
                 <div>
-                    <label>Téléphone</label>
-                    <input type="tel" id="onbPhone" placeholder="+212 6 12 34 56 78">
+                    <label>Téléphone <span class="opt">(optionnel)</span></label>
+                    <input type="tel" id="onbPhone" placeholder="+212 6 12 34 56 78" maxlength="20">
                 </div>
                 <div>
-                    <label>Email</label>
-                    <input type="email" id="onbEmail" placeholder="contact@entreprise.ma">
+                    <label>Email <span class="opt">(optionnel)</span></label>
+                    <input type="email" id="onbEmail" placeholder="contact@entreprise.ma" maxlength="120">
                 </div>
             </div>
 
@@ -2866,18 +2872,19 @@
             <p class="subtitle">Pour faciliter les paiements de vos clients (optionnel mais recommandé).</p>
 
             <div class="form-group">
-                <label>Banque</label>
-                <input type="text" id="onbBank" placeholder="Ex: Attijariwafa Bank">
+                <label>Banque <span class="opt">(optionnel)</span></label>
+                <input type="text" id="onbBank" placeholder="Ex: Attijariwafa Bank" maxlength="80">
             </div>
 
             <div class="form-group">
-                <label>RIB (24 chiffres)</label>
-                <input type="text" id="onbRIB" placeholder="007 780 0001234567890123 45" maxlength="30">
+                <label>RIB <span class="opt">(optionnel, 24 chiffres)</span></label>
+                <input type="text" id="onbRIB" placeholder="24 chiffres" maxlength="30" inputmode="numeric" oninput="onbCounter('onbRIB', 24)">
+                <div class="field-hint" id="hintonbRIB">0 / 24 chiffres</div>
             </div>
 
             <div class="form-group">
-                <label>SWIFT / BIC (paiements internationaux)</label>
-                <input type="text" id="onbSWIFT" placeholder="BCMAMAMC">
+                <label>SWIFT / BIC <span class="opt">(optionnel, 8 ou 11 caractères)</span></label>
+                <input type="text" id="onbSWIFT" placeholder="BCMAMAMC" maxlength="11">
             </div>
 
             <div class="notice success">
@@ -7029,12 +7036,78 @@ function selectStatus(status) {
     
     // Adapt labels based on status
     if (status === 'ae') {
-        document.getElementById('lblIF').innerHTML = 'IF <span style="color: var(--ink-mute); font-weight: 400;">(optionnel pour AE)</span>';
-        document.getElementById('lblRC').innerHTML = 'RC <span style="color: var(--ink-mute); font-weight: 400;">(non requis pour AE)</span>';
+        document.getElementById('lblIF').innerHTML = 'IF <span class="opt">(optionnel pour AE)</span>';
+        document.getElementById('lblRC').innerHTML = 'RC <span class="opt">(non requis pour AE)</span>';
     } else {
-        document.getElementById('lblIF').textContent = 'IF (Identifiant Fiscal) *';
-        document.getElementById('lblRC').textContent = 'RC (Registre Commerce) *';
+        document.getElementById('lblIF').innerHTML = 'IF (Identifiant Fiscal) <span class="opt">(recommandé, chiffres)</span>';
+        document.getElementById('lblRC').innerHTML = 'RC (Registre Commerce) <span class="opt">(recommandé)</span>';
     }
+}
+
+// ---------- Validation du formulaire d'entreprise : astérisque rouge et message AU-DESSUS du champ ----------
+function onbCounter(id, n) {
+    const el = document.getElementById(id), h = document.getElementById('hint' + id);
+    if (!el || !h) return;
+    const d = el.value.replace(/\D/g, '').length;
+    h.textContent = d + ' / ' + n + ' chiffres' + (d === n ? ' ✓' : '');
+}
+function onbClearErrors(scope) {
+    document.querySelectorAll('#' + scope + ' .field-error').forEach(e => e.remove());
+    document.querySelectorAll('#' + scope + ' .field-invalid').forEach(e => e.classList.remove('field-invalid'));
+    document.querySelectorAll('#' + scope + ' .req.err-star').forEach(e => e.remove());
+}
+function onbFlag(id, msg) {
+    const el = document.getElementById(id); if (!el) return;
+    const box = el.parentElement; box.classList.add('field-invalid');
+    const label = box.querySelector('label');
+    const err = document.createElement('div'); err.className = 'field-error'; err.textContent = '* ' + msg;
+    if (label) { label.insertAdjacentElement('afterend', err); if (!label.querySelector('.req')) { const st = document.createElement('span'); st.className = 'req err-star'; st.textContent = ' *'; label.appendChild(st); } }
+    else box.insertBefore(err, el);
+    const clear = () => { err.remove(); box.classList.remove('field-invalid'); el.removeEventListener('input', clear); };
+    el.addEventListener('input', clear);
+}
+// Renvoie la liste des erreurs [id, message] (pure, testable)
+function onbCheckStep2(v) {
+    const errs = [];
+    const digits = (x) => (x || '').replace(/\s/g, '');
+    if (!v.name) errs.push(['onbCompanyName', 'Vérifiez : le nom de l\'entreprise est obligatoire.']);
+    const ice = digits(v.ice);
+    if (!ice) errs.push(['onbICE', 'Vérifiez : l\'ICE est obligatoire (15 chiffres).']);
+    else if (!/^\d+$/.test(ice)) errs.push(['onbICE', 'Vérifiez : l\'ICE ne contient que des chiffres (15 attendus).']);
+    else if (ice.length !== 15) errs.push(['onbICE', 'Vérifiez : l\'ICE doit contenir 15 chiffres (' + ice.length + ' saisi' + (ice.length > 1 ? 's' : '') + ').']);
+    else if (ice === '002345678000012' || /^(\d)\1+$/.test(ice)) errs.push(['onbICE', 'Vérifiez : saisissez votre vrai ICE (pas l\'exemple ni des chiffres répétés).']);
+    if (digits(v.if) && !/^\d{1,12}$/.test(digits(v.if))) errs.push(['onbIF', 'Vérifiez : l\'IF ne contient que des chiffres.']);
+    if (digits(v.cnss) && !/^\d{1,12}$/.test(digits(v.cnss))) errs.push(['onbCNSS', 'Vérifiez : le numéro CNSS ne contient que des chiffres.']);
+    if (v.phone && v.phone.replace(/\D/g, '').length < 9) errs.push(['onbPhone', 'Vérifiez : numéro de téléphone incomplet (9 chiffres minimum), ou laissez vide.']);
+    if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.email)) errs.push(['onbEmail', 'Vérifiez : adresse e-mail invalide, ou laissez vide.']);
+    return errs;
+}
+function onbCheckStep3(v) {
+    const errs = [];
+    const rib = (v.rib || '').replace(/\s/g, '');
+    if (rib && !/^\d{24}$/.test(rib)) errs.push(['onbRIB', 'Vérifiez : le RIB doit contenir exactement 24 chiffres (' + rib.replace(/\D/g, '').length + ' saisi' + (rib.length > 1 ? 's' : '') + '), ou laissez vide.']);
+    const sw = (v.swift || '').replace(/\s/g, '');
+    if (sw && !/^[A-Za-z0-9]{8}([A-Za-z0-9]{3})?$/.test(sw)) errs.push(['onbSWIFT', 'Vérifiez : le code SWIFT/BIC compte 8 ou 11 caractères, ou laissez vide.']);
+    return errs;
+}
+function onbRun(scope, errs) {
+    onbClearErrors(scope);
+    errs.forEach(([id, msg]) => onbFlag(id, msg));
+    if (errs.length) {
+        const first = document.getElementById(errs[0][0]);
+        try { first.scrollIntoView({ block: 'center', behavior: 'smooth' }); first.focus({ preventScroll: true }); } catch {}
+        showToast(errs.length === 1 ? 'Un champ est à vérifier (en rouge)' : errs.length + ' champs sont à vérifier (en rouge)', 'error');
+        return false;
+    }
+    return true;
+}
+function validateOnboardingStep2() {
+    const g = (id) => document.getElementById(id).value.trim();
+    return onbRun('onbStep2', onbCheckStep2({ name: g('onbCompanyName'), ice: g('onbICE'), if: g('onbIF'), cnss: g('onbCNSS'), phone: g('onbPhone'), email: g('onbEmail') }));
+}
+function validateOnboardingStep3() {
+    const g = (id) => document.getElementById(id).value.trim();
+    return onbRun('onbStep3', onbCheckStep3({ rib: g('onbRIB'), swift: g('onbSWIFT') }));
 }
 
 function onboardingNext(currentStep) {
@@ -7049,20 +7122,7 @@ function onboardingNext(currentStep) {
         document.getElementById('prog1').classList.add('done');
         document.getElementById('prog2').classList.add('active');
     } else if (currentStep === 2) {
-        const name = document.getElementById('onbCompanyName').value.trim();
-        const ice = document.getElementById('onbICE').value.trim();
-        if (!name) {
-            showToast('Le nom de l\'entreprise est requis', 'error');
-            return;
-        }
-        if (!ice || ice.length !== 15 || !/^\d+$/.test(ice)) {
-            showToast('L\'ICE doit contenir 15 chiffres', 'error');
-            return;
-        }
-        if (ice === '002345678000012' || /^(\d)\1+$/.test(ice)) {
-            showToast('Saisissez votre vrai ICE (pas l\'exemple)', 'error');
-            return;
-        }
+        if (!validateOnboardingStep2()) return;
         document.getElementById('onbStep2').classList.remove('active');
         document.getElementById('onbStep3').classList.add('active');
         document.getElementById('prog2').classList.remove('active');
@@ -7088,6 +7148,7 @@ function onboardingBack(currentStep) {
 }
 
 function finishOnboarding() {
+    if (!validateOnboardingStep3()) return;
     const company = {
         status: onboardingStatus,
         name: document.getElementById('onbCompanyName').value.trim(),
