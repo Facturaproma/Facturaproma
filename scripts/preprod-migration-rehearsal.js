@@ -66,12 +66,12 @@ async function foreignHash(c) {
     const fq = `${s}.${t}`; if (EXCLUDED.has(fq)) continue;
     const cols = (await c.query(`SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2`, [s, t])).rows.map((r) => r.column_name);
     let where = 'TRUE';
-    if (fq === 'auth.users') where = 'NOT (email = ANY($2::text[]))';
+    if (fq === 'auth.users') where = 'NOT (email = ANY($1::text[]))';
     else if (fq === 'auth.audit_log_entries') where = `COALESCE(payload->>'actor_username','') NOT LIKE '%${DOMAIN}'`;
     else if (fq === 'auth.mfa_amr_claims') where = 'NOT (session_id IN (SELECT id FROM auth.sessions WHERE user_id::text = ANY($1::text[])))';
     else if (cols.includes('user_id')) where = 'user_id IS NULL OR NOT (user_id::text = ANY($1::text[]))';
     const r = await c.query(`SELECT count(*)::int n, md5(coalesce(string_agg(x::text, '|' ORDER BY x::text COLLATE "C"), '')) h FROM "${s}"."${t}" x WHERE ${where}`,
-      where.includes('$2') ? [uids, EMAILS] : where.includes('$1') ? [uids] : []);
+      fq === 'auth.users' ? [EMAILS] : where.includes('$1') ? [uids] : []);
     parts[fq] = `${r.rows[0].n}:${r.rows[0].h}`;
   }
   return { hash: sha(jstr(parts)), parts };
@@ -197,7 +197,7 @@ async function seed() {
   // mig-c : anomalies historiques. Le verrou serveur interdit de les fabriquer par l'API : on désactive brièvement le déclencheur d'INSERT, DANS UNE TRANSACTION, sur ce seul compte de test.
   await c.query('BEGIN');
   await c.query('ALTER TABLE public.user_data DISABLE TRIGGER trg_guard_issued_invoices_ins');
-  await c.query(`INSERT INTO public.user_data(user_id, key, value) VALUES ($1::uuid, 'invoices', $2::jsonb), ($1::uuid, 'payments', $3::jsonb)`, [u[`mig-c${DOMAIN}`],
+  await c.query(`INSERT INTO public.user_data(user_id, key, value) VALUES ($1::uuid, 'invoices', $2::jsonb), ($1::uuid, 'payments', $3::jsonb) ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value`, [u[`mig-c${DOMAIN}`],
     jstr([{ id: 'd1', type: 'invoice', number: FN('FAC', 1), status: 'sent', totalTTC: 10 }, { id: 'd2', type: 'invoice', number: FN('FAC', 1), status: 'sent', totalTTC: 20 }, { id: 'd3', type: 'invoice', number: 'SANS-NUMERO', status: 'sent', totalTTC: 30 },
       { id: 'd1', type: 'invoice', number: 'BRO-X', status: 'draft', totalTTC: 1 }, { number: 'BRO-Y', status: 'draft' }, 42]), jstr([{ invoiceId: 'zz', amount: 5 }])]);
   await c.query('ALTER TABLE public.user_data ENABLE TRIGGER trg_guard_issued_invoices_ins');
@@ -208,7 +208,7 @@ async function seed() {
   const seedSql = async (k, invs, quotes, pays, log, counters) => {
     const id = u[`mig-${k}${DOMAIN}`];
     for (const [t, v] of Object.entries(counters)) await c.query(`INSERT INTO public.doc_counters(user_id, doc_type, last_value) VALUES ($1::uuid,$2,$3) ON CONFLICT (user_id, doc_type) DO UPDATE SET last_value = GREATEST(public.doc_counters.last_value, EXCLUDED.last_value)`, [id, t, v]);
-    for (const [key, val] of [['invoices', invs], ['quotes', quotes], ['payments', pays], ['docLog', log]]) if (val) await c.query(`INSERT INTO public.user_data(user_id, key, value) VALUES ($1::uuid,$2,$3::jsonb)`, [id, key, jstr(val)]);
+    for (const [key, val] of [['invoices', invs], ['quotes', quotes], ['payments', pays], ['docLog', log]]) if (val) await c.query(`INSERT INTO public.user_data(user_id, key, value) VALUES ($1::uuid,$2,$3::jsonb) ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value`, [id, key, jstr(val)]);
   };
   await seedSql('d', [{ id: 'x1', type: 'invoice', number: FN('FAC', 1), status: 'sent', date: `${Y}-04-01`, totalHT: 33.333, totalTVA: 6.6666, totalTTC: 39.9996, paidAmount: 0 }, { id: 'x2', type: 'invoice', number: 'BRO-D2', status: 'draft', totalHT: 1, totalTVA: 0.2, totalTTC: 1.2 }],
     [{ id: 'x1', type: 'quote', number: FN('DEV', 1), status: 'sent', totalHT: 7.777, totalTVA: 1.5554, totalTTC: 9.3324 }], [{ id: 'p10', invoiceId: 'x1', date: `${Y}-04-02`, amount: 10.005, method: 'chèque' }],
