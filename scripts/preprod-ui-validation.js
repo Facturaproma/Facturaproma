@@ -550,7 +550,7 @@ async function inspect() {
     const r = await q1(`SELECT count(*)::int total${mine ? `, count(*) FILTER (WHERE ${mine})::int mine` : ', 0::int mine'} FROM "${sc}"."${t}"`, mine && mine.includes('$1') ? [fq === 'auth.users' ? EMAILS : uids] : []);
     const pre = r.total - r.mine, exp = BASELINE_ROWS[fq] || 0;
     sweep.push({ fq, total: r.total, mine: r.mine, pre, exp, attributable: !!mine });
-    if (pre !== exp) unexplained.push(`${fq} (préexistantes ${pre}, attendu ${exp})`);
+    if (fq !== 'public._mig_runs' && pre !== exp) unexplained.push(`${fq} (préexistantes ${pre}, attendu ${exp})`);
   }
   const shown = sweep.filter((x) => x.total || x.exp);
   out('| Table | total | lignes de la campagne | autres lignes | attendu avant campagne |\n|---|---|---|---|---|\n' + shown.map((x) => `| ${x.fq} | ${x.total} | ${x.mine}${x.attributable ? '' : ' (non attribuable)'} | ${x.pre} | ${x.exp} |`).join('\n'));
@@ -559,16 +559,33 @@ async function inspect() {
   const orph = await q1(`SELECT (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int user_data, (SELECT count(*) FROM public.documents WHERE user_id NOT IN (SELECT id FROM auth.users))::int documents, (SELECT count(*) FROM public.doc_payments WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_payments, (SELECT count(*) FROM public.doc_history WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_history, (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int licenses, (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int doc_counters`);
   rec('I4', 'aucune ligne orpheline (sans compte propriétaire)', 'tout à 0', jstr(orph), Object.values(orph).every((v) => v === 0));
   const mr = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
-  rec('I5', '_mig_runs vide (aucune migration de données exécutée)', '0', String(mr), mr === 0);
-  out('\n### III bis. Lignes de `_mig_runs` : à qui appartiennent-elles ? (table exclue de l\'empreinte, référence 0)');
+  out(`- Information : ${mr} ligne(s) dans _mig_runs (référence avant campagne : 0) — leur attribution est jugée par I7.`);
+  out('\n### III bis. Lignes de `_mig_runs` : preuves de rattachement (référence 0 avant la campagne ; table exclue de l\'empreinte)');
+  out('Méthode : une bascule (fp_doc_mode_set) écrit la ligne de mode ET la ligne `_mig_runs` dans UNE SEULE transaction ; deux lignes écrites par la même transaction portent le même `xmin`. Preuves, de la plus forte à la plus faible : (A) le rapport de la ligne cite un compte de la campagne ; (B) même transaction qu\'une ligne de mode / testeur / événement d\'un compte de la campagne (xmin identique) ; (C) simple proximité d\'horodatage — jamais considérée comme une preuve suffisante.');
   const first = us.reduce((m, r) => (!m || new Date(r.created_at) < new Date(m) ? r.created_at : m), null);
-  const runsList = await q('SELECT run_id::text run_id, mode, status, started_at, finished_at, report::text rep FROM public._mig_runs ORDER BY started_at');
+  const runsList = await q('SELECT run_id::text run_id, mode, status, started_at, finished_at, xmin::text::bigint x, report::text rep FROM public._mig_runs ORDER BY started_at');
+  const anchors = await q(`SELECT 'users' src, u.email, u.xmin::text::bigint x FROM auth.users u WHERE u.email = ANY($1)
+      UNION ALL SELECT 'licence', u.email, l.xmin::text::bigint FROM public.licenses l JOIN auth.users u ON u.id=l.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT 'testeur', u.email, t.xmin::text::bigint FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT 'mode', u.email, m.xmin::text::bigint FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT 'evenement', u.email, e.xmin::text::bigint FROM public.doc_events e JOIN auth.users u ON u.id=e.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT 'sauvegarde_migration', u.email, b.xmin::text::bigint FROM public._mig_source_backup b JOIN auth.users u ON u.id=b.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT 'compteur', u.email, c.xmin::text::bigint FROM public.doc_counters c JOIN auth.users u ON u.id=c.user_id WHERE u.email = ANY($1)`, [EMAILS]);
   const pref = us.map((r) => ({ p: r.id.slice(0, 8), n: r.email.split('@')[0] }));
-  const runsInfo = runsList.map((r) => ({ ...r, who: pref.filter((x) => r.rep && r.rep.includes(x.p)).map((x) => x.n), after: first && new Date(r.started_at) >= new Date(first) }));
-  out('| run | mode | statut | début (UTC) | fin | comptes de la campagne cités | postérieur à la création des comptes |\n|---|---|---|---|---|---|---|\n' +
-    runsInfo.map((r) => `| ${r.run_id.slice(0, 8)} | ${r.mode} | ${r.status} | ${new Date(r.started_at).toISOString()} | ${r.finished_at ? new Date(r.finished_at).toISOString() : '—'} | ${r.who.join(', ') || '(aucun)'} | ${r.after ? 'oui' : 'NON'} |`).join('\n'));
-  out('\nContenu résumé de chaque rapport (identifiants tronqués) :\n' + runsInfo.map((r) => `- ${r.run_id.slice(0, 8)} : ${clip(r.rep, 380)}`).join('\n'));
-  rec('I7', 'chaque ligne de `_mig_runs` a été créée APRÈS la création des comptes de la campagne et cite au moins un compte de la campagne', 'toutes les lignes attribuées à la campagne', `${runsInfo.filter((r) => r.after && r.who.length).length}/${runsInfo.length} lignes attribuées${runsInfo.some((r) => !(r.after && r.who.length)) ? ' ; NON attribuées : ' + runsInfo.filter((r) => !(r.after && r.who.length)).map((r) => r.run_id.slice(0, 8)).join(',') : ''}`, runsInfo.every((r) => r.after && r.who.length), { proof: 'dates de début comparées à la création des comptes ; comptes cités dans le rapport' });
+  const stampsI = []; for (const r of await q(`SELECT 'mode' src, u.email, to_jsonb(m)::text j FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1) UNION ALL SELECT 'testeur', u.email, to_jsonb(t)::text FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)`, [EMAILS])) for (const m of r.j.matchAll(/"(\d{4}-\d{2}-\d{2}T[0-9:.]+(?:[+-]\d{2}:?\d{2}|Z))"/g)) stampsI.push({ src: r.src, who: r.email.split('@')[0], t: new Date(m[1]).getTime() });
+  const runsInfo = runsList.map((r) => {
+    const cited = pref.filter((x) => r.rep && r.rep.includes(x.p)).map((x) => x.n);
+    const same = anchors.filter((a) => Number(a.x) === Number(r.x)).map((a) => `${a.email.split('@')[0]}/${a.src}`);
+    const st = new Date(r.started_at).getTime(), near = stampsI.filter((x) => Math.abs(x.t - st) <= 1000).map((x) => `${x.who}/${x.src} à ${Math.abs(x.t - st)} ms`);
+    return { ...r, cited, same, near, after: !!first && new Date(r.started_at) >= new Date(first), cls: cited.length ? 'A' : same.length ? 'B' : near.length ? 'C' : '—' };
+  });
+  out('| run | mode | statut | début (UTC) | xmin | A : compte cité | B : même transaction que | C : horodatage proche (indicatif) | classe |\n|---|---|---|---|---|---|---|---|---|\n' +
+    runsInfo.map((r) => `| ${r.run_id.slice(0, 8)} | ${r.mode} | ${r.status} | ${new Date(r.started_at).toISOString()} | ${r.x} | ${r.cited.join(', ') || '—'} | ${r.same.join(', ') || '—'} | ${r.near.join(', ') || '—'} | ${r.cls} |`).join('\n'));
+  out('\nChronologie des identifiants de transaction (xmin croissants) des lignes de la campagne et des lignes `_mig_runs` — toute transaction étrangère intercalée se verrait comme un trou dans la séquence :\n' +
+    anchors.concat(runsInfo.map((r) => ({ src: '_mig_runs ' + r.run_id.slice(0, 8), email: 'run@', x: r.x }))).filter((a) => ['users', 'testeur', 'mode', '_mig'].some((k) => a.src.startsWith(k))).sort((a, b) => Number(a.x) - Number(b.x)).map((a) => `${a.x}:${a.email.split('@')[0]}/${a.src}`).join(' ; '));
+  out('\nContenu résumé de chaque rapport (identifiants tronqués) :\n' + runsInfo.map((r) => `- ${r.run_id.slice(0, 8)} : ${clip(r.rep, 300)}`).join('\n'));
+  const strong = runsInfo.filter((r) => r.after && (r.cls === 'A' || r.cls === 'B'));
+  rec('I7', 'chaque ligne de `_mig_runs` est rattachée à la campagne par une preuve A (compte cité) ou B (même transaction) — la proximité d\'horodatage seule (C) ne suffit pas', 'toutes en A ou B', `${strong.length}/${runsInfo.length} en A ou B ; classe C seulement : ${runsInfo.filter((r) => r.cls === 'C').map((r) => r.run_id.slice(0, 8)).join(',') || 'aucune'} ; sans preuve : ${runsInfo.filter((r) => r.cls === '—').map((r) => r.run_id.slice(0, 8)).join(',') || 'aucune'}`, strong.length === runsInfo.length, { proof: 'xmin comparés entre `_mig_runs` et les lignes de mode / testeur / événements' });
   out('\n### IV. Empreinte des données préexistantes');
   await checkForeign('inspection en lecture seule', 'I6');
   out('\n**Lecture seule : rien n\'a été supprimé, basculé ni modifié.**');
