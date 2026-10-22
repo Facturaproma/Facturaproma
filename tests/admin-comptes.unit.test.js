@@ -12,3 +12,7 @@ t('équipe toujours affichée', isReal({ last_sign_in: null, is_staff: true, typ
 t('les 3 sites de stats utilisent le même filtre', (html.match(/!a\.is_staff && isRealAccount\(a\)/g) || []).length === 3);
 t('filtre de liste présent, défaut « connectés »', /id="filterConnected"[\s\S]*?<option value="real">/.test(html));
 console.log('OK');
+// Page de connexion admin : l'e-mail du compte Master n'est plus affiché ni pré-suggéré
+const a0 = html.indexOf('id="adminEmail"'), loginBlock = html.slice(a0 - 600, a0 + 2600);
+assert(/Se connecter/.test(loginBlock), 'bloc de connexion introuvable');
+t('connexion admin : e-mail Master absent du texte et des placeholders visibles', !/webnour@gmail\.com/.test(loginBlock));
