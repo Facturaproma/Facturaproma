@@ -1,0 +1,176 @@
+# MIGRATION DE PRODUCTION (facturapro-prod) : SQL 14 + SQL 18 + durcissement de update_updated_at.
+# Pilotée par ops/prod-migration.json (phase idle | apply | rollback). Autorisée par le propriétaire le 22/10/2026.
+# Garde-fous : cible fixée (ref du projet dans l'utilisateur de connexion), empreinte des scripts, état attendu de la base,
+# sauvegarde chiffrée prise juste avant, UNE transaction (--single-transaction) avec contrôles qui lèvent une erreur => annulation complète.
+# Aucune donnée existante n'est modifiée ni supprimée. Aucun mot de passe dans les journaux.
+name: prod-migration
+on:
+  push:
+    branches: [validation/integration-documents]
+    paths: ['ops/prod-migration.json']
+permissions:
+  contents: read
+concurrency:
+  group: prod-migration
+  cancel-in-progress: false
+jobs:
+  migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PGHOST: aws-1-eu-north-1.pooler.supabase.com
+      PGPORT: '5432'
+      PGUSER: postgres.mdozjptoecygmpkjlohr
+      PGDATABASE: postgres
+      PGSSLMODE: require
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lire la phase
+        id: ph
+        run: |
+          PHASE=$(python3 -c "import json;print(json.load(open('ops/prod-migration.json'))['phase'])")
+          echo "phase=$PHASE" >> "$GITHUB_OUTPUT"
+          echo "Phase : $PHASE"
+
+      - name: Installer psql 17
+        if: steps.ph.outputs.phase != 'idle'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsS -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Préparer le mot de passe
+        if: steps.ph.outputs.phase != 'idle'
+        env:
+          RAW: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          P=$(python3 - <<'PY'
+          import os, re
+          raw = os.environ["RAW"].strip()
+          m = re.match(r"^postgres(?:ql)?://[^:/@]+:(.*)@[^@]*$", raw, re.I | re.S)
+          if m: raw = m.group(1)
+          print(re.sub(r"\s", "", raw.strip().strip("[]")))
+          PY
+          )
+          test -n "$P"
+          echo "::add-mask::$P"
+          echo "PGPASSWORD=$P" >> "$GITHUB_ENV"
+
+      - name: Contrôles préalables (lecture seule)
+        if: steps.ph.outputs.phase != 'idle'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib,sys
+          e=json.load(open('ops/prod-migration.json'))['expected']
+          for f,k in (('sql/14_numerotation_et_verrouillage.sql','sql14_sha256_prefix'),('sql/18_contact_public.sql','sql18_sha256_prefix')):
+              h=hashlib.sha256(open(f,'rb').read()).hexdigest()
+              if not h.startswith(e[k]): print('::error::Empreinte inattendue pour '+f); sys.exit(1)
+          print('Empreintes des scripts : OK')
+          PY
+          PHASE='${{ steps.ph.outputs.phase }}'
+          psql -v ON_ERROR_STOP=1 -qAt -c "select 'cible='||current_setting('server_version_num')" >/dev/null
+          # La cible est fixée par PGUSER (postgres.<ref>) ; on contrôle en plus la signature des données
+          ROWS=$(psql -v ON_ERROR_STOP=1 -qAt -c "select count(*) from public.user_data")
+          USERS=$(psql -v ON_ERROR_STOP=1 -qAt -c "select count(*) from auth.users")
+          HAS14=$(psql -qAt -c "select count(*) from pg_proc where proname='next_doc_number'")
+          HAS18=$(psql -qAt -c "select count(*) from pg_proc where proname='get_contact_info'")
+          echo "user_data=$ROWS comptes=$USERS sql14=$HAS14 sql18=$HAS18"
+          if [ "$PHASE" = "apply" ]; then
+            test "$ROWS" = "$(python3 -c "import json;print(json.load(open('ops/prod-migration.json'))['expected']['user_data_rows'])")" || { echo "::error::Nombre de lignes user_data inattendu : cible ou état incertain, arrêt."; exit 1; }
+            test "$USERS" = "9" || { echo "::error::Nombre de comptes inattendu, arrêt."; exit 1; }
+            test "$HAS14" = "0" -a "$HAS18" = "0" || { echo "::error::SQL 14/18 déjà présents (ou partiellement) : arrêt pour analyse."; exit 1; }
+          fi
+
+      - name: Sauvegarde chiffrée juste avant
+        if: steps.ph.outputs.phase == 'apply'
+        env:
+          PP: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          D=$(date -u +%Y-%m-%dT%H%M)
+          mkdir out
+          pg_dump --no-owner --no-privileges -n public -f out/public-$D.sql
+          pg_dump --no-owner --no-privileges --data-only -t auth.users -t auth.identities -f out/auth-$D.sql || echo "::warning::auth non exporté"
+          grep -q user_data out/public-$D.sql
+          tar czf pre-migration-$D.tar.gz -C out .
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PP" --symmetric --cipher-algo AES256 -o pre-migration-$D.tar.gz.gpg pre-migration-$D.tar.gz
+          rm -rf out pre-migration-$D.tar.gz
+          ls -l *.gpg
+
+      - name: Déposer la sauvegarde chiffrée
+        if: steps.ph.outputs.phase == 'apply'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauvegarde-avant-migration
+          path: "*.gpg"
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Appliquer SQL 14 + SQL 18 + update_updated_at (une transaction, contrôles intégrés)
+        if: steps.ph.outputs.phase == 'apply'
+        run: |
+          set -euo pipefail
+          cat > /tmp/hardening.sql <<'SQL'
+          CREATE OR REPLACE FUNCTION update_updated_at() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql SET search_path = public;
+          SQL
+          cat > /tmp/checks.sql <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT count(*) FROM pg_class WHERE relname IN ('doc_counters','doc_events') AND relnamespace='public'::regnamespace AND relrowsecurity) <> 2 THEN RAISE EXCEPTION 'CONTROLE: tables/RLS'; END IF;
+            IF (SELECT count(*) FROM pg_trigger WHERE tgname LIKE 'trg_guard_issued_invoices%' AND NOT tgisinternal) <> 3 THEN RAISE EXCEPTION 'CONTROLE: déclencheurs'; END IF;
+            IF has_function_privilege('anon','public.next_doc_number(text,int)','EXECUTE') THEN RAISE EXCEPTION 'CONTROLE: anon peut next_doc_number'; END IF;
+            IF NOT has_function_privilege('authenticated','public.next_doc_number(text,int)','EXECUTE') THEN RAISE EXCEPTION 'CONTROLE: authenticated sans next_doc_number'; END IF;
+            IF has_function_privilege('anon','public.get_contact_info()','EXECUTE') THEN RAISE EXCEPTION 'CONTROLE: anon peut get_contact_info'; END IF;
+            IF NOT has_function_privilege('authenticated','public.get_contact_info()','EXECUTE') THEN RAISE EXCEPTION 'CONTROLE: authenticated sans get_contact_info'; END IF;
+            IF has_function_privilege('authenticated','public.guard_issued_invoices()','EXECUTE') THEN RAISE EXCEPTION 'CONTROLE: guard exposé'; END IF;
+            IF (SELECT proconfig::text FROM pg_proc WHERE proname='update_updated_at' AND pronamespace='public'::regnamespace) IS DISTINCT FROM '{search_path=public}' THEN RAISE EXCEPTION 'CONTROLE: update_updated_at'; END IF;
+            IF EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE')) THEN RAISE EXCEPTION 'CONTROLE: fonction SECURITY DEFINER exécutable par anon'; END IF;
+            IF (SELECT count(*) FROM public.user_data) <> 47 THEN RAISE EXCEPTION 'CONTROLE: nombre de lignes user_data modifié'; END IF;
+            RAISE NOTICE 'CONTROLES TRANSACTION : OK';
+          END $$;
+          SQL
+          # Une seule transaction : toute erreur ou tout CONTROLE en échec annule l'ensemble
+          psql -v ON_ERROR_STOP=1 --single-transaction -q \
+            -f sql/14_numerotation_et_verrouillage.sql \
+            -f sql/18_contact_public.sql \
+            -f /tmp/hardening.sql \
+            -f /tmp/checks.sql 2>&1 | sed 's/^psql:[^ ]* //' | tail -20
+          echo "Migration appliquée."
+
+      - name: Contrôles après validation (lecture seule) + test d'émission sous ROLLBACK
+        if: steps.ph.outputs.phase == 'apply'
+        run: |
+          set -euo pipefail
+          psql -qAt -c "select 'user_data='||count(*)||' factures_emises='||(select count(*) from public.user_data d, jsonb_array_elements(case when jsonb_typeof(d.value)='array' then d.value else '[]'::jsonb end) e where d.key='invoices' and coalesce(e->>'status','draft')<>'draft') from public.user_data"
+          sed -n '/^-- C\./,$p' docs/VERIFICATIONS_POST_SQL14.sql > /tmp/c.sql
+          psql -v ON_ERROR_STOP=1 -q -f /tmp/c.sql 2>&1 | tee /tmp/c.out | sed 's/^psql:[^ ]* //'
+          ! grep -q "NOTICE:  KO" /tmp/c.out || { echo "::error::Un contrôle d'émission a échoué (KO). Voir le plan de retour arrière."; exit 1; }
+          test "$(grep -c 'NOTICE:  OK' /tmp/c.out)" -ge 7 || { echo "::error::Moins de 7 contrôles OK."; exit 1; }
+          psql -qAt -c "select 'compte_test_restant='||count(*) from auth.users where email='verif-sql14@test.invalid'"
+          psql -qAt -c "select 'user_data_final='||count(*) from public.user_data"
+
+      - name: Retour arrière (phase rollback) — seulement si aucun compteur ni journal produit
+        if: steps.ph.outputs.phase == 'rollback'
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 --single-transaction -q <<'SQL'
+          DO $$ BEGIN
+            IF (SELECT count(*) FROM public.doc_counters) > 0 OR (SELECT count(*) FROM public.doc_events) > 0 THEN
+              RAISE EXCEPTION 'ROLLBACK REFUSÉ: des numéros ou journaux ont déjà été produits (perte de données)';
+            END IF;
+          END $$;
+          DROP TRIGGER IF EXISTS trg_guard_issued_invoices_ins ON public.user_data;
+          DROP TRIGGER IF EXISTS trg_guard_issued_invoices ON public.user_data;
+          DROP TRIGGER IF EXISTS trg_guard_issued_invoices_del ON public.user_data;
+          DROP FUNCTION IF EXISTS public.guard_issued_invoices();
+          DROP FUNCTION IF EXISTS public.guard_issued_invoices_del();
+          DROP FUNCTION IF EXISTS public.next_doc_number(text, int);
+          DROP TABLE IF EXISTS public.doc_events;
+          DROP TABLE IF EXISTS public.doc_counters;
+          DROP FUNCTION IF EXISTS public.get_contact_info();
+          SQL
+          echo "Retour arrière effectué."
