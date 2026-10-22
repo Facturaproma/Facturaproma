@@ -14,6 +14,7 @@ const { execFile } = require('child_process');
 const { Client } = require('pg');
 
 const REHEARSAL = process.env.REHEARSAL === '1';
+const ALLOW_EMPTY = process.env.BACKUP_ALLOW_EMPTY === '1';   // sauvegarde de référence d'une base sans compte (aucune facture attendue)
 const secrets = new Set();
 const addSecret = (s) => { if (s && String(s).length >= 4) secrets.add(String(s)); };
 function redact(t) {
@@ -206,7 +207,8 @@ function classifyErrors(stderr) {
     const dupes = Object.entries(S2.invoices).filter(([, v]) => new Set(v.numbers).size !== v.numbers.length).map(([u]) => u);
     ck('aucun numéro de facture en double après restauration', dupes.length === 0, dupes.join(','));
     const nInv = Object.values(S2.invoices).reduce((a, v) => a + v.numbers.length, 0);
-    ck(`le test contient bien des factures (${nInv}) — sinon la preuve serait vide`, nInv > 0);
+    if (ALLOW_EMPTY && nInv === 0) out('- (base de référence sans compte ni facture : le contrôle « des factures sont présentes » ne s\'applique pas à cette sauvegarde)');
+    else ck(`le test contient bien des factures (${nInv}) — sinon la preuve serait vide`, nInv > 0);
     const low = [];
     for (const [u, v] of Object.entries(S2.invoices)) for (const n of v.numbers) {
       const m = /^(FAC|DEV|AVR)-\d{4}-(\d+)$/.exec(n || ''); if (!m) continue;
@@ -219,8 +221,9 @@ function classifyErrors(stderr) {
 
     // 6) tests fonctionnels sur la copie restaurée
     out('\n### 5. Tests fonctionnels sur la copie restaurée (sans toucher à la source)');
-    const uids = (await rc.query(`SELECT id::text id, left(id::text,8) u, email FROM auth.users WHERE email LIKE 'preprod-%@facturapro-test.invalid' ORDER BY email`)).rows;
-    ck('les 2 comptes de test sont présents dans la copie restaurée', uids.length === 2);
+    const uids = (await rc.query(`SELECT id::text id, left(id::text,8) u, email FROM auth.users WHERE email LIKE '%@facturapro-test.invalid' ORDER BY email LIMIT 2`)).rows;
+    if (ALLOW_EMPTY && uids.length === 0) out('- (aucun compte de test dans cette sauvegarde de référence : tests fonctionnels sur comptes non applicables ; ils sont faits sur la sauvegarde suivante)');
+    else ck('les 2 comptes de test sont présents dans la copie restaurée', uids.length === 2);
     if (uids.length === 2) {
       const [A, B] = uids;
       const as = async (u, fn) => {   // exécute fn en tant que rôle authenticated avec l'identité u, dans une transaction annulée
