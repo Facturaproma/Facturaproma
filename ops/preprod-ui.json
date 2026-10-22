@@ -1,5 +1,21 @@
 {
   "_comment": "Pousser une modification de CE fichier sur la branche validation/integration-documents déclenche « preprod-ui » (PRÉPRODUCTION uniquement). phase = idle (rien) | test (cible, sauvegarde restaurée et vérifiée, comptes jetables ui-*, essais réels protocole + navigateur) | cleanup (supprime uniquement les comptes de cette campagne). Aucune écriture en production, aucun déploiement, aucun nettoyage automatique.",
-  "phase": "inspect",
-  "nonce": "13"
+  "phase": "cleanup",
+  "nonce": "14",
+  "cleanup_scope": {
+    "run": "39779883156",
+    "created_between": [
+      "2026-10-22T12:39:00Z",
+      "2026-10-22T12:39:30Z"
+    ],
+    "runs_until": "2026-10-22T12:41:00Z",
+    "accounts": {
+      "ui-d@facturapro-test.invalid": "cc47b291-baaa-4eca-9c1e-b9298a3a36b9",
+      "ui-e@facturapro-test.invalid": "5db8d820-8f21-465c-a2f4-0414dd950edc",
+      "ui-f@facturapro-test.invalid": "5fe3259e-69bc-41a6-acb9-edda246c02b9",
+      "ui-g@facturapro-test.invalid": "47018530-3d04-4e59-809f-a3e639cc0f7c",
+      "ui-l@facturapro-test.invalid": "1b8c5810-c5ad-482e-8bd3-669f7e322f06",
+      "ui-o@facturapro-test.invalid": "129fa752-61f8-4189-90ba-a9142aa46928"
+    }
+  }
 }
