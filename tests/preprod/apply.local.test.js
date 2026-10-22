@@ -24,7 +24,7 @@ const expectThrow = async (n, fn, re) => { try { await fn(); ck(n, false, 'aucun
   await expectThrow('seed refusé sur une base non marquée', () => run(c, 'seed', CTX), /non marquée/);
   await expectThrow('cleanup refusé sur une base non marquée', () => run(c, 'cleanup', CTX), /non marquée/);
   await run(c, 'install', CTX);
-  ck('install : 10 scripts enregistrés', (await c.query('SELECT count(*)::int n FROM public._fp_migrations')).rows[0].n === 10);
+  ck('install : 11 scripts enregistrés', (await c.query('SELECT count(*)::int n FROM public._fp_migrations')).rows[0].n === 11);
   await run(c, 'install', CTX);
   ck('install rejoué : rien de réappliqué', (await c.query("SELECT count(*)::int n FROM public._fp_migrations WHERE applied_at > now() - interval '1 second'")).rows[0].n >= 0);
   const fails = await run(c, 'postcheck', CTX);

@@ -79,6 +79,15 @@
         "07",
         "10"
       ]
+    },
+    {
+      "file": "18_contact_public.sql",
+      "role": "Fonction get_contact_info : WhatsApp et e-mail de support lisibles par les comptes connectés (jamais le RIB)",
+      "reexecutable": true,
+      "depend": [
+        "00",
+        "06"
+      ]
     }
   ],
   "exclus": [

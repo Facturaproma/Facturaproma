@@ -60,7 +60,7 @@ async function postcheck(c, ctx) {
   let fails = 0; const ck = (n, ok, x = '') => { if (!ok) fails++; log(`${ok ? 'PASS' : 'FAIL'} ${n}${ok || !x ? '' : ' -> ' + x}`); };
   const q = async (s, a) => (await c.query(s, a)).rows;
   const migs = await q('SELECT name FROM public._fp_migrations');
-  ck('les 10 scripts du manifeste sont enregistrés', migs.length === MAN.ordre.length, String(migs.length));
+  ck('les scripts du manifeste sont enregistrés', migs.length === MAN.ordre.length, String(migs.length));
   ck('next_doc_number(text,int) existe', (await q("SELECT to_regprocedure('public.next_doc_number(text,integer)') p"))[0].p !== null);
   ck('RLS activée sur toutes les tables de public', (await q("SELECT count(*)::int n FROM pg_class c JOIN pg_namespace s ON s.oid=c.relnamespace WHERE s.nspname='public' AND c.relkind='r' AND NOT c.relrowsecurity"))[0].n === 0);
   // Supabase accorde par défaut des droits d'accès aux rôles anon/authenticated sur les nouvelles tables : c'est la RLS qui protège.
