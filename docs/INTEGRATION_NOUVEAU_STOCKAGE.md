@@ -38,9 +38,11 @@ Si `get_doc_mode` est absente (sql/17 non installé) → `legacy`. Sur un build 
 |---|---|
 | Ancien chemin reçoit `42501` + `MODE_NOUVEAU_STOCKAGE` | **distinct de la licence** : drapeau `refused`, bandeau explicite « rechargez », entrées de file ancienne des 4 clés purgées, écritures suivantes refusées localement (toast), **aucun nouvel appel**, `License.refresh()` non déclenché |
 | Nouveau chemin reçoit `MODE_ANCIEN_STOCKAGE` (compte repassé en legacy) | arrêt (`halted`), bandeau explicite, modifications en attente **conservées** (persistées) mais non rejouées, aucune nouvelle tentative automatique ; rechargement → mode `legacy` |
-| `42501` autre / `PGRST301` / 401-403 (droits, licence) | arrêt, message, **un seul** appel, file conservée, bouton « Réessayer » |
+| `LICENCE_INACTIVE` (licence) | arrêt `licence`, message dédié, **file conservée**, un seul appel, « Réessayer » après renouvellement *(corrigé à la revue : l'édition était jetée)* |
+| `PGRST301` / 401 / « JWT » (session) | arrêt `auth`, message « reconnectez-vous », file conservée, un seul appel |
+| `42501` autre / 403 (droits) | arrêt `refuse`, message, **un seul** appel, file conservée, bouton « Réessayer » |
 | Erreur réseau | file conservée et persistée ; **3 essais automatiques au plus** (2 s, 8 s, 30 s) puis attente d'un événement (retour en ligne, nouvelle action, bouton) |
-| Erreur fonctionnelle (`FACTURE_VERROUILLEE`, `NUMERO_EN_DOUBLE`, `LICENCE_INACTIVE`, `PAIEMENT_*`…) | message, opération retirée (jamais rejouée), état réaligné sur le serveur |
+| Erreur fonctionnelle (`FACTURE_VERROUILLEE`, `NUMERO_EN_DOUBLE`, `PAIEMENT_*`…) | message, opération retirée (jamais rejouée), **archivée localement** (`fpd_r_<uid>`, 50 max, exportable), état réaligné sur le serveur |
 | Conflit de version (2 appareils) | opération retirée, conflit conservé avec **les deux versions** ; bandeau ; choix explicite « garder la mienne » (réappliquée sur la version serveur) / « garder le serveur » ; une version locale n'est jamais écrasée sans choix ; `reload()` refuse d'écraser tant qu'il reste file ou conflit |
 | Réponse perdue (serveur a appliqué, client non informé) | rejeu avec le même `op_id` : une seule ligne, aucune duplication |
 | Document supprimé sur un autre appareil | signalé au rechargement (message), jamais recréé silencieusement ; modification d'un document supprimé ailleurs → conflit « supprimé » (recréer / abandonner) |
@@ -49,11 +51,12 @@ Si `get_doc_mode` est absente (sql/17 non installé) → `legacy`. Sur un build 
 `docstore.js` (nouveau), `app.html` (glue `DocStoreGlue` ; `Storage._buildLocalKey/set/_syncToCloud/loadFromCloud/setCurrentUser/clearAll`, `SyncManager.syncPending`, `resetApp`, 3 déconnexions), `sw.js` (cache `docstore.js`, version v17), `scripts/make-preprod-build.js` (nouveau), `.gitignore`, `package.json`, `tests/docstore.unit.test.js`, `tests/preprod-build.test.js`, `tests/integration/docstore.browser.test.js` (nouveaux), `tests/integration/backend.js` et `fake_supabase.js` (support des tables/RPC du nouveau stockage, réponse perdue, démarrage hors ligne), `tests/integration/mode.test.js` (cause d'arrêt conservée, reprise sur « activité récente », prérequis sans `catch` silencieux), `scripts/preprod-mode-validation.js` (même reprise légitime), workflows `preprod*.yml` (voir §6), ce document. **Inchangés :** `sql/*`, `sql/MANIFEST.json`, installateur, `main`, production.
 
 ## 5. Tests exécutés — TOUS SIMULÉS (aucun n'a touché Supabase)
+*(chiffres mis à jour après la revue de code, §9 : docstore 57, navigateur 79)*
 | Suite | Résultat | Nature |
 |---|---|---|
 | `tests/app.test.js`, `regression.test.js` | 37/37, 32/32 | navigateur + stockage local (inchangés) |
-| `tests/docstore.unit.test.js` | 47/47 | logique pure + faux client en mémoire : verrous build/compte/serveur, indicateur local, diff, file, fusion, reprise, plafond de 3 essais, erreurs, conflits, journal, paiements |
-| `tests/integration/docstore.browser.test.js` | 68/68 | `app.html` + faux client Supabase + **PostgreSQL local** (sql 00…17 réels) : parcours complet (brouillon, modification, émission, paiements partiel/total, avoir, devis, conversion, suppression, journal, société, compteur), rechargement, coupure réseau + reprise, réponse perdue, 2 appareils (numérotation concurrente, 4 types de conflits), retour vers legacy, build de production, compte ordinaire, indicateur local, hors-ligne bloqué, `resetApp` |
+| `tests/docstore.unit.test.js` | 57/57 | logique pure + faux client en mémoire : verrous build/compte/serveur, indicateur local, diff, file, fusion, reprise, plafond de 3 essais, erreurs, conflits, journal, paiements |
+| `tests/integration/docstore.browser.test.js` | 79/79 | `app.html` + faux client Supabase + **PostgreSQL local** (sql 00…17 réels) : parcours complet (brouillon, modification, émission, paiements partiel/total, avoir, devis, conversion, suppression, journal, société, compteur), rechargement, coupure réseau + reprise, réponse perdue, 2 appareils (numérotation concurrente, 4 types de conflits), retour vers legacy, build de production, compte ordinaire, indicateur local, hors-ligne bloqué, `resetApp` |
 | `cloud`, `concurrence`, `migration`, `mode` (intégration) | 32/32, 6/6, 18/18, 11/11 | PostgreSQL local (mode : 30 exécutions consécutives sans échec après correction du test) |
 | `tests/sql` | 206/206 | PostgreSQL local |
 | `test:preprod-local` | tout réussi, dont 5/5 build de préproduction | simulé |
@@ -61,7 +64,7 @@ Tests de mutation (code volontairement cassé → les tests échouent) : refus `
 **Réel (Supabase préproduction) pour cette étape : AUCUN.** Seuls les résultats de `sql/15–17` (101/101, rapports de la branche `preprod-reports`) sont réels ; ils ne prouvent pas le comportement de l'interface.
 
 ## 6. Scripts et workflows (point 8)
-Supprimés : `|| true` sur la lecture de `preprod-reports` et sur la création de la branche orpheline (5 workflows `preprod*.yml`) → vérification explicite, échec si le dépôt distant est illisible. Le test `mode.test.js` n'ignorait plus silencieusement l'échec de ses prérequis. **Exceptions restantes, justifiées :** `set +e` des étapes d'analyse de secrets (le code de retour est capturé puis fait échouer le job) ; `.catch(() => {})` sur `ROLLBACK`/fermeture de connexion (l'erreur d'origine est relancée ou enregistrée). **À examiner (non modifié, hors périmètre préproduction) :** `.github/workflows/backup.yml:80` convertit l'échec de l'export des comptes en simple avertissement ; `preprod-logscan.yml` compte les journaux indisponibles sans faire échouer le job.
+Supprimés : `|| true` sur la lecture de `preprod-reports` et sur la création de la branche orpheline (5 workflows `preprod*.yml`) → vérification explicite, échec si le dépôt distant est illisible. Le test `mode.test.js` n'ignorait plus silencieusement l'échec de ses prérequis. **Exceptions restantes, justifiées :** `set +e` des étapes d'analyse de secrets (le code de retour est capturé puis fait échouer le job) ; `.catch(() => {})` sur `ROLLBACK`/fermeture de connexion (l'erreur d'origine est relancée ou enregistrée). **Corrigé à la revue :** `preprod-logscan.yml` ne laisse plus réussir le job quand des journaux n'ont pas pu être analysés (code 3, cause conservée au lieu de `2>/dev/null`). **Non modifié, décision requise :** `.github/workflows/backup.yml:80` (sauvegarde de PRODUCTION) convertit l'échec de l'export des comptes `auth` en simple avertissement → un job vert peut produire une sauvegarde sans comptes ; correctif recommandé : retirer le `|| echo ::warning::` (ou échouer explicitement).
 
 ## 7. Risques restants
 1. **Non validé sur Supabase.** Lectures PostgREST (`.order().range()` sur `documents`/`doc_payments`/`doc_history`, politiques RLS), jetons réels, latence : à valider (§8). Un défaut a été trouvé et corrigé par relecture du schéma (`doc_history` n'a pas de colonne `created_at`) ; d'autres écarts simulation/réel sont possibles.
@@ -82,3 +85,41 @@ Supprimés : `|| true` sur la lecture de `preprod-reports` et sur la création d
 6. Repasser le compte en legacy (`fp_doc_mode_set`) avec l'application ouverte : message `MODE_ANCIEN_STOCKAGE`, aucune boucle ; recharger : toutes les données présentes.
 7. Compte ordinaire sur le même build : comportement strictement historique.
 8. Nettoyage des seuls comptes créés ; vérification des orphelins et de l'empreinte.
+
+## 9. Revue de code approfondie du commit 9248170 (comparaison avec `dev/fondations`)
+Méthode : relecture du diff `app.html`, de `docstore.js`, du script de build, des tests, des workflows ; chaque défaut ci-dessous a d'abord été **reproduit par un test qui échoue** (vérifié en restaurant l'ancien code : 9 échecs navigateur + 6 unitaires), puis corrigé. Tests = SIMULATION locale.
+
+### 9.1 Défauts CONFIRMÉS et corrigés
+| # | Gravité | Où (avant correctif) | Scénario | Correctif | Test |
+|---|---|---|---|---|---|
+| D1 | **Haute** (défaut ANTÉRIEUR, présent aussi sur `main`) | `app.html` `SyncManager.syncPending` (l. 5342 de 9248170) : `window._supabaseClient` n'est assigné nulle part | Compte legacy hors ligne → écriture en file → retour en ligne : aucun envoi, l'entrée est retirée et « ✅ synchronisée » s'affiche. **Perte silencieuse de données.** | utilise `supaClient` ; sans client/session l'entrée reste en file | `REVUE syncPending envoie réellement…` |
+| D2 | **Haute** | `app.html` `syncPending` (branche licence 42501) | écriture refusée pour licence → avertissement, puis `synced++` et retrait de la file : refus marqué synchronisé | refus licence / 401 / réseau : l'entrée **reste en attente**, jamais comptée synchronisée, un seul appel, pas de boucle | 3 cas × 2 chemins |
+| D3 | Moyenne | `app.html` `_syncToCloud` (42501 licence) | écriture refusée pour licence : `return` sans file d'attente → perdue côté serveur | mise en attente (sans doublon) | `REVUE … écriture directe refusée` |
+| D4 | Moyenne | `SyncManager.addPendingChange` | N écritures hors ligne sur la même clé = N entrées (N envois du même contenu) | une entrée par clé (valeur courante rejouée) | `REVUE plusieurs écritures…` |
+| D5 | **Haute** | `docstore.js` `classify` : `LICENCE_INACTIVE` (P0001) = « fonctionnelle » | licence expirée en mode documents : l'opération est **jetée** et l'état écrasé par le serveur → édition perdue | classe `licence` : arrêt net, file conservée, message dédié ; classe `auth` distincte pour 401/JWT | R1, R1b |
+| D6 | **Haute** | `docstore.js` `reset()` | déconnexion pendant un envoi en cours : à son retour, l'envoi réécrit `fpd_q_<uid>` avec une file vide → les opérations suivantes (jamais envoyées) sont **effacées du stockage** | magasin « mort » : plus aucune écriture, plus aucune suite après `await` ; l'opération en vol sera rejouée avec le même `op_id` | R2 |
+| D7 | Moyenne | `docstore.js` `flush` (erreur fonctionnelle) | un brouillon rejeté (ex. `NUMERO_EN_DOUBLE`) disparaît après simple toast | archivage local exploitable (`fpd_r_<uid>`) + export | R3 |
+| D8 | Moyenne | `app.html` `handleLegacyRefusal` | écriture ancien format refusée `MODE_NOUVEAU_STOCKAGE` : entrée purgée, valeur non conservée | copie de récupération `fp_refused_<uid>_<clé>` (aussi pour `FACTURE_VERROUILLEE` dans `syncPending`) | `REVUE refus MODE_NOUVEAU_STOCKAGE…` |
+| D9 | Moyenne (point 7) | `docstore.js` `start()` | retour au legacy avec `fpd_q_<uid>` non vide : aucun signe ; la file dort, invisible | `orphan` signalé + bandeau + bouton **Exporter** (JSON : file, conflits, rejets, copies locales) ; jamais rejoué | R4, `REVUE retour au legacy…` |
+| D10 | Moyenne | `docstore.js` `reload()` | modification faite pendant une relecture : l'état rechargé, périmé, écrase l'interface et l'instantané | relecture « à blanc » ; abandon si une écriture locale a eu lieu (`rev`) | R5 |
+
+### 9.2 Vérifications qui n'ont révélé AUCUN défaut
+- **Point 4 (compte ordinaire)** : le mode `documents` exige trois conditions indépendantes (URL du build, e-mail de test, réponse du serveur). L'URL est une constante du build ; aucune lecture de paramètre d'URL, de `localStorage` ou de configuration ne peut l'ouvrir ; l'indicateur local n'est même pas lu hors build de préproduction + compte de test, et ne peut que restreindre. Le serveur reste l'autorité (`sql/17`, validé en réel 101/101) : un client falsifié obtiendrait `MODE_ANCIEN_STOCKAGE`.
+- **Point 5 (build)** : `app.html` du dépôt garde l'URL de production ; `make-preprod-build.js` vérifie que la clé est une clé *anon* de la préproduction et refuse si la référence de production subsiste dans `app.html`. *(Note : `docstore.js` contient la référence de production comme constante de refus — voulu, c'est elle qui interdit le mode documents en production.)* Le dossier `.preprod-build/` est ignoré par Git ; `netlify.toml` publie `.` donc ce dossier ne serait déployé que s'il était commité.
+- **Point 3 (réseau/duplication)** : rejeu avec le même `op_id` testé (réponse perdue) ; 3 essais automatiques maximum ; erreurs réseau jamais jetées.
+- **Point 6** : conflits (4 types), numérotation concurrente, paiements (règlement dérivé non renvoyé), suppressions et brouillons : tests S1–S6, aucune perte constatée.
+- **Tests/Workflows (point 8)** : aucun `|| true` ni `.catch` permissif masquant un échec dans `tests/` et `scripts/` (seuls `ROLLBACK`/fermeture/suppression de base jetable). Les `set +e` des workflows capturent le code de retour puis le propagent.
+
+### 9.3 Risques NON démontrés (à garder ouverts)
+1. **Course sur la suppression d'un brouillon** : créé puis supprimé avant tout envoi, mais première opération déjà partie dont la réponse s'est perdue → le brouillon pourrait réapparaître au rechargement (résurrection, pas perte). Non reproduit.
+2. **Erreurs 42501 ambiguës** (ancien chemin) : un 42501 sans indice est toujours traité comme « licence » (comportement historique) ; un manque de privilège SQL serait confondu avec la licence. Non démontré.
+3. **Mode inconnu au démarrage hors ligne, appareil neuf, compte de test en `documents`** : le client démarre en legacy ; l'écriture ancien format sera refusée au retour du réseau (`MODE_NOUVEAU_STOCKAGE`) puis archivée (D8) — récupérable manuellement, mais non fluide.
+4. **Deux onglets d'un même appareil** : non testés en navigateur (rejeux idempotents grâce aux `op_id`).
+5. **Comportement réel de PostgREST** (pagination, tri, politiques RLS sur les nouvelles tables) et latence : non validés — seule la simulation a tourné.
+6. **Effet du correctif D1 sur la production** : une fois fusionné, le chemin hors ligne ancien enverra réellement (comportement voulu, mais NOUVEAU). Il faut le valider avant toute fusion (§8) ; il concerne tous les comptes, pas seulement les comptes de test.
+7. **Fiabilité de l'environnement de test** : une exécution complète de `npm run test:all` a échoué une fois par `EPIPE` dans `migration.test.js` (chute de la connexion au PostgreSQL local) puis a réussi intégralement à la relance suivante ; cause non élucidée, sans lien avec le code applicatif.
+8. Interface de résolution des conflits et d'export de récupération minimale (`confirm()`, téléchargement JSON).
+
+### 9.4 Décisions en attente
+- `backup.yml` (production) : retirer le `|| echo ::warning::` ? *(non touché)*
+- Validation isolée en préproduction du correctif D1 (chemin ancien) avec un compte ordinaire jetable ? *(non lancée)*

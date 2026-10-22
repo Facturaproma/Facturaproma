@@ -43,8 +43,10 @@
     if (/MODE_ANCIEN_STOCKAGE/.test(t)) return 'mode_ancien';
     if (/MODE_NOUVEAU_STOCKAGE/.test(t)) return 'mode_nouveau';
     if (e && (e.code === 'PGRST202' || e.code === '42883')) return 'fonction_absente';
+    if (/LICENCE_INACTIVE|LICENCE_EXPIREE/.test(t)) return 'licence';                     // licence : l'édition est CONSERVÉE (jamais jetée comme une erreur fonctionnelle)
     if (isNetworkError(e, status)) return 'reseau';
-    if (e && (e.code === '42501' || e.code === 'PGRST301' || e.code === '401' || status === 401 || status === 403)) return 'refuse';
+    if (e && (e.code === 'PGRST301' || e.code === '401' || status === 401 || /JWT/i.test(e.message || ''))) return 'auth';   // session expirée / jeton refusé
+    if (e && (e.code === '42501' || status === 403)) return 'refuse';
     return 'fonctionnelle';
   };
   const functionalCode = (e) => { const m = /^\s*([A-Z_]{5,})/.exec((e && e.message) || ''); return m ? m[1] : (e && e.code) || 'ERREUR'; };
@@ -74,23 +76,26 @@
     const notify = cfg.notify || (() => {});
     const timers = cfg.timers || { set: (f, ms) => setTimeout(f, ms), clear: (t) => clearTimeout(t) };
     const isOnline = cfg.isOnline || (() => (typeof navigator === 'undefined' || navigator.onLine !== false));
-    const K = { q: 'fpd_q_' + userId, c: 'fpd_c_' + userId, hint: 'fpd_hint_' + userId, cache: (k) => 'fpd_' + userId + '_' + k };
+    const K = { q: 'fpd_q_' + userId, c: 'fpd_c_' + userId, r: 'fpd_r_' + userId, hint: 'fpd_hint_' + userId, cache: (k) => 'fpd_' + userId + '_' + k };
     const rd = (k, def) => { try { const v = storage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } };
-    const wr = (k, v) => { try { storage.setItem(k, JSON.stringify(v)); } catch (e) { /* quota : la file reste en mémoire */ } };
+    const wr = (k, v) => { if (S && S.dead) return; try {   // un magasin « mort » (déconnexion) n'écrit plus jamais : il écraserait la file persistée du prochain magasin
+       storage.setItem(k, JSON.stringify(v)); } catch (e) { /* quota : la file reste en mémoire */ } };
 
     const S = {
       mode: 'inactive',          // inactive | legacy | documents | blocked
       reason: '',
-      halted: null,              // null | 'mode_ancien' | 'refuse' | 'fonction_absente' : plus aucun envoi
+      halted: null,              // null | 'mode_ancien' | 'licence' | 'auth' | 'refuse' | 'fonction_absente' : plus aucun envoi (file conservée)
       versions: {},              // 'type:id' → version serveur connue
       snaps: { invoices: new Map(), quotes: new Map() },
       payIds: new Set(),
       logCount: new Map(),       // canon(entrée) → nombre d'entrées déjà transmises
       queue: rd(K.q, []),
       conflicts: rd(K.c, []),
+      rejected: rd(K.r, []),     // opérations rejetées par le serveur (erreur fonctionnelle) : archivées pour récupération, jamais perdues en silence
+      dead: false, rev: 0,       // rev : compteur de modifications locales (détecte une écriture pendant une relecture)
       flushing: false, attempts: 0, timer: null, lastError: null, needReload: false
     };
-    const persist = () => { wr(K.q, S.queue); wr(K.c, S.conflicts); };
+    const persist = () => { wr(K.q, S.queue); wr(K.c, S.conflicts); wr(K.r, S.rejected); };
     const emit = () => { try { cfg.onChange && cfg.onChange(api.status()); } catch (e) { /* l'interface ne doit pas bloquer */ } };
 
     function takeSnapshot(state) {
@@ -117,7 +122,7 @@
     const api = {
       // ----- état -----
       get mode() { return S.mode; },
-      status() { return { mode: S.mode, reason: S.reason, halted: S.halted, pending: S.queue.length, conflicts: S.conflicts.length, flushing: S.flushing, attempts: S.attempts, lastError: S.lastError }; },
+      status() { return { mode: S.mode, reason: S.reason, halted: S.halted, pending: S.queue.length, conflicts: S.conflicts.length, rejected: S.rejected.length, flushing: S.flushing, attempts: S.attempts, lastError: S.lastError }; },
       get queue() { return S.queue; },
       get conflicts() { return S.conflicts; },
       get versions() { return S.versions; },
@@ -147,14 +152,16 @@
       },
 
       // ----- chargement depuis le serveur (en mode documents uniquement) -----
-      async load() {
+      async load(dry) {   // dry : lit sans toucher à l'instantané ni aux versions (retourne { state, versions }) ; l'appelant décide de les appliquer
         if (S.mode !== 'documents') throw new Error('load() hors mode documents');
         const docs = await fetchAll('documents', 'doc_type,id,version,body,created_at', 'created_at');
         const pays = await fetchAll('doc_payments', 'id,body,created_at', 'created_at');
         const hist = await fetchAll('doc_history', 'seq,ts,body', 'seq');
         const state = { invoices: [], quotes: [], payments: pays.map((p) => p.body), docLog: hist.slice().sort((a, b) => tms(a.ts) - tms(b.ts) || (a.seq || 0) - (b.seq || 0)).map((h) => h.body) };
-        S.versions = {};
-        for (const d of docs) { (d.doc_type === 'quote' ? state.quotes : state.invoices).push(d.body); S.versions[dkey(d.doc_type, d.id)] = d.version; }
+        const versions = {};
+        for (const d of docs) { (d.doc_type === 'quote' ? state.quotes : state.invoices).push(d.body); versions[dkey(d.doc_type, d.id)] = d.version; }
+        if (dry) return { state, versions };
+        S.versions = versions;
         takeSnapshot(state);
         return state;
       },
@@ -162,7 +169,11 @@
       // ----- démarrage : mode, file en attente, état local ou serveur -----
       async start() {
         await api.detect();
-        if (S.mode !== 'documents') return { mode: S.mode, reason: S.reason };
+        if (S.mode !== 'documents') {
+          // retour au mode ancien (ou mode inconnu) avec des modifications locales jamais envoyées : JAMAIS rejouées automatiquement (pas de double source), mais signalées et exportables
+          const orphan = (S.queue.length || S.conflicts.length || S.rejected.length) ? { pending: S.queue.length, conflicts: S.conflicts.length, rejected: S.rejected.length } : null;
+          return { mode: S.mode, reason: S.reason, orphan };
+        }
         let state = null;
         if (S.queue.length) {
           // des opérations n'ont pas encore été envoyées : l'état local (cache) fait foi tant qu'elles ne sont pas passées
@@ -185,12 +196,19 @@
         return { mode: 'documents', state };
       },
 
+      // export de récupération (file, conflits, rejets, copies locales) — lecture seule, n'envoie rien
+      exportRecovery() {
+        const caches = {}; KEYS.forEach((k) => { caches[k] = rd(K.cache(k), null); });
+        return JSON.stringify({ userId, at: new Date().toISOString(), queue: S.queue, conflicts: S.conflicts, rejected: S.rejected, caches }, null, 1);
+      },
+
       cacheKey: K.cache,
 
       // ----- validation d'une écriture locale : calcule et met en file les opérations (aucun envoi synchrone) -----
       commit(key, next) {
         if (S.mode !== 'documents') throw new Error('commit() hors mode documents');
         if (S.halted) return { refused: true, reason: S.halted };
+        S.rev++;
         const ops = [];
         if (key === 'invoices' || key === 'quotes') {
           ops.push(...diffDocs(key, S.snaps[key], next));
@@ -234,16 +252,20 @@
             if (!isOnline()) { scheduleRetry(); break; }
             const op = S.queue[0];
             const res = await send(op);
+            if (S.dead) return;                       // déconnecté pendant l'envoi : ne touche plus à rien (l'opération sera rejouée avec le même op_id)
             if (res.kind === 'ok') { S.queue.shift(); S.attempts = 0; S.lastError = null; wr('fpd_v_' + userId, S.versions); persist(); emit(); continue; }
             if (res.kind === 'reseau') { S.lastError = res.text; scheduleRetry(); break; }
             if (res.kind === 'conflit') { S.queue.shift(); dropQueuedFor(op); recordConflict(op, res); persist(); emit(); notify('warning', 'Conflit : ce document a été modifié sur un autre appareil. Résolvez-le avant de continuer.'); continue; }
-            if (res.kind === 'mode_ancien' || res.kind === 'refuse' || res.kind === 'fonction_absente') {
+            if (res.kind === 'mode_ancien' || res.kind === 'refuse' || res.kind === 'fonction_absente' || res.kind === 'licence' || res.kind === 'auth') {
               S.halted = res.kind; S.lastError = res.text; persist(); emit();
-              notify('error', res.kind === 'mode_ancien' ? 'MODE_ANCIEN_STOCKAGE : ce compte est repassé à l\'ancien stockage. Vos modifications en attente sont conservées sur cet appareil ; rechargez l\'application.' : 'Écriture refusée par le serveur (' + (res.text || res.kind) + '). Aucune nouvelle tentative automatique.');
+              notify('error', res.kind === 'mode_ancien' ? 'MODE_ANCIEN_STOCKAGE : ce compte est repassé à l\'ancien stockage. Vos modifications en attente sont conservées sur cet appareil ; rechargez l\'application.'
+                : res.kind === 'licence' ? 'Licence inactive ou expirée (LICENCE_INACTIVE). Vos modifications sont conservées sur cet appareil ; renouvelez la licence puis cliquez sur « Réessayer ».'
+                : res.kind === 'auth' ? 'Session expirée ou refusée (authentification). Vos modifications sont conservées ; reconnectez-vous puis cliquez sur « Réessayer ».'
+                : 'Écriture refusée par le serveur (' + (res.text || res.kind) + '). Aucune nouvelle tentative automatique.');
               break;
             }
             // erreur fonctionnelle : l'opération est retirée (jamais rejouée), signalée, puis l'état est réaligné sur le serveur
-            S.queue.shift(); S.lastError = res.text; resync = true; persist(); emit();
+            S.queue.shift(); S.lastError = res.text; resync = true; archiveRejected(op, res.text); persist(); emit();
             notify('error', res.text);
           }
         } finally { S.flushing = false; emit(); }
@@ -254,7 +276,11 @@
       async reload() {
         if (S.mode !== 'documents' || S.queue.length || S.conflicts.length || S.flushing) return null;   // jamais d'écrasement de l'état local en attente ou en conflit
         const before = new Set([...S.snaps.invoices.keys(), ...S.snaps.quotes.keys()]);
-        const state = await api.load();
+        const rev0 = S.rev;
+        const loaded = await api.load(true);
+        // une modification a eu lieu PENDANT la relecture : l'état rechargé est périmé, on ne l'applique pas (instantané et versions inchangés)
+        if (S.dead || S.queue.length || S.conflicts.length || S.flushing || S.rev !== rev0) return null;
+        const state = loaded.state; S.versions = loaded.versions; takeSnapshot(state);
         const after = new Set([...state.invoices, ...state.quotes].map((d) => d.id));
         const gone = [...before].filter((id) => !after.has(id));
         wr('fpd_v_' + userId, S.versions);
@@ -282,7 +308,7 @@
 
       // ----- bouton « réessayer » explicite -----
       retryNow() { S.attempts = 0; S.halted = S.halted === 'mode_ancien' ? S.halted : null; return api.flush(); },
-      reset() { if (S.timer) timers.clear(S.timer); S.timer = null; S.mode = 'inactive'; S.queue = []; S.conflicts = []; S.flushing = false; }
+      reset() { S.dead = true; if (S.timer) timers.clear(S.timer); S.timer = null; S.mode = 'inactive'; S.queue = []; S.conflicts = []; S.flushing = false; }
     };
 
     // ----- internes -----
@@ -299,6 +325,10 @@
         for (let i = S.queue.length - 1; i >= 0; i--) { const q = S.queue[i]; if (q.kind === 'upsert' && q.key === op.key && q.id === op.id && !(i === 0 && S.flushing)) S.queue.splice(i, 1); }
       }
       S.queue.push(op);
+    }
+    function archiveRejected(op, reason) {   // le contenu rejeté reste récupérable (copie locale), il n'est pas rejoué
+      S.rejected.push({ id: op.id, kind: op.kind, key: op.key, doc: op.doc || op.payment || op.entries || null, reason: String(reason || ''), at: new Date().toISOString() });
+      if (S.rejected.length > 50) S.rejected.splice(0, S.rejected.length - 50);
     }
     function dropQueuedFor(op) { S.queue = S.queue.filter((q) => !(q.key === op.key && q.id === op.id && q.kind !== 'payment')); }
     function snapReplace(c, doc) { if (S.snaps[c.key]) S.snaps[c.key].set(c.id, { canon: canon(doc), doc: clone(doc) }); }

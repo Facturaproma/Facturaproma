@@ -149,6 +149,51 @@ const mk = (over = {}) => {
   { let got = null; const t = mk({ client: withTables(), onReload: (s, i) => { got = i; } }); await t.st.start(); tables.documents = { data: [], error: null };
     await t.st.reload(); ck('reload : documents disparus du serveur → signalés (suppression sur un autre appareil)', got && got.removedRemotely.length === 2 && t.notes.some((n) => /supprimé/.test(n[1]))); }
 
+  // ---------- REVUE DE CODE (régressions) ----------
+  // R1 : licence inactive côté serveur → l'édition n'est PAS jetée : file conservée, arrêt net, un seul appel, pas de boucle
+  { const t = mk({ client: withTables({ upsert_document: { data: null, error: { code: 'P0001', message: 'LICENCE_INACTIVE' } } }) }); const r = await t.st.start();
+    t.st.commit('invoices', r.state.invoices.concat([inv('n1')])); await flushAll(t.st); const calls1 = t.client.calls.filter((c) => c.fn === 'upsert_document').length;
+    await t.st.flush(); await t.st.flush();
+    ck('R1 LICENCE_INACTIVE : modification conservée en file (aucune perte), arrêt net, message dédié (ni réseau ni fonctionnelle)', t.st.status().pending === 1 && t.st.status().halted === 'licence' && /licence/i.test(t.notes.map((n) => n[1]).join(' ')), JSON.stringify(t.st.status()));
+    ck('R1  … un seul appel, aucun réessai automatique (ni flush répété, ni minuterie)', calls1 === 1 && t.client.calls.filter((c) => c.fn === 'upsert_document').length === 1 && t.timers.length === 0);
+    t.client.script.upsert_document = { data: { ok: true, version: 1 }, error: null }; await t.st.retryNow(); await flushAll(t.st);
+    ck('R1  … licence renouvelée + « Réessayer » : la modification est envoyée (rien perdu)', t.st.status().pending === 0 && t.client.calls.filter((c) => c.fn === 'upsert_document').length === 2); }
+  // R1b : jeton expiré (401) distingué de la licence : arrêt, file conservée, texte explicite
+  { const t = mk({ client: withTables({ upsert_document: { data: null, error: { code: 'PGRST301', message: 'JWT expired' }, status: 401 } }) }); const r = await t.st.start();
+    t.st.commit('invoices', r.state.invoices.concat([inv('n1')])); await flushAll(t.st);
+    ck('R1b session expirée (401/JWT) : arrêt « authentification », file conservée, distinct de la licence', t.st.status().halted === 'auth' && t.st.status().pending === 1, JSON.stringify(t.st.status())); }
+  // R2 : déconnexion (reset) pendant un envoi en cours → la file persistée n'est PAS vidée
+  { let release; const gate = new Promise((r) => { release = r; });
+    const t = mk({ client: withTables({ upsert_document: () => gate.then(() => ({ data: { ok: true, version: 1 }, error: null })) }) }); const r = await t.st.start();
+    t.st.commit('invoices', r.state.invoices.concat([inv('a1')])); await sleep(5);          // a1 : envoi en cours (non terminé)
+    t.st.commit('invoices', r.state.invoices.concat([inv('a1'), inv('a2')])); await sleep(2);   // a2 : encore en file
+    const before = JSON.parse(t.storage.getItem('fpd_q_u1') || '[]').length;
+    t.st.reset(); release(); await sleep(20);
+    const after = JSON.parse(t.storage.getItem('fpd_q_u1') || '[]');
+    ck('R2 déconnexion pendant un envoi : la file persistée n\'est pas effacée (a2 reste à envoyer)', before === 2 && after.some((o) => o.id === 'a2'), 'avant=' + before + ' après=' + JSON.stringify(after.map((o) => o.id))); }
+  // R3 : opération rejetée (erreur fonctionnelle) → archivée localement, récupérable (pas de perte silencieuse)
+  { const t = mk({ client: withTables({ upsert_document: { data: null, error: { code: 'P0001', message: 'NUMERO_EN_DOUBLE' } } }) }); const r = await t.st.start();
+    t.st.commit('invoices', r.state.invoices.concat([inv('r1', { clientName: 'à ne pas perdre' })])); await flushAll(t.st);
+    const arch = JSON.parse(t.storage.getItem('fpd_r_u1') || '[]');
+    ck('R3 opération rejetée par le serveur : archivée avec le document et la raison (récupérable)', arch.length === 1 && arch[0].id === 'r1' && arch[0].doc && arch[0].doc.clientName === 'à ne pas perdre' && /NUMERO_EN_DOUBLE/.test(arch[0].reason) && t.st.status().rejected === 1, JSON.stringify(arch).slice(0, 200)); }
+  // R4 : retour au mode ancien avec une file locale non vide → signalé (orphelin), jamais rejoué, récupérable
+  { const storage = mem(); storage.setItem('fpd_q_u1', JSON.stringify([{ kind: 'upsert', key: 'invoices', type: 'invoice', id: 'o1', doc: inv('o1'), expected: 0, opId: 'u:o1:1' }])); storage.setItem('fpd_c_u1', '[]');
+    const t = mk({ storage, client: fakeClient({ get_doc_mode: { data: 'legacy', error: null } }) }); const r = await t.st.start();
+    ck('R4 retour au legacy avec file non vide : signalé (orphan), mode legacy, rien rejoué', r.mode === 'legacy' && r.orphan && r.orphan.pending === 1 && t.client.calls.every((c) => c.fn === 'get_doc_mode'), JSON.stringify(r));
+    t.st.flushSoon(); await flushAll(t.st);
+    ck('R4  … la file reste intacte (récupération manuelle) et aucun envoi n\'a lieu en mode legacy', JSON.parse(storage.getItem('fpd_q_u1')).length === 1 && t.client.calls.every((c) => c.fn === 'get_doc_mode')); }
+
+  // R5 : une modification faite PENDANT une relecture serveur n'est pas écrasée par l'état rechargé (course reload / commit)
+  { let release; const gate = new Promise((r) => { release = r; }); let reloaded = null;
+    const t = mk({ client: withTables(), onReload: (s) => { reloaded = s; } }); const r = await t.st.start();
+    const saved = tables.documents; tables.documents = gate.then(() => saved);
+    const p = t.st.reload(); await sleep(5);
+    const mine = r.state.invoices.concat([inv('pendant')]); t.st.commit('invoices', mine);   // l'utilisateur crée un brouillon pendant la relecture
+    release(); const out = await p; tables.documents = saved; await flushAll(t.st);
+    ck('R5 relecture concurrente à une modification : état rechargé NON appliqué (pas d\'écrasement), brouillon envoyé une seule fois', out === null && reloaded === null && t.client.calls.filter((c) => c.fn === 'upsert_document' && c.args.p_doc.id === 'pendant').length === 1, 'out=' + (out && 'état') + ' reloaded=' + !!reloaded);
+    t.st.commit('invoices', mine); await flushAll(t.st);
+    ck('R5  … l\'instantané reste cohérent : une réécriture identique n\'envoie rien de plus', t.client.calls.filter((c) => c.fn === 'upsert_document' && c.args.p_doc.id === 'pendant').length === 1); }
+
   const bad = res.filter((x) => !x).length;
   console.log(`\n${res.length - bad}/${res.length} tests de docstore.js réussis (SIMULATION locale : faux client, aucun Supabase)`);
   process.exit(bad ? 1 : 0);

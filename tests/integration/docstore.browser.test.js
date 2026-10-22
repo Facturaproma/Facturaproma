@@ -255,6 +255,8 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
     await reload(A);
     check('S6 après rechargement : mode legacy, factures lues depuis user_data', (await A.E(() => DocStoreGlue.mode)) === 'legacy' && (await A.E(() => Storage.get('invoices', []).length)) === ud.value.length);
     check('S6 la modification en attente n\'a PAS été écrite dans l\'ancien stockage ni rejouée (reste conservée localement pour décision)', (await legacyFp(T)) === fp6 && await A.E(() => JSON.parse(localStorage.getItem('fpd_q_' + Storage._currentUserId) || '[]').length === 1));
+    const orph = await A.E(() => ({ o: DocStoreGlue.orphan, banner: (document.getElementById('docstoreBanner') || {}).textContent || '', exp: DocStoreGlue.store.exportRecovery() }));
+    check('REVUE retour au legacy avec file locale non vide : signalé (bandeau), exportable, jamais rejoué', orph.o && orph.o.pending === 1 && /non envoyées/.test(orph.banner) && /"queue"/.test(orph.exp) && orph.exp.includes('après retour arrière'), JSON.stringify(orph).slice(0, 300));
     // l'ancien chemin fonctionne de nouveau
     await draft(A, 'Retour legacy', 9); await A.p.waitForTimeout(1200);
     check('S6 écriture legacy de nouveau fonctionnelle après retour', (await legacyVal(T, 'invoices')).value.some(i => i.items && i.items[0].description === 'Retour legacy'));
@@ -273,12 +275,38 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
     const n7 = await P.E(() => window.__rpcLog.length);
     await P.E(() => { Storage.set('invoices', Storage.get('invoices', [])); Storage.set('quotes', []); window.dispatchEvent(new Event('online')); }); await P.p.waitForTimeout(1500);
     check('S7 ensuite : écritures sur les 4 clés refusées localement, plus aucun appel serveur pour elles (pas de boucle)', (await P.E(() => window.__rpcLog.length)) === n7 && (await legacyFp(T)) === fp7);
+    check('REVUE refus MODE_NOUVEAU_STOCKAGE : la valeur refusée est conservée localement (copie de récupération), non perdue en silence', (await P.E(() => localStorage.getItem('fp_refused_' + Storage._currentUserId + '_invoices') || '')).includes('Prod refusé'));
     const pending7 = await P.E(() => SyncManager.pendingChanges.filter(c => ['invoices', 'quotes', 'payments', 'docLog'].includes(c.key)).length);
     check('S7 file de synchronisation ancienne : aucune entrée en attente pour les 4 clés (pas de réessai infini)', pending7 === 0, String(pending7));
     // compte ordinaire sur build de préproduction
     const O = await newDevice('O'); await signup(O, ORD); await seedClient(O);
     await draft(O, 'Ordinaire', 7); await O.p.waitForTimeout(1000);
     check('S7 compte ORDINAIRE (build de préproduction) : legacy, get_doc_mode jamais appelé', (await O.E(() => DocStoreGlue.mode)) === 'legacy' && (await rpcCount(O, 'get_doc_mode')) === 0 && (await legacyVal(ORD, 'invoices')).value.length === 1);
+    // ----- REVUE DE CODE : file d'attente ANCIEN format (SyncManager.syncPending) sur un compte legacy -----
+    const sentUp = () => be.log.filter(l => l.op === 'table' && l.table === 'user_data' && l.tableOp === 'upsert').length;
+    const pend = () => O.E(() => SyncManager.pendingChanges.map(c => c.key));
+    const origHandle = be.handle; let forced = 0, forcedErr = null;
+    be.handle = async (op, a) => { if (forcedErr && op === 'table' && a.table === 'user_data' && a.op === 'upsert') { forced++; return { data: null, error: forcedErr }; } return origHandle(op, a); };
+    await O.E(() => { SyncManager.isOnline = true; SyncManager.isSyncing = false; SyncManager.pendingChanges = [{ type: 'storage', key: 'company', id: 'rv0', timestamp: 1 }]; });
+    let u0 = sentUp(); await O.E(() => SyncManager.syncPending());
+    check('REVUE syncPending envoie réellement l\'écriture en attente (avant : client inexistant, déclarée synchronisée sans envoi)', sentUp() === u0 + 1 && (await pend()).length === 0, sentUp() - u0 + ' envois, file ' + (await pend()).join(','));
+    for (const [label, err] of [['licence (42501/RLS)', { code: '42501', message: 'new row violates row-level security policy for table "user_data"' }], ['session expirée (PGRST301)', { code: 'PGRST301', message: 'JWT expired' }], ['réseau', { message: 'TypeError: Failed to fetch' }]]) {
+      forcedErr = err; forced = 0;
+      await O.E(() => { SyncManager.isSyncing = false; SyncManager.pendingChanges = [{ type: 'storage', key: 'company', id: 'rv1', timestamp: 1 }]; });
+      await O.E(() => SyncManager.syncPending()); await O.p.waitForTimeout(200);
+      check('REVUE écriture ancien format refusée/échouée (' + label + ') : reste EN ATTENTE, jamais marquée synchronisée, un seul appel', (await pend()).join() === 'company' && forced === 1, 'file=' + (await pend()).join() + ' appels=' + forced);
+      forced = 0; await O.E(() => { Storage.set('company', { ...Storage.get('company', {}), name: 'SARL Revue ' + Date.now() }); }); await O.p.waitForTimeout(600);
+      check('REVUE  … écriture directe refusée (' + label + ') : mise en attente (pas perdue), sans boucle', (await pend()).includes('company') && forced === 1, 'file=' + (await pend()).join() + ' appels=' + forced);
+      await O.E(() => { SyncManager.pendingChanges = []; });
+    }
+    forcedErr = null; await O.E(() => { SyncManager.isSyncing = false; SyncManager.pendingChanges = [{ type: 'storage', key: 'company', id: 'rv2', timestamp: 1 }]; });
+    u0 = sentUp(); await O.E(() => SyncManager.syncPending());
+    check('REVUE  … retour du service : une seule écriture, file vide (pas de doublon)', sentUp() === u0 + 1 && (await pend()).length === 0);
+    await O.E(() => { Storage.set('company', { ...Storage.get('company', {}), name: 'A' }); Storage.set('company', { ...Storage.get('company', {}), name: 'B' }); });
+    forcedErr = { message: 'TypeError: Failed to fetch' }; await O.E(() => { Storage.set('company', { ...Storage.get('company', {}), name: 'C' }); Storage.set('company', { ...Storage.get('company', {}), name: 'D' }); }); await O.p.waitForTimeout(500);
+    check('REVUE plusieurs écritures hors ligne sur la même clé : une seule entrée en attente (valeur courante rejouée)', (await pend()).filter(k => k === 'company').length === 1, (await pend()).join());
+    forcedErr = null; be.handle = origHandle;
+
     // indicateur local « documents » alors que le serveur dit legacy
     await flipTo(T, 'legacy');
     await A.E(() => { localStorage.setItem('fpd_hint_' + Storage._currentUserId, 'documents'); });

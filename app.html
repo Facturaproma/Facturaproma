@@ -5300,6 +5300,8 @@ const SyncManager = {
     },
     
     addPendingChange(change) {
+        // une écriture « clé entière » en attente suffit : le rejeu envoie la valeur courante (pas d'empilement par clé)
+        if (change.type === 'storage' && change.key && this.pendingChanges.some(c => c.type === 'storage' && c.key === change.key)) return;
         this.pendingChanges.push({
             ...change,
             timestamp: Date.now(),
@@ -5339,8 +5341,9 @@ const SyncManager = {
                         continue;
                     }
                     const value = Storage.get(change.key);
-                    if (window._supabaseClient && Storage._currentUserId) {
-                        const { error: upErr } = await window._supabaseClient
+                    if (!supaClient || !Storage._currentUserId) { failed.push(change); continue; }   // pas de client/session : rien n'est envoyé, rien n'est déclaré synchronisé (avant : `window._supabaseClient`, jamais défini)
+                    {
+                        const { error: upErr } = await supaClient
                             .from('user_data')
                             .upsert({
                                 user_id: Storage._currentUserId,
@@ -5350,10 +5353,15 @@ const SyncManager = {
                             }, { onConflict: 'user_id,key' });
                         if (upErr) {
                             // l'erreur n'est plus masquée : refus de mode / licence / verrouillage = retirés avec message ; réseau = conservé en file
-                            if (DocStoreGlue.handleLegacyRefusal(upErr, change.key)) { continue; }
-                            if (upErr.code === '42501' || /row-level security/i.test(upErr.message || '')) { try { License.refresh(); } catch {} console.warn('[Sync] écriture refusée (licence) :', change.key); }
+                            if (DocStoreGlue.handleLegacyRefusal(upErr, change.key, value)) { continue; }
+                            if (upErr.code === '42501' || /row-level security/i.test(upErr.message || '')) {
+                                // licence : refus du serveur => l'écriture RESTE en attente (jamais marquée synchronisée) ; relancée à la prochaine reprise, sans boucle
+                                try { License.refresh(); } catch {} console.warn('[Sync] écriture refusée (licence), conservée en attente :', change.key);
+                                failed.push(change); continue;
+                            }
                             else if (/FACTURE_VERROUILLEE|NUMERO_EN_DOUBLE|NUMERO_NON_ATTRIBUE/.test(upErr.message || '')) {
                                 console.warn('[Sync] écriture refusée (facture émise verrouillée) :', change.key);
+                                DocStoreGlue.archiveRefused(change.key, value, 'FACTURE_VERROUILLEE');
                                 try { showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error'); } catch {}
                                 this.pendingChanges = this.pendingChanges.filter(c => c.id !== change.id);
                                 try { await Storage.loadFromCloud(); renderInvoices(); } catch {}
@@ -5900,6 +5908,8 @@ const DOC_KEYS = ['invoices', 'quotes', 'payments', 'docLog'];
 const DocStoreGlue = {
     store: null,
     mode: 'legacy',            // legacy | documents | blocked
+    orphan: null,              // retour au mode ancien avec une file locale non vide (jamais rejouée) : {pending, conflicts, rejected}
+    _orphanHidden: false,
     refused: null,             // 'nouveau' : l'ancien chemin a reçu MODE_NOUVEAU_STOCKAGE (le compte est passé au nouveau stockage)
     _listeners: false,
     _lastReload: 0,
@@ -5921,7 +5931,7 @@ const DocStoreGlue = {
     },
     reset() {
         try { if (this.store) this.store.reset(); } catch {}
-        this.store = null; this.mode = 'legacy'; this.refused = null;
+        this.store = null; this.mode = 'legacy'; this.refused = null; this.orphan = null; this._orphanHidden = false;
         this.renderBanner();
     },
     async start(userId) {
@@ -5940,6 +5950,7 @@ const DocStoreGlue = {
             });
             const r = await this.store.start();
             this.mode = r.mode === 'documents' ? 'documents' : (r.mode === 'blocked' ? 'blocked' : 'legacy');
+            this.orphan = r.orphan || null;
             if (this.mode === 'documents') { this.listen(); setTimeout(() => { try { this.store.flushSoon(); } catch {} }, 300); }   // reprise : envoie la file persistée (rejouable grâce aux op_id)
             this.renderBanner();
             return { active: this.active(), state: r.state || null };
@@ -5984,14 +5995,26 @@ const DocStoreGlue = {
         });
     },
     // Refus de l'ancien chemin par le serveur : explicite, sans nouvelle tentative, sans le confondre avec une licence expirée (42501).
-    handleLegacyRefusal(error, key) {
+    // Copie de sauvegarde locale d'une écriture ancien format refusée : l'utilisateur peut la récupérer (rien n'est perdu en silence)
+    archiveRefused(key, value, reason) {
+        try { if (Storage._currentUserId) localStorage.setItem('fp_refused_' + Storage._currentUserId + '_' + key, JSON.stringify({ at: new Date().toISOString(), reason, value })); } catch {}
+    },
+    handleLegacyRefusal(error, key, value) {
         const t = String((error && (error.message || '')) || '') + ' ' + String((error && error.hint) || '');
         if (!/MODE_NOUVEAU_STOCKAGE/.test(t)) return false;
         this.refused = 'nouveau';
+        this.archiveRefused(key, value !== undefined ? value : Storage._cache[key], 'MODE_NOUVEAU_STOCKAGE');
         try { SyncManager.pendingChanges = SyncManager.pendingChanges.filter(c => DOC_KEYS.indexOf(c.key) < 0); SyncManager.savePendingChanges(); SyncManager.updateUI(); } catch {}
         console.warn('[DocStore] MODE_NOUVEAU_STOCKAGE sur', key, '— plus aucune écriture sur ces clés avant rechargement.');
         this.refusedToast(); this.renderBanner();
         return true;
+    },
+    exportRecovery() {
+        try {
+            const blob = new Blob([this.store.exportRecovery()], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'facturapro-recuperation-' + new Date().toISOString().slice(0, 10) + '.json';
+            document.body.appendChild(a); a.click(); a.remove();
+        } catch (e) { console.error('[DocStore] export', e); }
     },
     showConflicts() {
         if (!this.store) return;
@@ -6014,10 +6037,16 @@ const DocStoreGlue = {
         if (this.refused) { msg = '🔒 Ce compte utilise le nouveau stockage (MODE_NOUVEAU_STOCKAGE) : rechargez l\'application.'; btn = 'Recharger'; act = () => location.reload(); }
         else if (this.mode === 'blocked') { msg = '🔒 Nouveau stockage : lecture seule (' + ((st && st.reason) || 'mode inconnu') + ').'; btn = 'Recharger'; act = () => location.reload(); }
         else if (this.mode === 'documents' && st) {
-            if (st.halted === 'mode_ancien') { msg = '⚠️ MODE_ANCIEN_STOCKAGE : ce compte est repassé à l\'ancien stockage. Vos modifications en attente (' + st.pending + ') sont conservées sur cet appareil. Rechargez.'; btn = 'Recharger'; act = () => location.reload(); }
+            if (st.halted === 'licence') { msg = '🔒 Licence inactive ou expirée (LICENCE_INACTIVE). ' + st.pending + ' modification(s) conservée(s) sur cet appareil, aucune nouvelle tentative automatique.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+            else if (st.halted === 'auth') { msg = '🔑 Session expirée ou refusée (authentification). ' + st.pending + ' modification(s) conservée(s) ; reconnectez-vous puis réessayez.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+            else if (st.halted === 'mode_ancien') { msg = '⚠️ MODE_ANCIEN_STOCKAGE : ce compte est repassé à l\'ancien stockage. Vos modifications en attente (' + st.pending + ') sont conservées sur cet appareil. Rechargez.'; btn = 'Recharger'; act = () => location.reload(); }
             else if (st.halted) { msg = '⚠️ Écriture refusée par le serveur (' + (st.lastError || st.halted) + '). ' + st.pending + ' modification(s) en attente, aucune nouvelle tentative automatique.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
             else if (st.conflicts) { msg = '⚠️ ' + st.conflicts + ' conflit(s) entre appareils à résoudre.'; btn = 'Résoudre'; act = () => this.showConflicts(); }
             else if (st.pending) { msg = '🔄 ' + st.pending + ' modification(s) en attente d\'envoi' + (st.lastError ? ' — ' + st.lastError : '') + '.'; btn = 'Réessayer'; act = () => this.store.retryNow(); }
+        }
+        if (!msg && this.orphan && !this._orphanHidden && this.mode === 'legacy') {
+            msg = '⚠️ Ce compte est en ancien stockage, mais cet appareil conserve des modifications du nouveau stockage non envoyées (' + this.orphan.pending + ' en attente, ' + this.orphan.conflicts + ' conflit(s), ' + this.orphan.rejected + ' rejetée(s)). Elles ne sont PAS rejouées automatiquement : exportez-les pour les récupérer.';
+            btn = 'Exporter'; act = () => { this.exportRecovery(); this._orphanHidden = true; this.renderBanner(); };
         }
         if (!msg) { if (el) el.remove(); return; }
         if (!el) {
@@ -6169,11 +6198,12 @@ const Storage = {
             
             if (error) {
                 // MODE_NOUVEAU_STOCKAGE (SQLSTATE 42501 aussi !) : le compte est passé au nouveau stockage — ce n'est PAS une licence expirée, et on ne réessaie pas
-                if (DocStoreGlue.handleLegacyRefusal(error, key)) return;
+                if (DocStoreGlue.handleLegacyRefusal(error, key, value)) return;
                 // 42501 = refus RLS : licence expirée côté serveur
                 if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
-                    console.warn('Écriture refusée par le serveur (licence).');
+                    console.warn('Écriture refusée par le serveur (licence) : conservée en attente.');
                     License.refresh();
+                    if (typeof SyncManager !== 'undefined') SyncManager.addPendingChange({ type: 'storage', key });   // jamais perdue ni déclarée synchronisée
                     return;
                 }
                 if (/FACTURE_VERROUILLEE|NUMERO_EN_DOUBLE|NUMERO_NON_ATTRIBUE/.test(error.message || '')) {
