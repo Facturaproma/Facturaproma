@@ -434,39 +434,52 @@ async function test() {
 
 async function cleanup() {
   CTX = await makeCtx();
+  if (CTX.dry) { await createAccounts(); for (const k of ['d', 'e', 'f', 'g']) await toDocuments(k); }   // répétition locale : comptes simulés + vraies bascules locales
   out('### 15. État final des données de test, puis nettoyage (comptes de cette campagne uniquement)');
   const us = await q('SELECT id::text id, email FROM auth.users WHERE email = ANY($1) ORDER BY email', [EMAILS]), uids = us.map((x) => x.id);
   // C0 : identité exacte des comptes à supprimer (adresses, identifiants, date de création, correspondance avec le run indiqué dans ops/preprod-ui.json)
-  const scope = (() => { try { return require('../ops/preprod-ui.json').cleanup_scope; } catch { return null; } })();
+  let scope = (() => { try { return require('../ops/preprod-ui.json').cleanup_scope; } catch { return null; } })();
   const idRows = await q('SELECT id::text id, email, created_at FROM auth.users WHERE email = ANY($1) ORDER BY email', [EMAILS]);
+  if (CTX.dry) scope = { run: 'répétition', created_between: [new Date(Date.now() - 3600e3).toISOString(), new Date(Date.now() + 3600e3).toISOString()], runs_until: new Date(Date.now() + 3600e3).toISOString(), accounts: Object.fromEntries(idRows.map((r) => [r.email, r.id])) };
   const totalUsers = (await q1('SELECT count(*)::int n FROM auth.users')).n;
   out('- Comptes ciblés (adresse exacte) : ' + idRows.map((r) => `${r.email} / ${r.id} / créé ${new Date(r.created_at).toISOString()}`).join(' ; ') + `. Comptes totaux dans la base : ${totalUsers}.`);
   const inWin = scope && Array.isArray(scope.created_between) && idRows.every((r) => new Date(r.created_at) >= new Date(scope.created_between[0]) && new Date(r.created_at) <= new Date(scope.created_between[1]));
-  // _mig_runs : référence 0 avant la campagne ; les bascules de comptes jetables en créent (une par bascule / retour arrière). On ne supprime QUE celles créées dans la fenêtre de la campagne, après la création des comptes.
-  const runsAll = await q('SELECT run_id::text run_id, started_at FROM public._mig_runs ORDER BY started_at');
+  // identité par UUID ET adresse : la table attendue figure dans ops/preprod-ui.json (cleanup_scope.accounts), relevée lors de l'inspection en lecture seule
+  const expected = scope && scope.accounts ? scope.accounts : {};
+  const idOk = EMAILS.every((e) => expected[e] && idRows.some((r) => r.email === e && r.id === expected[e])) && Object.keys(expected).length === EMAILS.length && idRows.length === EMAILS.length;
+  out('- Identité attendue (adresse → UUID) : ' + EMAILS.map((e) => `${e} → ${expected[e] || '(absent du périmètre)'}`).join(' ; '));
   const winEnd = scope && scope.created_between ? scope.created_between[1] : null, winRuns = scope && scope.runs_until ? scope.runs_until : winEnd;
   const firstCreated = idRows.reduce((m, r) => (!m || new Date(r.created_at) < m ? new Date(r.created_at) : m), null);
-  const runsInWin = runsAll.filter((r) => firstCreated && winRuns && new Date(r.started_at) >= firstCreated && new Date(r.started_at) <= new Date(winRuns));
-  // rattachement de chaque ligne _mig_runs : (a) elle cite un compte de la campagne, ou (b) à défaut, un horodatage d'une ligne de mode / testeur / événement d'un compte de la campagne tombe dans la même seconde (preuve temporelle)
-  const repRows = await q('SELECT run_id::text run_id, report::text rep FROM public._mig_runs');
-  const tsRows = await q(`SELECT 'mode' src, u.email, to_jsonb(m)::text j FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1)
-      UNION ALL SELECT 'testeur', u.email, to_jsonb(t)::text FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)
-      UNION ALL SELECT 'evenement', u.email, to_jsonb(e)::text FROM public.doc_events e JOIN auth.users u ON u.id=e.user_id WHERE u.email = ANY($1)`, [EMAILS]);
-  const stamps = []; for (const r of tsRows) for (const m of r.j.matchAll(/"(\d{4}-\d{2}-\d{2}T[0-9:.]+(?:[+-]\d{2}:?\d{2}|Z))"/g)) stamps.push({ src: r.src, who: r.email.split('@')[0], t: new Date(m[1]).getTime() });
-  const attrib = runsAll.map((r) => {
-    const rep = (repRows.find((x) => x.run_id === r.run_id) || {}).rep || '';
-    const cited = us.length ? idRows.filter((u) => rep.includes(u.id.slice(0, 8))).map((u) => u.email.split('@')[0]) : [];
-    const st = new Date(r.started_at).getTime();
-    const near = stamps.filter((x) => Math.abs(x.t - st) <= 1000).sort((a, b) => Math.abs(a.t - st) - Math.abs(b.t - st));
-    const emptyAccounts = /"accounts":\s*\[\s*\]/.test(rep) || cited.length > 0;
-    return { run: r.run_id.slice(0, 8), started: new Date(r.started_at).toISOString(), cited, near: near[0] ? `${near[0].who}/${near[0].src} à ${Math.abs(near[0].t - st)} ms` : null, ok: cited.length > 0 || (!!near[0] && emptyAccounts) };
+  // _mig_runs (référence 0 avant la campagne ; table GLOBALE) : on ne supprime QUE les lignes dont le rattachement est PROUVÉ — A : le rapport cite un compte de la campagne ; B : écrite dans la même transaction (xmin identique) qu'une ligne d'un compte de la campagne.
+  // Une ligne rattachée par la seule proximité d'horodatage (C) est CONSERVÉE et signalée.
+  const runsList = await q('SELECT run_id::text run_id, started_at, xmin::text::bigint x, report::text rep FROM public._mig_runs ORDER BY started_at');
+  const anchors = await q(`SELECT u.email, 'mode' src, m.xmin::text::bigint x FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT u.email, 'testeur', t.xmin::text::bigint FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT u.email, 'evenement', e.xmin::text::bigint FROM public.doc_events e JOIN auth.users u ON u.id=e.user_id WHERE u.email = ANY($1)
+      UNION ALL SELECT u.email, 'sauvegarde_migration', b.xmin::text::bigint FROM public._mig_source_backup b JOIN auth.users u ON u.id=b.user_id WHERE u.email = ANY($1)`, [EMAILS]);
+  const strongAnchors = anchors.filter((a) => a.src !== 'testeur');   // une ligne testeur est écrite par une transaction distincte de la bascule
+  const stampsC = []; for (const r of await q(`SELECT u.email, to_jsonb(m)::text j FROM public.doc_store_mode m JOIN auth.users u ON u.id=m.user_id WHERE u.email = ANY($1) UNION ALL SELECT u.email, to_jsonb(t)::text FROM public.doc_store_testers t JOIN auth.users u ON u.id=t.user_id WHERE u.email = ANY($1)`, [EMAILS])) for (const m of r.j.matchAll(/"(\d{4}-\d{2}-\d{2}T[0-9:.]+(?:[+-]\d{2}:?\d{2}|Z))"/g)) stampsC.push({ who: r.email.split('@')[0], t: new Date(m[1]).getTime() });
+  const attrib = runsList.map((r) => {
+    const cited = idRows.filter((u) => r.rep && r.rep.includes(u.id.slice(0, 8))).map((u) => u.email.split('@')[0]);
+    const same = strongAnchors.filter((a) => Number(a.x) === Number(r.x)).map((a) => `${a.email.split('@')[0]}/${a.src}`);
+    const st = new Date(r.started_at).getTime(), near = stampsC.filter((x) => Math.abs(x.t - st) <= 1000).length > 0;
+    const inW = !!firstCreated && new Date(r.started_at) >= firstCreated && !!winRuns && new Date(r.started_at) <= new Date(winRuns);
+    const cls = !inW ? 'HORS FENÊTRE' : cited.length ? 'A' : same.length ? 'B' : near ? 'C' : '—';
+    return { run_id: r.run_id, run: r.run_id.slice(0, 8), started: new Date(r.started_at).toISOString(), cited, same, cls, del: cls === 'A' || cls === 'B' };
   });
-  out('- Rattachement des lignes `_mig_runs` : ' + attrib.map((a) => `${a.run}@${a.started} → ${a.cited.length ? 'cite ' + a.cited.join(',') : a.near ? 'horodatage proche : ' + a.near + ' ; rapport sans compte à migrer' : 'NON ATTRIBUÉE'}`).join(' ; '));
+  out('- Rattachement des lignes `_mig_runs` : ' + attrib.map((a) => `${a.run}@${a.started} → classe ${a.cls}${a.cited.length ? ' (cite ' + a.cited.join(',') + ')' : ''}${a.same.length ? ' (même transaction : ' + a.same.join(',') + ')' : ''} → ${a.del ? 'SUPPRIMÉE' : 'CONSERVÉE'}`).join(' ; '));
   const otherUsers = (await q1('SELECT count(*)::int n FROM auth.users WHERE NOT (email = ANY($1))', [EMAILS])).n;
-  out(`- Autres comptes pouvant déclencher une bascule : ${otherUsers} (aucun autre compte dans la base).`);
-  const attribOk = attrib.every((a) => a.ok) && otherUsers === 0;
-  out(`- Lignes \`_mig_runs\` : ${runsAll.length} au total, ${runsInWin.length} dans la fenêtre de la campagne (${runsAll.map((r) => r.run_id.slice(0, 8) + '@' + new Date(r.started_at).toISOString()).join(', ') || 'aucune'}).`);
-  rec('C0', `identité : exactement ${EMAILS.length} comptes aux adresses prévues, tous créés pendant le run ${scope && scope.run} (${scope && scope.created_between && scope.created_between.join(' → ')}), et toutes les lignes _mig_runs sont postérieures à leur création et dans la fenêtre`, `${EMAILS.length} comptes, fenêtre respectée, toutes les lignes _mig_runs dans la fenêtre et attribuées`, `${idRows.length} comptes, fenêtre ${inWin ? 'respectée' : 'NON respectée'}, _mig_runs ${runsInWin.length}/${runsAll.length} dans la fenêtre, attribuées ${attrib.filter((a) => a.ok).length}/${attrib.length}`, idRows.length === EMAILS.length && !!inWin && runsInWin.length === runsAll.length && attribOk, { fatal: true, proof: 'adresses exactes, UUID, dates et lignes _mig_runs affichés ci-dessus' });
+  out(`- Autres comptes dans la base : ${otherUsers}.`);
+  const keptRuns = attrib.filter((a) => !a.del).map((a) => a.run_id), delRuns = attrib.filter((a) => a.del).map((a) => a.run_id);
+  rec('C0', `identité par UUID et adresse des ${EMAILS.length} comptes, créés pendant le run ${scope && scope.run} (${scope && scope.created_between && scope.created_between.join(' → ')}) ; aucune ligne _mig_runs hors fenêtre ou sans aucun indice`, `${EMAILS.length} comptes (UUID et adresse), fenêtre respectée, aucun autre compte, aucune ligne sans indice`, `${idOk ? 'UUID et adresses conformes' : 'UUID/adresses NON conformes'}, fenêtre ${inWin ? 'respectée' : 'NON respectée'}, autres comptes ${otherUsers}, lignes sans indice ou hors fenêtre : ${attrib.filter((a) => a.cls === '—' || a.cls === 'HORS FENÊTRE').length}`, idOk && !!inWin && otherUsers === 0 && attrib.every((a) => a.cls !== '—' && a.cls !== 'HORS FENÊTRE'), { fatal: true, proof: 'adresses, UUID, dates et classes de rattachement affichés ci-dessus' });
+  const struct = async () => q1(`SELECT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p') AND n.nspname IN ('public','auth'))::int tables,
+      (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p') AND c.relrowsecurity AND n.nspname IN ('public','auth'))::int rls,
+      (SELECT count(*) FROM pg_policies WHERE schemaname IN ('public','auth'))::int politiques,
+      (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public')::int fonctions_public,
+      (SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE NOT t.tgisinternal AND n.nspname IN ('public','auth'))::int declencheurs,
+      (SELECT count(*) FROM pg_constraint k JOIN pg_namespace n ON n.oid=k.connamespace WHERE n.nspname IN ('public','auth'))::int contraintes`);
+  const structBefore = await struct();
+  out('- Structure avant nettoyage : ' + jstr(structBefore));
   const st = await q(`SELECT u.email, COALESCE((SELECT mode FROM public.doc_store_mode m WHERE m.user_id=u.id),'legacy') mode, (SELECT count(*) FROM public.documents d WHERE d.user_id=u.id)::int docs, (SELECT count(*) FROM public.doc_payments d WHERE d.user_id=u.id)::int pays,
       (SELECT count(*) FROM public.doc_history d WHERE d.user_id=u.id)::int hist, (SELECT count(*) FROM public.user_data d WHERE d.user_id=u.id)::int ud FROM auth.users u WHERE u.id::text = ANY($1) ORDER BY 1`, [uids]);
   out('| Compte | mode | documents | paiements | journal | lignes user_data |\n|---|---|---|---|---|---|\n' + st.map((r) => `| ${r.email.split('@')[0]} | ${r.mode} | ${r.docs} | ${r.pays} | ${r.hist} | ${r.ud} |`).join('\n'));
@@ -475,23 +488,30 @@ async function cleanup() {
       (SELECT count(*) FROM public._mig_source_backup WHERE NOT (user_id::text = ANY($1)))::int b, (SELECT count(*) FROM public._mig_conflicts WHERE NOT (user_id::text = ANY($1)))::int cf`, [uids]);
   rec('C1', 'les tables du nouveau stockage ne contiennent AUCUNE ligne étrangère aux comptes de cette campagne', 'toutes à 0', jstr(strange), Object.values(strange).every((v) => v === 0), { fatal: true });
   await checkForeign('avant nettoyage', 'C2');
-  const base = await q1("SELECT sha256 FROM public._fp_rehearsal WHERE name='mode_mig_runs'");
+  const base = CTX.dry ? { sha256: '0' } : await q1("SELECT sha256 FROM public._fp_rehearsal WHERE name='mode_mig_runs'");
   const runs = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
-  rec('C3', '_mig_runs : référence 0 avant la campagne ; toutes les lignes actuelles sont celles de la campagne', 'référence 0', `référence ${base && base.sha256}, actuel ${runs}`, base && Number(base.sha256) === 0, { fatal: true });
+  rec('C3', '_mig_runs : référence 0 avant la campagne ; lignes actuelles = lignes prouvées + lignes conservées', 'référence 0', `référence ${base && base.sha256}, actuel ${runs} (à supprimer ${delRuns.length}, conservées ${keptRuns.length})`, base && Number(base.sha256) === 0 && runs === delRuns.length + keptRuns.length, { fatal: true });
   await CTX.adm.query('BEGIN');
-  await CTX.adm.query('DELETE FROM public._mig_source_backup WHERE user_id::text = ANY($1)', [uids]);
-  await CTX.adm.query('DELETE FROM public._mig_conflicts WHERE user_id::text = ANY($1)', [uids]);
-  await CTX.adm.query('DELETE FROM public.code_attempts WHERE user_id::text = ANY($1)', [uids]);
-  await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text = ANY($1)', [runsInWin.map((r) => r.run_id)]);   // uniquement les lignes de la campagne (identifiées en C0)
-  const del = await CTX.adm.query('DELETE FROM auth.users WHERE id::text = ANY($1) AND email = ANY($2)', [uids, EMAILS]);
-  await CTX.adm.query('COMMIT');
-  rec('C4', 'comptes de test supprimés (par adresse exacte, eux seuls)', `${us.length}`, `${del.rowCount}`, del.rowCount === us.length, { fatal: true });
+  let del;
+  try {
+    await CTX.adm.query('DELETE FROM public._mig_source_backup WHERE user_id::text = ANY($1)', [uids]);
+    await CTX.adm.query('DELETE FROM public._mig_conflicts WHERE user_id::text = ANY($1)', [uids]);
+    await CTX.adm.query('DELETE FROM public.code_attempts WHERE user_id::text = ANY($1)', [uids]);
+    await CTX.adm.query('DELETE FROM public._mig_runs WHERE run_id::text = ANY($1)', [delRuns]);   // uniquement les lignes DONT LE RATTACHEMENT EST PROUVÉ (A ou B)
+    del = await CTX.adm.query('DELETE FROM auth.users WHERE id::text = ANY($1) AND email = ANY($2) RETURNING id', [Object.values(expected), EMAILS]);   // UUID ET adresse
+    await CTX.adm.query('COMMIT');
+  } catch (e) { try { await CTX.adm.query('ROLLBACK'); } catch {} throw e; }
+  rec('C4', 'comptes de test supprimés (par adresse exacte, eux seuls)', `${us.length}`, `${del.rows.length}`, del.rows.length === us.length, { fatal: true });
   const left = await q1(`SELECT (SELECT count(*) FROM auth.users WHERE email = ANY($1))::int u, (SELECT count(*) FROM public.documents)::int d, (SELECT count(*) FROM public.doc_payments)::int p, (SELECT count(*) FROM public.doc_history)::int h,
       (SELECT count(*) FROM public.doc_deleted)::int g, (SELECT count(*) FROM public.doc_store_mode)::int m, (SELECT count(*) FROM public.doc_store_testers)::int t, (SELECT count(*) FROM public._mig_source_backup)::int b,
-      (SELECT count(*) FROM public._mig_conflicts)::int cf, (SELECT count(*) FROM public._mig_runs)::int runs, (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ud,
+      (SELECT count(*) FROM public._mig_conflicts)::int cf, (SELECT count(*) FROM public.user_data WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ud,
       (SELECT count(*) FROM public.doc_counters WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_dc, (SELECT count(*) FROM public.doc_events WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_ev,
       (SELECT count(*) FROM public.licenses WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_lic, (SELECT count(*) FROM public.code_attempts WHERE user_id NOT IN (SELECT id FROM auth.users))::int orphan_att`, [EMAILS]);
   rec('C5', 'plus aucun compte de test ni ligne résiduelle ou orpheline', 'tout à 0', jstr(left), Object.values(left).every((v) => v === 0), { fatal: true });
+  const runsAfter = (await q('SELECT run_id::text run_id FROM public._mig_runs')).map((r) => r.run_id);
+  rec('C5b', `_mig_runs : seules les lignes prouvées ont été supprimées ; ${keptRuns.length} ligne(s) CONSERVÉE(S) : ${attrib.filter((a) => !a.del).map((a) => a.run + ' (classe ' + a.cls + ')').join(', ') || 'aucune'}`, `${keptRuns.length} ligne(s) restantes, identiques aux lignes conservées`, `${runsAfter.length} ligne(s) restantes : ${runsAfter.map((r) => r.slice(0, 8)).join(', ') || 'aucune'}`, runsAfter.length === keptRuns.length && runsAfter.every((r) => keptRuns.includes(r)), { fatal: true });
+  const structAfter = await struct();
+  rec('C5c', 'structure inchangée : tables, RLS, politiques, fonctions publiques, déclencheurs, contraintes', jstr(structBefore), jstr(structAfter), jstr(structBefore) === jstr(structAfter), { fatal: true });
   await checkForeign('après nettoyage', 'C6');
   out(`- Comptes restants dans la préproduction : ${(await q1('SELECT count(*)::int n FROM auth.users')).n}.`);
 }
