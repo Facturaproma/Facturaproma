@@ -483,7 +483,11 @@ async function rehearse() {
   const rt = await run(us.a, true);
   ck('aller-retour : la migration relancée après le retour arrière est cohérente (verify ok)', rt.status === 'applied' && (await q1('SELECT public.fp_mig_verify($1::uuid) v', [us.a])).v.ok === true, jstr(rt).slice(0, 250));
   const rbB = (await q1('SELECT public.fp_mig_rollback($1::uuid, true) r', [us.b])).r;
-  ck('mig-b (aucune écriture depuis la copie) : le retour arrière ne change rien', rbB.lists_changed === 0, jstr(rbB).slice(0, 200));
+  const bInv = (await q1("SELECT value v FROM public.user_data WHERE user_id=$1::uuid AND key='invoices'", [us.b])).v, bPays = (await q1("SELECT value v FROM public.user_data WHERE user_id=$1::uuid AND key='payments'", [us.b])).v;
+  const bCh = Object.fromEntries(rbB.changes.map((x) => [x.key, x]));
+  ck('mig-b : la seule écriture faite depuis la copie (le paiement « evil » de B sur SA facture i2, section 8) est reprise, rien d\'autre ne change : 1 facture remplacée, 1 paiement ajouté, 0 retrait',
+    rbB.status === 'rollback_applied' && bCh.invoices.replaced === 1 && bCh.invoices.appended === 0 && bCh.invoices.removed === 0 && bCh.payments.appended === 1 && bInv.length === 2 && bPays.map((x) => x.id).sort().join() === 'evil,p1,p2', jstr(rbB).slice(0, 400));
+  ck('mig-b : retour arrière rejoué, aucun changement', (await q1('SELECT public.fp_mig_rollback($1::uuid, true) r', [us.b])).r.changes.length === 0);
   // l'application « ancien format » fonctionne toujours après le retour arrière : écriture + verrou
   const post = await put(A.tok, A.id, 'invoices', [...after, { id: 'after-rb', type: 'invoice', number: 'BRO-AFTER', status: 'draft', totalTTC: 1 }]);
   ck('après le retour arrière, l\'ancien format reste utilisable (écriture d\'un brouillon via l\'API, verrou serveur actif)', post.status < 300);
@@ -511,6 +515,7 @@ async function cleanup() {
   await c.query('DELETE FROM public._mig_source_backup WHERE user_id::text = ANY($1)', [uids]);
   await c.query('DELETE FROM public._mig_conflicts WHERE user_id::text = ANY($1)', [uids]);
   await c.query('DELETE FROM public._mig_runs');
+  await c.query("DELETE FROM public._fp_rehearsal WHERE name = 'legacy_seed'");
   const del = await c.query('DELETE FROM auth.users WHERE id::text = ANY($1) AND email = ANY($2)', [uids, EMAILS]);
   await c.query('COMMIT');
   ck(`${del.rowCount} compte(s) de test supprimé(s) (et eux seuls, par e-mail exact)`, del.rowCount === us.length);
