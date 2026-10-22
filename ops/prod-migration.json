@@ -1,7 +1,7 @@
 {
   "_comment": "Pilote le workflow prod-migration (PRODUCTION facturapro-prod, ref mdozjptoecygmpkjlohr). phase: idle (ne fait rien) | apply (SQL 14 + SQL 18 + update_updated_at durci, UNE transaction avec contrôles ; annulation automatique au moindre écart) | apply19 (SQL 19 seul : journal sans doublons ; sauvegarde préalable, une transaction, vérifications immédiates sous ROLLBACK) | rollback (retire uniquement les objets créés par 14/18, refusé si des compteurs ou journaux ont déjà été produits). Autorisé par le propriétaire le 22/10/2026 17:01 après trois annulations de l'outil de confirmation Supabase. Modifier cette valeur + nonce pour déclencher.",
-  "phase": "idle",
-  "nonce": 3,
+  "phase": "apply19",
+  "nonce": 4,
   "expected": {
     "project_ref": "mdozjptoecygmpkjlohr",
     "user_data_rows": 47,
