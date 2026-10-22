@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SQL_FILES = ['00_setup_complet', '05_admins', '06_securite_rls', '07_licence_serveur', '08_admin_comptes',
-  '09_periode_de_grace', '10_anti_abus', '12_admin_supprimer_compte', '13_profil_assistant', '14_numerotation_et_verrouillage'];
+  '09_periode_de_grace', '10_anti_abus', '12_admin_supprimer_compte', '13_profil_assistant', '14_numerotation_et_verrouillage', '18_contact_public'];
 
 function psql(db, args) { return execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-q', '-d', db, ...args], { stdio: ['ignore', 'pipe', 'pipe'] }).toString(); }
 
@@ -48,7 +48,7 @@ function makeBackend(db) {
   const session = (id, email) => ({ access_token: 'tok_' + id, user: { id, email }, expires_at: Math.floor(Date.now() / 1000) + 3600 });
   const RPC = { my_license: [], activate_license: ['p_code'], next_doc_number: ['p_type', 'p_floor'],
     get_doc_mode: [], upsert_document: ['p_doc', 'p_expected_version', 'p_op_id'], delete_document: ['p_type', 'p_id', 'p_expected_version', 'p_op_id'],
-    record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'] };
+    record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'], get_contact_info: [] };
   const JSONB_PARAMS = ['p_doc', 'p_payment', 'p_entries'];
   const DOC_TABLES = { documents: 'doc_type, id, version, body, created_at', doc_payments: 'id, body, created_at', doc_history: 'seq, ts, body' };
   const DOC_ORDER = { documents: 'created_at, id', doc_payments: 'created_at, id', doc_history: 'seq' };

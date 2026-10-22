@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FacturaPro — Facturation Maroc</title>
-    <meta name="description" content="Logiciel de facturation 100% marocain. Factures conformes, déclarations CNSS et impôts automatiques.">
+    <meta name="description" content="Logiciel de facturation pour auto-entrepreneurs, freelances et petites entreprises au Maroc : factures, devis, paiements et PDF en français et en arabe.">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -4087,7 +4087,7 @@
             </div>
 
             <div class="notice">
-                <strong>🔔 Système de relances automatiques</strong> — Configurez vos modèles d'emails de relance et FacturaPro vous proposera d'envoyer des rappels aux clients en retard.
+                <strong>🔔 Relances guidées</strong> — Configurez vos modèles de message : FacturaPro repère les factures en retard et prépare le texte, que vous envoyez vous-même (copie du texte ou ouverture dans votre messagerie e-mail).
             </div>
 
             <div class="calc-grid">
@@ -4249,21 +4249,10 @@
                 </div>
             </div>
 
-            <!-- Promo code -->
-            <div class="promo-section" id="sectionPromoCode">
-                <h4>🎁 Vous avez un code promo ?</h4>
-                <p style="font-size: 13px; color: var(--ink-mute); margin-bottom: 12px;">Saisissez votre code promo (partenaire comptable…)</p>
-                <div class="promo-input-group">
-                    <input type="text" id="promoCode" placeholder="ENTREZ VOTRE CODE">
-                    <button class="btn btn-primary" onclick="applyPromoCode()">Appliquer</button>
-                </div>
-                <div id="promoResult" style="margin-top: 8px; font-size: 13px; font-weight: 600;"></div>
-            </div>
-
             <!-- Payment methods -->
             <div class="calc-card" id="sectionPayment" style="margin-top: 24px;">
                 <h3>💳 Modes de paiement acceptés</h3>
-                <p class="subtitle">Plusieurs options pour vous faciliter la vie</p>
+                <p class="subtitle">Paiement par virement bancaire</p>
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px;">
                     <div style="padding: 14px; background: var(--surface-soft); border-radius: 10px; border: 1px solid var(--border);">
@@ -4271,15 +4260,10 @@
                         <strong style="font-size: 14px;">Virement bancaire</strong>
                         <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">RIB fourni au paiement</p>
                     </div>
-                    <div style="padding: 14px; background: var(--surface-soft); border-radius: 10px; border: 1px solid var(--border);">
-                        <div style="font-size: 24px; margin-bottom: 6px;">💵</div>
-                        <strong style="font-size: 14px;">Espèces</strong>
-                        <p style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">Sur rendez-vous</p>
-                    </div>
                 </div>
 
-                <div class="notice" style="margin-top: 20px;">
-                    <strong>📞 Besoin d'aide ?</strong> Contactez-nous via WhatsApp au <strong class="contact-wa">+212 6XX XX XX XX</strong> ou par email à <strong class="contact-email">hello@facturapro.ma</strong> pour finaliser votre achat.
+                <div class="notice" id="contactNotice" style="margin-top: 20px;">
+                    <strong>📞 Besoin d'aide ?</strong> Demandez votre abonnement ci-dessus : notre équipe vous contactera pour finaliser votre achat.
                 </div>
             </div>
 
@@ -5526,17 +5510,39 @@ async function getCaptchaToken() {
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q';
 
 // ============================================
-// CONTACT COMMERCIAL : un seul endroit à modifier
-// Remplacer par le vrai numéro / e-mail de la SARL.
+// CONTACT COMMERCIAL : configuré dans Admin → Réglages (WhatsApp, e-mail), lu via la fonction SQL get_contact_info().
+// Aucune valeur factice n'est affichée : tant que le contact n'est pas configuré (ou indisponible), le client est invité
+// à demander son abonnement dans l'application, et l'équipe le contacte.
 // ============================================
-const CONTACT = {
-    whatsapp: '+212 6XX XX XX XX',
-    email: 'hello@facturapro.ma'
-};
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.contact-wa').forEach(e => e.textContent = CONTACT.whatsapp);
-    document.querySelectorAll('.contact-email').forEach(e => e.textContent = CONTACT.email);
-});
+const CONTACT = { whatsapp: '', email: '' };
+function contactLinesText() {
+    const l = [];
+    if (CONTACT.whatsapp) l.push(`📱 WhatsApp : ${CONTACT.whatsapp}`);
+    if (CONTACT.email) l.push(`📧 E-mail : ${CONTACT.email}`);
+    return l.length ? l.join('\n') : `📞 Contact : demandez votre abonnement dans l'application, notre équipe vous contactera.`;
+}
+function renderContactNotice() {
+    const el = document.getElementById('contactNotice');
+    if (!el) return;
+    const parts = [];
+    if (CONTACT.whatsapp) parts.push(`WhatsApp au <strong>${escapeHtml(CONTACT.whatsapp)}</strong>`);
+    if (CONTACT.email) parts.push(`e-mail à <strong>${escapeHtml(CONTACT.email)}</strong>`);
+    el.innerHTML = parts.length
+        ? `<strong>📞 Besoin d'aide ?</strong> Contactez-nous par ${parts.join(' ou par ')} pour finaliser votre achat.`
+        : `<strong>📞 Besoin d'aide ?</strong> Demandez votre abonnement ci-dessus : notre équipe vous contactera pour finaliser votre achat.`;
+}
+async function loadContactInfo() {
+    try {
+        if (USE_SUPABASE && ensureSupabase()) {
+            const { data, error } = await supaClient.rpc('get_contact_info');
+            if (!error && data) { CONTACT.whatsapp = String(data.whatsapp || '').trim(); CONTACT.email = String(data.email || '').trim(); }
+            else if (error) console.warn('get_contact_info indisponible :', error.message);
+        }
+    } catch (e) { console.warn('get_contact_info :', e); }
+    renderContactNotice();
+    return CONTACT;
+}
+document.addEventListener('DOMContentLoaded', renderContactNotice);
 
 // ============================================
 // RÉINITIALISATION DE MOT DE PASSE (lien reçu par e-mail)
@@ -10162,8 +10168,7 @@ const TRIAL_DURATION_DAYS = 14;
 // Codes promos disponibles
 // Note : tier 'lifetime' réservé aux Founders bêta. Promos publiques sur tiers payants.
 const PROMO_CODES = {
-    // Offre fondateurs : gérée côté admin par codes de licence à usage unique (pas de code promo public)
-    'COMPTABLE': { discount: 20, label: 'Promo Comptable -20%', validFor: ['annual', 'monthly'] }
+    // Aucun code promo public. Offre fondateurs : gérée côté admin par codes de licence à usage unique.
 };
 
 const License = {
@@ -10484,6 +10489,7 @@ function updateTrialUI() {
 }
 
 function renderLicensePage() {
+    loadContactInfo();   // asynchrone : met à jour le bloc « Besoin d'aide ? » dès que les coordonnées sont lues
     const info = License.get();
     const isLicensed = isUserLicensed();
     const daysLeft = License.getDaysRemaining();
@@ -10704,16 +10710,15 @@ function selectPlan(tier) {
     setTimeout(() => purchaseLicense(tier), 100);
 }
 
-function showHowToBuy() {
+async function showHowToBuy() {
+    await loadContactInfo();
     alert(`💳 Comment payer FacturaPro\n\n` +
-        `1️⃣ VIREMENT BANCAIRE\n` +
-        `   Effectuez un virement vers le compte indiqué\n` +
-        `   Envoyez-nous le justificatif par WhatsApp\n\n` +
-        `2️⃣ ESPÈCES (Casa/Rabat)\n` +
-        `   Sur rendez-vous uniquement\n\n` +
-        `📱 Contact : WhatsApp ${CONTACT.whatsapp}\n` +
-        `📧 Email : ${CONTACT.email}\n\n` +
-        `Une fois le paiement reçu, vous recevrez votre code de licence par WhatsApp/email sous 24h.`);
+        `VIREMENT BANCAIRE\n` +
+        `   1. Demandez votre abonnement dans l'application\n` +
+        `   2. Nous vous envoyons le RIB\n` +
+        `   3. Après le virement, envoyez-nous le justificatif\n\n` +
+        `${contactLinesText()}\n\n` +
+        `Une fois le paiement reçu, vous recevrez votre code de licence sous 24h.`);
 }
 
 async function logoutFromLicense() {
@@ -10727,7 +10732,8 @@ async function logoutFromLicense() {
 }
 
 async function purchaseLicense(tier) {
-    const promo = Storage.get('activePromo', null);
+    const _storedPromo = Storage.get('activePromo', null);
+    const promo = (_storedPromo && PROMO_CODES[_storedPromo.code]) ? _storedPromo : null;   // un ancien code mémorisé n'est plus honoré
     const company = Storage.get('company', {});
     const session = await Auth.getCurrentUser();
     
@@ -10799,6 +10805,7 @@ async function purchaseLicense(tier) {
         `Continuer ?`;
     
     if (!confirm(confirmMsg)) return;
+    await loadContactInfo();   // coordonnées de contact configurées dans Admin → Réglages
     
     // Créer la demande dans Supabase
     let requestSent = false;
@@ -10834,21 +10841,16 @@ async function purchaseLicense(tier) {
         `📋 Plan : ${config.label}\n` +
         `💰 Montant : ${finalPrice} DH / ${config.period}\n\n` +
         `🚀 PROCHAINES ÉTAPES :\n\n` +
-        `1️⃣ Effectuez votre paiement par :\n` +
-        `   • Virement bancaire\n` +
-        `   • Espèces (Casa/Rabat sur RDV)\n\n` +
-        `2️⃣ Envoyez le justificatif sur WhatsApp :\n` +
-        `   📱 ${CONTACT.whatsapp}\n\n` +
-        `3️⃣ Vous recevrez votre code d'activation\n` +
-        `   sous 24h par WhatsApp/email\n\n` +
-        `📧 Référence : ${session.email}\n` +
-        `🆔 ID demande : ${Date.now().toString(36).toUpperCase()}\n\n` +
+        `1️⃣ Notre équipe vous envoie le RIB pour le virement bancaire\n\n` +
+        `2️⃣ Après le virement, envoyez-nous le justificatif\n` +
+        `   ${contactLinesText().replace(/\n/g, '\n   ')}\n\n` +
+        `3️⃣ Vous recevrez votre code d'activation sous 24h\n\n` +
+        `📧 Référence : ${session.email}\n\n` +
         `Notre équipe vous contactera dans les 24h !`
         :
         `⚠️ La demande n'a pas pu être envoyée automatiquement.\n\n` +
         `Pour acheter votre abonnement, contactez-nous :\n\n` +
-        `📱 WhatsApp : ${CONTACT.whatsapp}\n` +
-        `📧 Email : ${CONTACT.email}\n\n` +
+        `${contactLinesText()}\n\n` +
         `Précisez :\n` +
         `• Plan : ${config.label}\n` +
         `• Email : ${session.email}\n` +
