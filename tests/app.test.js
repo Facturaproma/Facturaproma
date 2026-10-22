@@ -184,6 +184,10 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
     const ov = await E(() => document.documentElement.scrollWidth - window.innerWidth);
     check(`mobile 390 px : page ${pg} sans débordement de la page`, ov <= 1, 'débordement ' + ov + ' px');
   }
+  await E(() => newInvoice()); await p.waitForTimeout(400);
+  const edOv = await E(() => document.documentElement.scrollWidth - window.innerWidth);
+  check('mobile 390 px : éditeur de facture sans débordement de la page', edOv <= 1, 'débordement ' + edOv + ' px');
+  check('mobile 390 px : boutons de l\'éditeur (PDF, WhatsApp, Brouillon, Enregistrer) tous visibles à l\'écran', await E(() => [...document.querySelectorAll('#page-invoice-editor .topbar-actions .btn')].filter(b => b.offsetParent).every(b => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth + 1; })));
   await E(() => navTo('invoices')); await p.waitForTimeout(250);
   const vis = await E(() => { const b = document.querySelector('table.tbl-act td:last-child button'); if (!b) return false; const r = b.getBoundingClientRect(); return r.right <= window.innerWidth + 1 && r.width >= 36; });
   check('mobile : boutons d\'action des factures visibles et assez grands', vis);
