@@ -152,7 +152,7 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
 
   // --- 9. Mobile : pas de débordement horizontal, actions visibles ---
   await p.setViewportSize({ width: 390, height: 800 });
-  for (const pg of ['dashboard', 'invoices', 'quotes', 'clients', 'products', 'payments', 'reminders']) {
+  for (const pg of ['dashboard', 'invoices', 'quotes', 'clients', 'products', 'payments', 'reminders', 'taxes', 'cnss']) {
     await E((x) => navTo(x), pg); await p.waitForTimeout(250);
     const ov = await E(() => document.documentElement.scrollWidth - window.innerWidth);
     check(`mobile 390 px : page ${pg} sans débordement de la page`, ov <= 1, 'débordement ' + ov + ' px');
@@ -160,6 +160,35 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   await E(() => navTo('invoices')); await p.waitForTimeout(250);
   const vis = await E(() => { const b = document.querySelector('table.tbl-act td:last-child button'); if (!b) return false; const r = b.getBoundingClientRect(); return r.right <= window.innerWidth + 1 && r.width >= 36; });
   check('mobile : boutons d\'action des factures visibles et assez grands', vis);
+
+  // --- 10. Impôts & TVA, CNSS (rapport par période, achats, export CSV, échéances) ---
+  await p.setViewportSize({ width: 1280, height: 900 });
+  await E(() => navTo('taxes')); await p.waitForTimeout(400);
+  const tx = await E(() => ({ deadline: document.getElementById('tvaNextDeadline').textContent, regime: document.getElementById('tvaRegime').value,
+    periods: document.getElementById('tvaPeriod').options.length, stale: /31 mars 2026/.test(document.getElementById('page-taxes').textContent),
+    dup: (document.getElementById('page-taxes').textContent.match(/déclaration T1/g) || []).length }));
+  check('Impôts & TVA : régime trimestriel par défaut, 4 périodes', tx.regime === 'quarterly' && tx.periods === 4, JSON.stringify(tx));
+  check('Impôts & TVA : plus de texte « 31 mars 2026 » ni de doublon T1', !tx.stale && tx.dup === 0, JSON.stringify(tx));
+  check('Impôts & TVA : échéance affichée = fin du mois suivant un trimestre', await E(() => { const t = document.getElementById('tvaNextDeadline').textContent; return /^(30 avril|31 juillet|31 octobre|31 janvier) \d{4} — déclaration T[1-4] \d{4}$/.test(t); }), tx.deadline);
+  await E(() => { document.getElementById('vpDate').value = todayISO(); document.getElementById('vpSupplier').value = 'Fournisseur test'; document.getElementById('vpRef').value = 'FA-1'; document.getElementById('vpHT').value = '100'; vpSuggestTva(); });
+  check('achat : TVA proposée à 20 % (modifiable)', await E(() => document.getElementById('vpTVA').value === '20.00'));
+  await E(() => addVatPurchase()); await p.waitForTimeout(200);
+  check('achat enregistré et listé', await E(() => Storage.get('vatPurchases', []).length === 1 && /Fournisseur test/.test(document.getElementById('vatPurchasesBody').textContent)));
+  const bal = await E(() => { const per = document.getElementById('tvaPeriod'); const y = document.getElementById('tvaYear'); y.value = String(new Date().getFullYear()); onVatControlChange(false);
+    for (const o of per.options) { per.value = o.value; onVatControlChange(false); if (/20,00/.test(document.getElementById('tvaDeductible').textContent)) return document.getElementById('tvaBalanceLabel').textContent; } return null; });
+  check('rapport TVA : la TVA déductible apparaît dans la période de l\'achat', bal !== null, String(bal));
+  const dlv = p.waitForEvent('download', { timeout: 8000 }).catch(() => null);
+  await E(() => exportVatReportCSV());
+  const fv = await dlv;
+  check('export CSV du rapport TVA', fv && /^rapport-tva-.*\.csv$/.test(fv.suggestedFilename()), fv && fv.suggestedFilename());
+  if (fv) { const txt = fs.readFileSync(await fv.path(), 'utf8'); check('CSV : sections collectée / déductible / mention non officielle', /TVA COLLECTEE/.test(txt) && /TVA DEDUCTIBLE/.test(txt) && /non officielle/.test(txt)); }
+  await E(() => { document.getElementById('tvaRegime').value = 'exempt'; onVatControlChange(true); });
+  check('régime exonéré : rapport masqué, message affiché', await E(() => document.getElementById('tvaReportBody').style.display === 'none' && document.getElementById('tvaExemptNotice').style.display !== 'none'));
+  await E(() => { document.getElementById('tvaRegime').value = 'quarterly'; onVatControlChange(true); });
+  await E(() => navTo('cnss')); await p.waitForTimeout(300);
+  await E(() => { document.getElementById('ceLabel').value = 'Salarié test'; document.getElementById('ceGross').value = '5000'; addCnssEmployee(); });
+  check('CNSS employeur : 5 000 DH -> 337,00 salarié / 1 054,50 patronal', await E(() => { const t = document.getElementById('cnssEmployeesBody').textContent.replace(/\s|\u00a0|\u202f/g, ''); return t.includes('337,00DH') && t.includes('1054,50DH'); }));
+  check('CNSS : liens officiels Damancom et cnss.ma, échéance affichée', await E(() => { const h = [...document.querySelectorAll('#page-cnss a')].map(a => a.href); return h.some(x => /^https:\/\/www\.damancom\.ma/.test(x)) && h.some(x => /^https:\/\/www\.cnss\.ma/.test(x)) && /^\d+(er)? \S+ \d{4} — déclaration des salaires de /.test(document.getElementById('cnssNextDue').textContent); }));
 
   check('aucune erreur JavaScript pendant les tests', errors.length === 0, errors.join(' | '));
 

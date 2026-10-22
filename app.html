@@ -2307,6 +2307,7 @@
             margin-bottom: 24px;
         }
 
+        .calc-grid > * { min-width: 0; }
         @media (max-width: 700px) { .calc-grid { grid-template-columns: 1fr; } }
 
         /* === RTL SUPPORT (Arabic) === */
@@ -3779,7 +3780,7 @@
             </div>
 
             <div class="notice">
-                <strong>ℹ️ Calcul indicatif</strong> — Ces calculs sont basés sur les barèmes officiels CNSS. Vérifiez toujours sur le portail Damancom pour la déclaration officielle.
+                <strong>ℹ️ Calcul indicatif</strong> — Estimations non officielles. Les taux et échéances n'ont pas pu être relus automatiquement sur cnss.ma : confirmez-les avant toute déclaration, qui se fait uniquement sur le portail Damancom.
             </div>
 
             <div class="calc-grid">
@@ -3848,10 +3849,10 @@
             </div>
 
             <div class="calc-card">
-                <h3>📅 Échéancier des cotisations</h3>
-                <p class="subtitle">Périodicité : mensuelle ou trimestrielle</p>
+                <h3>📅 Échéancier indicatif (chiffre d'affaires auto-entrepreneur)</h3>
+                <p class="subtitle">Par trimestre, échéance supposée : fin du mois suivant le trimestre (à valider auprès de l'administration)</p>
 
-                <table style="margin-top: 16px;">
+                <div class="items-scroll"><table style="margin-top: 16px;">
                     <thead>
                         <tr>
                             <th>Période</th>
@@ -3862,7 +3863,38 @@
                         </tr>
                     </thead>
                     <tbody id="cnssSchedule"></tbody>
-                </table>
+                </table></div>
+            </div>
+
+            <div class="calc-card" style="margin-top: 16px;">
+                <h3>👥 Déclaration employeur (Damancom) — récapitulatif indicatif</h3>
+                <p class="subtitle">Pour vos salariés déclarés à la CNSS. Ne saisissez que ce qui est utile (nom ou prénom suffit).</p>
+
+                <div class="notice success">
+                    <strong>📅 Prochaine échéance</strong><br>
+                    <span id="cnssNextDue">—</span>
+                </div>
+                <div class="notice" style="margin-top: 12px;">
+                    <strong>⚠️ À valider</strong> — Échéance (le <span id="cnssDueDayTxt">10</span> du mois suivant), plafond (<span id="cnssCeilingTxt">6 000</span> DH) et taux proviennent de sources secondaires non officielles. Vérifiez-les sur
+                    <a href="https://www.cnss.ma" target="_blank" rel="noopener noreferrer">cnss.ma</a> avant de déclarer sur
+                    <a href="https://www.damancom.ma" target="_blank" rel="noopener noreferrer">Damancom</a>.
+                    Le fichier de déclaration (BDS/eBDS) n'est pas généré par FacturaProMa.
+                </div>
+
+                <div class="form-group"><label for="ceLabel">Salarié (nom ou prénom)</label><input type="text" id="ceLabel" maxlength="80"></div>
+                <div class="form-group"><label for="ceGross">Salaire brut mensuel (DH)</label><input type="number" id="ceGross" min="0" step="0.01" placeholder="0"></div>
+                <button class="btn btn-primary" onclick="addCnssEmployee()">Ajouter</button>
+
+                <div class="items-scroll"><table style="margin-top: 16px;">
+                    <thead><tr><th>Salarié</th><th>Brut</th><th>Part salariale</th><th>Part patronale</th><th></th></tr></thead>
+                    <tbody id="cnssEmployeesBody"></tbody>
+                </table></div>
+                <div class="calc-result">
+                    <div class="calc-line"><span>Total part salariale (retenue)</span><span id="cnssEmpTotal">0,00 DH</span></div>
+                    <div class="calc-line"><span>Total part patronale</span><span id="cnssErTotal">0,00 DH</span></div>
+                    <div class="calc-line total"><span>Total estimé à verser</span><span id="cnssAllTotal">0,00 DH</span></div>
+                </div>
+                <p class="subtitle" style="margin-top: 8px;">Autres cotisations éventuelles (selon votre situation) non incluses.</p>
             </div>
         </section>
 
@@ -3887,40 +3919,71 @@
 
                 <div class="calc-grid">
                     <div class="calc-card">
-                        <h3>TVA collectée — Période en cours</h3>
-                        <p class="subtitle">Sur factures payées</p>
+                        <h3>Rapport TVA par période</h3>
+                        <p class="subtitle">Estimation à partir de vos factures et de vos achats saisis</p>
 
-                        <div class="calc-result" style="margin-top: 0;">
-                            <div class="calc-line">
-                                <span>CA HT</span>
-                                <span id="tvaHT">0,00 DH</span>
+                        <div class="form-group">
+                            <label for="tvaRegime">Régime</label>
+                            <select id="tvaRegime" onchange="onVatControlChange(true)">
+                                <option value="monthly">Mensuel (CA &ge; 1M DH)</option>
+                                <option value="quarterly">Trimestriel (CA &lt; 1M DH)</option>
+                                <option value="exempt">Exonéré (Auto-Entrepreneur)</option>
+                            </select>
+                        </div>
+                        <div id="tvaReportBody">
+                            <div class="form-group">
+                                <label for="tvaYear">Année</label>
+                                <select id="tvaYear" onchange="onVatControlChange(false)"></select>
                             </div>
-                            <div class="calc-line">
-                                <span>TVA collectée</span>
-                                <span id="tvaCollected">0,00 DH</span>
+                            <div class="form-group">
+                                <label for="tvaPeriod">Période</label>
+                                <select id="tvaPeriod" onchange="onVatControlChange(false)"></select>
                             </div>
-                            <div class="calc-line total">
-                                <span>À déclarer</span>
-                                <span id="tvaToDeclare">0,00 DH</span>
+                            <div class="form-group">
+                                <label for="tvaBasis">Base de la TVA collectée</label>
+                                <select id="tvaBasis" onchange="onVatControlChange(false)">
+                                    <option value="paid">Factures encaissées (date de paiement)</option>
+                                    <option value="issued">Factures émises (date de facture, avoirs déduits)</option>
+                                </select>
                             </div>
+
+                            <div class="calc-result">
+                                <div class="calc-line"><span>CA HT de la période</span><span id="tvaHT">0,00 DH</span></div>
+                                <div class="calc-line"><span>TVA collectée</span><span id="tvaCollected">0,00 DH</span></div>
+                                <div class="calc-line"><span>TVA déductible (achats saisis)</span><span id="tvaDeductible">0,00 DH</span></div>
+                                <div class="calc-line total"><span id="tvaBalanceLabel">TVA estimée à payer</span><span id="tvaToDeclare">0,00 DH</span></div>
+                            </div>
+                            <p class="subtitle" id="tvaReportNote" style="margin-top: 8px;"></p>
+                            <button class="btn btn-secondary" style="margin-top: 12px;" onclick="exportVatReportCSV()">⬇️ Exporter le rapport (CSV)</button>
+                        </div>
+                        <div class="notice" id="tvaExemptNotice" style="display:none; margin-top: 12px;">
+                            Les auto-entrepreneurs ne facturent pas de TVA : aucun rapport TVA à produire. Voir l'onglet IR / la page CNSS pour les déclarations de chiffre d'affaires.
                         </div>
                     </div>
 
                     <div class="calc-card">
-                        <h3>Périodicité de déclaration</h3>
-                        <div class="form-group">
-                            <label>Régime</label>
-                            <select id="tvaRegime">
-                                <option value="monthly">Mensuel (CA &gt; 1M DH)</option>
-                                <option value="quarterly" selected>Trimestriel (CA &lt; 1M DH)</option>
-                                <option value="exempt">Exonéré (Auto-Entrepreneur)</option>
-                            </select>
+                        <div class="notice success" id="tvaDeadlineBox">
+                            <strong>📅 Prochaine échéance</strong><br>
+                            <span id="tvaNextDeadline">—</span>
+                        </div>
+                        <div class="notice" style="margin-top: 12px;">
+                            <strong>⚠️ À valider</strong> — Règle appliquée : dépôt et paiement avant la fin du mois qui suit la période. Ces dates n'ont pas pu être relues automatiquement sur tax.gov.ma ; confirmez-les avant d'agir. FacturaProMa ne dépose rien : la déclaration se fait sur
+                            <a href="https://www.tax.gov.ma" target="_blank" rel="noopener noreferrer">tax.gov.ma</a> (SIMPL-TVA) ou via votre comptable.
                         </div>
 
-                        <div class="notice success">
-                            <strong>📅 Prochaine échéance</strong><br>
-                            <span id="tvaNextDeadline">31 mars 2026</span> (déclaration T1)
-                        </div>
+                        <h3 style="margin-top: 16px;">TVA déductible (achats)</h3>
+                        <p class="subtitle">Saisissez les factures d'achat de la période, pièce justificative à conserver.</p>
+                        <div class="form-group"><label for="vpDate">Date de la facture</label><input type="date" id="vpDate"></div>
+                        <div class="form-group"><label for="vpSupplier">Fournisseur</label><input type="text" id="vpSupplier" maxlength="120" placeholder="Nom du fournisseur"></div>
+                        <div class="form-group"><label for="vpRef">N° de facture fournisseur</label><input type="text" id="vpRef" maxlength="60" placeholder="Référence"></div>
+                        <div class="form-group"><label for="vpHT">Montant HT (DH)</label><input type="number" id="vpHT" min="0" step="0.01" placeholder="0" oninput="vpSuggestTva()"></div>
+                        <div class="form-group"><label for="vpTVA">TVA (DH)</label><input type="number" id="vpTVA" min="0" step="0.01" placeholder="0" oninput="this.dataset.touched='1'"></div>
+                        <button class="btn btn-primary" onclick="addVatPurchase()">Ajouter l'achat</button>
+
+                        <div class="items-scroll"><table style="margin-top: 16px;">
+                            <thead><tr><th>Date</th><th>Fournisseur / N°</th><th>HT</th><th>TVA</th><th></th></tr></thead>
+                            <tbody id="vatPurchasesBody"></tbody>
+                        </table></div>
                     </div>
                 </div>
             </div>
@@ -8481,6 +8544,7 @@ function renderCNSS() {
     
     // Schedule
     renderCNSSSchedule();
+    renderCnssEmployer();
 }
 
 function calculateCNSS() {
@@ -8497,73 +8561,272 @@ function calculateCNSS() {
     document.getElementById('cnssPlafond').textContent = formatCurrency(plafond);
 }
 
+// <FISCAL-CALC> — règles et calculs purs (testés hors navigateur). Toute valeur "À valider" est modifiable ici.
+const FISCAL_RULES = {
+    reviewedOn: '2026-10-22',
+    // TVA : déclaration et paiement avant la fin du mois suivant la période (mensuel ou trimestriel). Source secondaire, à valider sur tax.gov.ma.
+    vat: { monthlyThresholdDH: 1000000 },
+    // CNSS : sources secondaires (non officielles) ; à valider sur cnss.ma / damancom.ma.
+    cnss: {
+        dueDay: 10,
+        ceilingDH: 6000,
+        // salarié / employeur ; capped = soumis au plafond
+        branches: [
+            { id: 'prestations', emp: 0.0448, er: 0.0898, capped: true },
+            { id: 'amo',         emp: 0.0226, er: 0.0411, capped: false },
+            { id: 'allocations', emp: 0,      er: 0.064,  capped: false },
+            { id: 'formation',   emp: 0,      er: 0.016,  capped: false }
+        ]
+    }
+};
+const FISCAL_MONTHS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+function fiscalIso(y, m0, d) { const x = new Date(y, m0, d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
+function fiscalMonthEnd(y, m0) { return fiscalIso(y, m0 + 1, 0); }
+function fiscalDateFr(iso) { const [y, m, d] = iso.split('-').map(Number); return (d === 1 ? '1er' : d) + ' ' + FISCAL_MONTHS_FR[m - 1] + ' ' + y; }
+// Périodes TVA d'une année : due = fin du mois suivant la fin de la période
+function vatPeriods(regime, year) {
+    const out = [];
+    if (regime === 'monthly') {
+        for (let m = 0; m < 12; m++) out.push({ key: 'M' + m, label: FISCAL_MONTHS_FR[m].charAt(0).toUpperCase() + FISCAL_MONTHS_FR[m].slice(1) + ' ' + year, start: fiscalIso(year, m, 1), end: fiscalMonthEnd(year, m), due: fiscalMonthEnd(year, m + 1) });
+    } else {
+        for (let q = 0; q < 4; q++) out.push({ key: 'Q' + q, label: 'T' + (q + 1) + ' ' + year, start: fiscalIso(year, q * 3, 1), end: fiscalMonthEnd(year, q * 3 + 2), due: fiscalMonthEnd(year, q * 3 + 3) });
+    }
+    return out;
+}
+// Prochaine déclaration à déposer : première période dont l'échéance n'est pas dépassée
+function nextVatPeriod(regime, todayIso) {
+    const y = parseInt(todayIso.slice(0, 4), 10);
+    const all = [].concat(vatPeriods(regime, y - 1), vatPeriods(regime, y), vatPeriods(regime, y + 1));
+    return all.find(p => p.due >= todayIso) || null;
+}
+function fiscalDay(v) { return (v || '').slice(0, 10); }
+function fiscalInPeriod(iso, per) { const d = fiscalDay(iso); return !!d && d >= per.start && d <= per.end; }
+const fiscalNum = (v) => (isFinite(parseFloat(v)) ? parseFloat(v) : 0);
+const fiscalR2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+// TVA collectée : base 'paid' = factures payées à leur date d'encaissement ; base 'issued' = factures émises à leur date, avoirs en négatif
+function vatCollected(invoices, per, basis) {
+    const rows = []; let creditsIgnored = 0;
+    (invoices || []).forEach(i => {
+        if (!i || !i.status || i.status === 'draft' || i.status === 'cancelled') return;
+        const isCredit = i.type === 'credit';
+        if (basis === 'paid') {
+            if (isCredit) { if (fiscalInPeriod(i.date, per)) creditsIgnored++; return; }
+            if (i.status !== 'paid') return;
+            if (!fiscalInPeriod(i.paidAt || i.paymentDate || i.date, per)) return;
+        } else if (!fiscalInPeriod(i.date, per)) return;
+        const sign = isCredit ? -1 : 1;
+        rows.push({ number: i.number || '', date: fiscalDay(basis === 'paid' ? (i.paidAt || i.paymentDate || i.date) : i.date), client: i.clientName || '', credit: isCredit,
+            ht: sign * Math.abs(fiscalNum(i.totalHT)), tva: sign * Math.abs(fiscalNum(i.totalTVA)), ttc: sign * Math.abs(fiscalNum(i.totalTTC)) });
+    });
+    return { rows, ht: fiscalR2(rows.reduce((s, r) => s + r.ht, 0)), tva: fiscalR2(rows.reduce((s, r) => s + r.tva, 0)), creditsIgnored };
+}
+function vatDeductible(purchases, per) {
+    const rows = (purchases || []).filter(p => p && fiscalInPeriod(p.date, per)).map(p => ({ id: p.id, date: fiscalDay(p.date), supplier: p.supplier || '', ref: p.ref || '', ht: fiscalNum(p.ht), tva: fiscalNum(p.tva) }));
+    return { rows, ht: fiscalR2(rows.reduce((s, r) => s + r.ht, 0)), tva: fiscalR2(rows.reduce((s, r) => s + r.tva, 0)) };
+}
+function vatBalance(collectedTva, deductibleTva) { const v = fiscalR2(collectedTva - deductibleTva); return { amount: v, credit: v < 0 }; }
+// Cellule texte CSV : séparateur « ; », guillemets, et neutralisation des formules (=, +, -, @) dans les textes libres
+function csvText(v) { let s = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+function vatReportCsv(per, basis, col, ded, bal) {
+    const L = [];
+    L.push(['Rapport TVA indicatif', per.label, 'Du ' + per.start + ' au ' + per.end, basis === 'paid' ? 'Base : encaissements' : 'Base : factures émises'].map(csvText).join(';'));
+    L.push('Estimation non officielle : à valider par votre comptable et sur tax.gov.ma');
+    L.push('');
+    L.push('TVA COLLECTEE');
+    L.push(['N° facture', 'Date', 'Client', 'Type', 'HT', 'TVA', 'TTC'].join(';'));
+    col.rows.forEach(r => L.push([csvText(r.number), r.date, csvText(r.client), r.credit ? 'Avoir' : 'Facture', r.ht.toFixed(2), r.tva.toFixed(2), r.ttc.toFixed(2)].join(';')));
+    L.push(['Total collecté', '', '', '', col.ht.toFixed(2), col.tva.toFixed(2), ''].join(';'));
+    L.push('');
+    L.push('TVA DEDUCTIBLE (achats saisis)');
+    L.push(['N° facture fournisseur', 'Date', 'Fournisseur', '', 'HT', 'TVA'].join(';'));
+    ded.rows.forEach(r => L.push([csvText(r.ref), r.date, csvText(r.supplier), '', r.ht.toFixed(2), r.tva.toFixed(2)].join(';')));
+    L.push(['Total déductible', '', '', '', ded.ht.toFixed(2), ded.tva.toFixed(2)].join(';'));
+    L.push('');
+    L.push([bal.credit ? 'Crédit de TVA estimé' : 'TVA estimée à payer', '', '', '', '', Math.abs(bal.amount).toFixed(2)].join(';'));
+    if (col.creditsIgnored) L.push('Avoirs non déduits sur la base encaissements : ' + col.creditsIgnored + ' (à traiter avec votre comptable)');
+    return L.join('\n');
+}
+// CNSS employeur (indicatif)
+function cnssForEmployee(gross, rules) {
+    const r = rules || FISCAL_RULES.cnss, g = Math.max(0, fiscalNum(gross)), capped = Math.min(g, r.ceilingDH);
+    let emp = 0, er = 0;
+    r.branches.forEach(b => { const base = b.capped ? capped : g; emp += base * b.emp; er += base * b.er; });
+    return { emp: fiscalR2(emp), er: fiscalR2(er) };
+}
+function cnssNextDue(todayIso, rules) {
+    const r = rules || FISCAL_RULES.cnss, y = parseInt(todayIso.slice(0, 4), 10), m = parseInt(todayIso.slice(5, 7), 10) - 1, d = parseInt(todayIso.slice(8, 10), 10);
+    const dueM = d <= r.dueDay ? m : m + 1;                     // échéance du mois en cours si pas encore passée, sinon du mois suivant
+    const periodM = dueM - 1;                                    // période déclarée = mois précédent l'échéance
+    const pd = new Date(y, periodM, 1);
+    return { due: fiscalIso(y, dueM, r.dueDay), periodLabel: FISCAL_MONTHS_FR[pd.getMonth()] + ' ' + pd.getFullYear() };
+}
+// </FISCAL-CALC>
+
+// ---------- Échéancier AE (CA par trimestre, HT) ----------
 function renderCNSSSchedule() {
     const invoices = Storage.get('invoices', []);
     const currentYear = new Date().getFullYear();
-    const months = [];
-    
-    for (let m = 0; m < 12; m++) {
-        const monthInvoices = invoices.filter(i => {
-            if (i.status !== 'paid') return false;
-            const d = new Date(i.date);
-            return d.getMonth() === m && d.getFullYear() === currentYear;
-        });
-        const ca = monthInvoices.reduce((s, i) => s + (i.totalTTC || 0), 0);
-        const cotisation = ca * 0.01;
-        const monthName = new Date(currentYear, m, 1).toLocaleDateString('fr-FR', { month: 'long' });
-        const echeance = new Date(currentYear, m + 1, 5);
-        
-        months.push({
-            month: monthName.charAt(0).toUpperCase() + monthName.slice(1),
-            ca: ca,
-            cotisation: cotisation,
-            echeance: echeance.toLocaleDateString('fr-FR'),
-            isPast: echeance < new Date()
-        });
-    }
-    
-    document.getElementById('cnssSchedule').innerHTML = months.map(m => `
+    const company = Storage.get('company', {});
+    const rate = (company.activity || 'services') === 'commerce' ? 0.005 : 0.01;
+    const today = todayISO();
+    const rows = vatPeriods('quarterly', currentYear).map(per => {
+        const ca = invoices.filter(i => i.type !== 'credit' && i.status === 'paid' && fiscalInPeriod(i.paidAt || i.paymentDate || i.date, per))
+            .reduce((s, i) => s + (fiscalNum(i.totalHT) || fiscalNum(i.totalTTC)), 0);
+        return { label: per.label, ca, cotisation: ca * rate, due: per.due, isPast: per.due < today };
+    });
+    document.getElementById('cnssSchedule').innerHTML = rows.map(m => `
         <tr>
-            <td><strong>${m.month}</strong></td>
+            <td><strong>${escapeHtml(m.label)}</strong></td>
             <td>${formatCurrency(m.ca)}</td>
             <td>${formatCurrency(m.cotisation)}</td>
-            <td>${m.echeance}</td>
+            <td>${escapeHtml(fiscalDateFr(m.due))}</td>
             <td>
                 ${m.ca === 0 ? '<span class="status-pill status-draft">Pas de CA</span>' :
-                  m.isPast ? '<span class="status-pill status-overdue">À déclarer</span>' :
+                  m.isPast ? '<span class="status-pill status-overdue">À vérifier</span>' :
                   '<span class="status-pill status-pending">À venir</span>'}
             </td>
         </tr>
     `).join('');
 }
 
+function renderCnssEmployer() {
+    const emps = Storage.get('cnssEmployees', []) || [];
+    const nd = cnssNextDue(todayISO());
+    document.getElementById('cnssNextDue').textContent = fiscalDateFr(nd.due) + ' — déclaration des salaires de ' + nd.periodLabel;
+    document.getElementById('cnssDueDayTxt').textContent = FISCAL_RULES.cnss.dueDay;
+    document.getElementById('cnssCeilingTxt').textContent = FISCAL_RULES.cnss.ceilingDH.toLocaleString('fr-FR');
+    let te = 0, tr = 0;
+    document.getElementById('cnssEmployeesBody').innerHTML = emps.map(e => {
+        const c = cnssForEmployee(e.gross); te += c.emp; tr += c.er;
+        return `<tr><td>${escapeHtml(e.label)}</td><td>${formatCurrency(fiscalNum(e.gross))}</td><td>${formatCurrency(c.emp)}</td><td>${formatCurrency(c.er)}</td>
+            <td><button class="btn btn-secondary" onclick="deleteCnssEmployee('${escapeHtml(String(e.id))}')">Supprimer</button></td></tr>`;
+    }).join('') || '<tr><td colspan="5" class="subtitle">Aucun salarié saisi.</td></tr>';
+    document.getElementById('cnssEmpTotal').textContent = formatCurrency(fiscalR2(te));
+    document.getElementById('cnssErTotal').textContent = formatCurrency(fiscalR2(tr));
+    document.getElementById('cnssAllTotal').textContent = formatCurrency(fiscalR2(te + tr));
+}
+function addCnssEmployee() {
+    const label = document.getElementById('ceLabel').value.trim();
+    const gross = parseFloat(document.getElementById('ceGross').value);
+    if (!label || !isFinite(gross) || gross < 0) { showToast('Indiquez un nom et un salaire brut valide', 'error'); return; }
+    const emps = (Storage.get('cnssEmployees', []) || []).slice();
+    emps.push({ id: uuid(), label: label.slice(0, 80), gross });
+    Storage.set('cnssEmployees', emps);
+    document.getElementById('ceLabel').value = ''; document.getElementById('ceGross').value = '';
+    renderCnssEmployer();
+}
+function deleteCnssEmployee(id) {
+    Storage.set('cnssEmployees', (Storage.get('cnssEmployees', []) || []).filter(e => String(e.id) !== String(id)));
+    renderCnssEmployer();
+}
+
 // ============================================
 // TAXES
 // ============================================
+function fiscalPrefs() { return Object.assign({ regime: 'quarterly', basis: 'paid' }, Storage.get('fiscalPrefs', {}) || {}); }
+
 function renderTaxes() {
-    // TVA
-    const invoices = Storage.get('invoices', []);
-    const currentYear = new Date().getFullYear();
-    const paidThisYear = invoices.filter(i => 
-        i.status === 'paid' && new Date(i.date).getFullYear() === currentYear
-    );
-    
-    const totalHT = paidThisYear.reduce((s, i) => s + (i.totalHT || 0), 0);
-    const totalTVA = paidThisYear.reduce((s, i) => s + (i.totalTVA || 0), 0);
-    
-    document.getElementById('tvaHT').textContent = formatCurrency(totalHT);
-    document.getElementById('tvaCollected').textContent = formatCurrency(totalTVA);
-    document.getElementById('tvaToDeclare').textContent = formatCurrency(totalTVA);
-    
-    // Next deadline
-    const today = new Date();
-    const quarter = Math.floor(today.getMonth() / 3);
-    const nextDeadline = new Date(currentYear, (quarter + 1) * 3, 0);
-    document.getElementById('tvaNextDeadline').textContent = 
-        nextDeadline.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) + 
-        ` (déclaration T${quarter + 1})`;
-    
+    renderVatReport(true);
     calculateIR();
+}
+
+function onVatControlChange(regimeChanged) {
+    const prefs = fiscalPrefs();
+    prefs.regime = document.getElementById('tvaRegime').value;
+    prefs.basis = document.getElementById('tvaBasis').value;
+    Storage.set('fiscalPrefs', prefs);
+    renderVatReport(regimeChanged);
+}
+
+// resetSelection : (re)positionne année et période sur la prochaine déclaration à déposer
+function renderVatReport(resetSelection) {
+    const prefs = fiscalPrefs();
+    const regimeSel = document.getElementById('tvaRegime');
+    const basisSel = document.getElementById('tvaBasis');
+    if (resetSelection) { regimeSel.value = prefs.regime; basisSel.value = prefs.basis; }
+    const regime = regimeSel.value;
+    const exempt = regime === 'exempt';
+    document.getElementById('tvaReportBody').style.display = exempt ? 'none' : '';
+    document.getElementById('tvaExemptNotice').style.display = exempt ? '' : 'none';
+    document.getElementById('tvaDeadlineBox').style.display = exempt ? 'none' : '';
+    renderVatPurchases();
+    if (exempt) return;
+
+    const today = todayISO();
+    const next = nextVatPeriod(regime, today);
+    const yearSel = document.getElementById('tvaYear'), perSel = document.getElementById('tvaPeriod');
+    const thisYear = parseInt(today.slice(0, 4), 10);
+    if (!yearSel.options.length) yearSel.innerHTML = [thisYear, thisYear - 1, thisYear - 2].map(y => `<option value="${y}">${y}</option>`).join('');
+    if (resetSelection && next) yearSel.value = next.start.slice(0, 4);
+    const year = parseInt(yearSel.value, 10);
+    const periods = vatPeriods(regime, year);
+    const prevKey = perSel.value;
+    perSel.innerHTML = periods.map(p => `<option value="${p.key}">${escapeHtml(p.label)}</option>`).join('');
+    perSel.value = (!resetSelection && periods.some(p => p.key === prevKey)) ? prevKey : (next && next.start.slice(0, 4) === String(year) ? next.key : periods[0].key);
+    const per = periods.find(p => p.key === perSel.value) || periods[0];
+
+    const basis = basisSel.value;
+    const col = vatCollected(Storage.get('invoices', []), per, basis);
+    const ded = vatDeductible(Storage.get('vatPurchases', []), per);
+    const bal = vatBalance(col.tva, ded.tva);
+    document.getElementById('tvaHT').textContent = formatCurrency(col.ht);
+    document.getElementById('tvaCollected').textContent = formatCurrency(col.tva);
+    document.getElementById('tvaDeductible').textContent = formatCurrency(ded.tva);
+    document.getElementById('tvaBalanceLabel').textContent = bal.credit ? 'Crédit de TVA estimé' : 'TVA estimée à payer';
+    document.getElementById('tvaToDeclare').textContent = formatCurrency(Math.abs(bal.amount));
+    document.getElementById('tvaReportNote').textContent = `Période ${per.label} : du ${fiscalDateFr(per.start)} au ${fiscalDateFr(per.end)}, à déclarer avant le ${fiscalDateFr(per.due)}.` +
+        (col.creditsIgnored ? ` ${col.creditsIgnored} avoir(s) non déduit(s) sur la base encaissements : à traiter avec votre comptable.` : '');
+    document.getElementById('tvaNextDeadline').textContent = next ? `${fiscalDateFr(next.due)} — déclaration ${next.label}` : '—';
+}
+
+function renderVatPurchases() {
+    const list = (Storage.get('vatPurchases', []) || []).slice().sort((a, b) => fiscalDay(b.date).localeCompare(fiscalDay(a.date)));
+    document.getElementById('vatPurchasesBody').innerHTML = list.map(p => `
+        <tr><td>${escapeHtml(fiscalDay(p.date))}</td><td>${escapeHtml(p.supplier || '')}<br><small>${escapeHtml(p.ref || '')}</small></td>
+        <td>${formatCurrency(fiscalNum(p.ht))}</td><td>${formatCurrency(fiscalNum(p.tva))}</td>
+        <td><button class="btn btn-secondary" onclick="deleteVatPurchase('${escapeHtml(String(p.id))}')">Supprimer</button></td></tr>`).join('')
+        || '<tr><td colspan="5" class="subtitle">Aucun achat saisi.</td></tr>';
+}
+function vpSuggestTva() {
+    const tvaEl = document.getElementById('vpTVA');
+    if (tvaEl.value !== '' && tvaEl.dataset.touched === '1') return;
+    const ht = parseFloat(document.getElementById('vpHT').value);
+    tvaEl.value = isFinite(ht) ? fiscalR2(ht * 0.2).toFixed(2) : '';   // proposition au taux normal de 20 %, modifiable
+}
+function addVatPurchase() {
+    const date = document.getElementById('vpDate').value;
+    const supplier = document.getElementById('vpSupplier').value.trim();
+    const ref = document.getElementById('vpRef').value.trim();
+    const ht = parseFloat(document.getElementById('vpHT').value);
+    const tva = parseFloat(document.getElementById('vpTVA').value);
+    if (!date || !supplier || !isFinite(ht) || ht < 0 || !isFinite(tva) || tva < 0) { showToast('Date, fournisseur, HT et TVA sont obligatoires', 'error'); return; }
+    const list = (Storage.get('vatPurchases', []) || []).slice();
+    list.push({ id: uuid(), date, supplier: supplier.slice(0, 120), ref: ref.slice(0, 60), ht, tva });
+    Storage.set('vatPurchases', list);
+    ['vpSupplier', 'vpRef', 'vpHT', 'vpTVA'].forEach(id => { document.getElementById(id).value = ''; });
+    delete document.getElementById('vpTVA').dataset.touched;
+    renderVatReport(false);
+    showToast('Achat ajouté ✓', 'success');
+}
+function deleteVatPurchase(id) {
+    Storage.set('vatPurchases', (Storage.get('vatPurchases', []) || []).filter(p => String(p.id) !== String(id)));
+    renderVatReport(false);
+}
+function exportVatReportCSV() {
+    const regime = document.getElementById('tvaRegime').value;
+    if (regime === 'exempt') return;
+    const per = vatPeriods(regime, parseInt(document.getElementById('tvaYear').value, 10)).find(p => p.key === document.getElementById('tvaPeriod').value);
+    if (!per) return;
+    const basis = document.getElementById('tvaBasis').value;
+    const col = vatCollected(Storage.get('invoices', []), per, basis);
+    const ded = vatDeductible(Storage.get('vatPurchases', []), per);
+    const csv = vatReportCsv(per, basis, col, ded, vatBalance(col.tva, ded.tva));
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rapport-tva-${per.label.replace(/\s+/g, '-')}-${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    showToast('Rapport TVA téléchargé ✓', 'success');
 }
 
 function switchTab(tab) {
@@ -9373,7 +9636,7 @@ function renderReportFiscal() {
         tips.push(`🏥 Provisionnez environ <strong>${formatCurrency(cnssAmount / 12)}</strong> par mois pour vos cotisations.`);
     }
     
-    tips.push('📅 La <strong>déclaration mensuelle</strong> se fait sur <strong>cnss.ma</strong> ou via votre comptable, avant le 30 du mois suivant.');
+    tips.push('📅 Échéances de déclaration : voir la page <strong>CNSS</strong> et l\'onglet <strong>Impôts &amp; TVA</strong> (dates à valider sur les portails officiels, <strong>tax.gov.ma</strong> et <strong>damancom.ma</strong>).');
     tips.push('💡 Le paiement libératoire AE couvre <strong>CNSS + IR</strong>. Pas de déclaration IR séparée.');
     
     if (pctPlafond >= 90) {
