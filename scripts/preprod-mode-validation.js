@@ -450,7 +450,7 @@ async function test() {
           await sleep(15);
         }
       });
-      await sleep(500);
+      const t0 = Date.now(); while (recs.filter((z) => z.ok).length < 8 && Date.now() - t0 < 10000) await sleep(50);   // la bascule ne part qu'après ≥ 8 écritures acceptées
       const f = await flipRetry(us.x, 'documents');
       await sleep(400); stop = true; await Promise.all(run);
       return { recs, flip: f, opened: conns.length };
@@ -466,7 +466,7 @@ async function test() {
     const inD = new Set((await q('SELECT id FROM public.documents WHERE user_id=$1::uuid', [us.x])).map((z) => z.id));
     const lost = acc.filter((z) => !inD.has(z.id)).map((z) => z.id);
     const bad = ref.filter((z) => z.kind === 'infrastructure' || z.kind === 'inattendu');
-    ck(`x palier ${level} (${writers} écrivains) : bascule legacy → documents ${R.flip && R.flip.ok ? 'faite' : 'NON faite ' + jstr(R.flip).slice(0, 150)} ; ${acc.length} écritures acceptées, toutes retrouvées dans documents (${lost.length} perdue)`, R.flip && R.flip.ok === true && acc.length > 0 && lost.length === 0, `perdues: ${lost.slice(0, 5).join(',')}`);
+    ck(`x palier ${level} (${writers} écrivains) : bascule legacy → documents ${R.flip && R.flip.ok ? 'faite' : 'NON faite ' + jstr(R.flip).slice(0, 150)} ; ${acc.length} écritures acceptées, toutes retrouvées dans documents (${lost.length} perdue)`, R.flip && R.flip.ok === true && acc.length >= 8 && lost.length === 0, `perdues: ${lost.slice(0, 5).join(',')}`);
     ck(`x palier ${level} : refus tous explicites et attendus (42501 MODE_NOUVEAU_STOCKAGE) — ${ref.length} refus ; erreurs d'infrastructure ou inattendues : ${bad.length}`, ref.length > 0 && bad.length === 0, bad.slice(0, 3).map((z) => z.kind + ' ' + z.code + ' ' + z.message).join(' | '));
     const back = await flipRetry(us.x, 'legacy');
     const inL = new Set(((await q1("SELECT value v FROM public.user_data WHERE user_id=$1::uuid AND key='invoices'", [us.x])).v || []).map((e) => e.id));
