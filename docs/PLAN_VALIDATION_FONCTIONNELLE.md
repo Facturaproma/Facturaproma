@@ -64,5 +64,5 @@ Préalable : cette campagne **ne peut démarrer** que sur une préproduction san
 
 * Les tests navigateur ont tourné en réel une seule fois (run 39779883156, 94/94) avec le script hCaptcha **bloqué dans le navigateur de test** : le chemin avec jeton hCaptcha réel n'est donc pas couvert, et la cause du blocage « Connexion... » du run précédent reste une hypothèse non observée directement.
 * `F1`–`F5` ont tourné en réel une fois (94/94) ; les messages d'erreur ne sont validés que pour les cas couverts.
-* Le changement D1 (envoi réel de la file hors ligne du mode historique) concerne **tous** les comptes une fois fusionné ; à valider séparément en conditions réelles avant toute mise en production.
+* Le changement D1 (envoi réel de la file hors ligne du mode historique) concerne **tous** les comptes une fois fusionné. Il a été validé en conditions réelles sur un compte ORDINAIRE en ancien stockage (ui-l, sections B1–B4 du run 39779883156 : écriture hors ligne → reconnexion → envoi vérifié côté serveur, licence inactive, jeton refusé, réponse perdue).
 * `backup.yml:80` masque une erreur par `|| echo ::warning::` (non modifié, à corriger plus tard).
