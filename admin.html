@@ -3133,7 +3133,7 @@ async function reopenRequest(requestId) {
     }
 }
 
-function contactByWhatsApp(email, tier, price) {
+async function contactByWhatsApp(email, tier, price) {
     const tierLabels = {
         lifetime: 'À vie (offert)',
         monthly: 'Mensuel (49 DH/mois)',
@@ -3142,7 +3142,24 @@ function contactByWhatsApp(email, tier, price) {
         business: 'Business Mensuel'
     };
     
-    const msg = `Bonjour 🇲🇦,\n\nMerci pour votre demande d'abonnement à FacturaPro !\n\n📋 Plan choisi : ${tierLabels[tier]}\n💰 Montant : ${price} DH\n📧 Email : ${email}\n\n💳 Voici les modalités de paiement :\n\n1️⃣ VIREMENT BANCAIRE\n   Bénéficiaire : FacturaPro\n   RIB : [À COMPLÉTER]\n   Référence : ${email}\n\n2️⃣ Une fois le paiement effectué, envoyez-nous le justificatif par retour de message.\n\n3️⃣ Vous recevrez votre code d'activation sous 24h.\n\nDes questions ? Je suis là !\n\n— FacturaPro`;
+    // Coordonnées bancaires lues dans Admin → Réglages (jamais de RIB factice envoyé à un client)
+    let cfg = {};
+    try {
+        const { data, error } = await supaClient.from('admin_settings').select('key, value');
+        if (error) throw error;
+        (data || []).forEach(row => cfg[row.key] = (row.value || '').trim());
+    } catch (err) {
+        showToast('Réglages illisibles : ' + err.message, 'error');
+        return;
+    }
+    if (!cfg.bank_rib) {
+        showToast('Renseignez d\'abord le RIB dans Réglages avant d\'écrire au client', 'error');
+        return;
+    }
+    const benef = cfg.bank_beneficiary || 'FacturaPro';
+    const bankLine = cfg.bank_name ? `\n   Banque : ${cfg.bank_name}` : '';
+
+    const msg = `Bonjour 🇲🇦,\n\nMerci pour votre demande d'abonnement à FacturaPro !\n\n📋 Plan choisi : ${tierLabels[tier]}\n💰 Montant : ${price} DH\n📧 Email : ${email}\n\n💳 Voici les modalités de paiement :\n\n1️⃣ VIREMENT BANCAIRE\n   Bénéficiaire : ${benef}${bankLine}\n   RIB : ${cfg.bank_rib}\n   Référence : ${email}\n\n2️⃣ Une fois le paiement effectué, envoyez-nous le justificatif par retour de message.\n\n3️⃣ Vous recevrez votre code d'activation sous 24h.\n\nDes questions ? Je suis là !\n\n— FacturaPro`;
     
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }

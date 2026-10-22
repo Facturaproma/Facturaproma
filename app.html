@@ -10831,6 +10831,10 @@ async function purchaseLicense(tier) {
             requestSent = true;
         } catch (err) {
             console.error('Failed to send subscription request:', err);
+            if (/demande déjà en attente/.test(String((err && err.message) || ''))) {
+                alert('ℹ️ Vous avez déjà une demande d\'abonnement en cours de traitement.\n\nPas besoin d\'en refaire une : notre équipe vous contacte pour le virement et vous envoie votre code d\'activation.\n\n' + contactLinesText());
+                return;
+            }
             // Fallback : on continue quand même pour ne pas bloquer le client
         }
     }

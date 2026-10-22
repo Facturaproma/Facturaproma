@@ -36,6 +36,7 @@ guard('app.html : aucun numéro ou e-mail de contact factice codé en dur', !/6X
 guard('index.html : aucun numéro ou e-mail de contact factice codé en dur', !/6XX|wa\.me\/2126000|hello@facturapro\.ma/.test(idx));
 guard('app.html : plus d\'offre « espèces » pour payer l\'abonnement ; plus de code promo public', !/Espèces \(Casa|ESPÈCES|COMPTABLE'/.test(app) && !/sectionPromoCode"/.test(app.replace(/getElementById\('sectionPromoCode'\)/g, '')));
 guard('offre Fondateur : 30 places partout (accueil, conditions, administration, README)', [idx, legal, admin, readme].every((t) => !/\b20 (places|codes|max)/.test(t)) && /30 places/.test(idx) && /30 places/.test(legal) && /FOUNDER_LIMIT = 30/.test(admin));
+guard('admin.html : le message au client n\'envoie jamais un RIB factice (« [À COMPLÉTER] ») ; le RIB vient des Réglages', !/À COMPLÉTER/i.test(admin) && /cfg\.bank_rib/.test(admin));
 const sqlContact = fs.existsSync(path.join(ROOT, 'sql/18_contact_public.sql'));
 guard('sql/18_contact_public.sql présent (fonction get_contact_info utilisée par app.html)', sqlContact && /get_contact_info/.test(app));
 const todos = (legal.match(/class="todo"/g) || []).length;
