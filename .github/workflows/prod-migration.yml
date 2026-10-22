@@ -63,10 +63,12 @@ jobs:
         if: steps.ph.outputs.phase != 'idle'
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json,hashlib,sys
+          PHASE='${{ steps.ph.outputs.phase }}' python3 - <<'PY'
+          import json,hashlib,sys,os
           e=json.load(open('ops/prod-migration.json'))['expected']
-          for f,k in (('sql/14_numerotation_et_verrouillage.sql','sql14_sha256_prefix'),('sql/18_contact_public.sql','sql18_sha256_prefix')):
+          files={'apply':(('sql/14_numerotation_et_verrouillage.sql','sql14_sha256_prefix'),('sql/18_contact_public.sql','sql18_sha256_prefix')),
+                 'apply19':(('sql/19_journal_sans_doublons.sql','sql19_sha256_prefix'),)}.get(os.environ['PHASE'],())
+          for f,k in files:
               h=hashlib.sha256(open(f,'rb').read()).hexdigest()
               if not h.startswith(e[k]): print('::error::Empreinte inattendue pour '+f); sys.exit(1)
           print('Empreintes des scripts : OK')
@@ -84,9 +86,18 @@ jobs:
             test "$USERS" = "9" || { echo "::error::Nombre de comptes inattendu, arrêt."; exit 1; }
             test "$HAS14" = "0" -a "$HAS18" = "0" || { echo "::error::SQL 14/18 déjà présents (ou partiellement) : arrêt pour analyse."; exit 1; }
           fi
+          if [ "$PHASE" = "apply19" ]; then
+            test "$USERS" = "9" || { echo "::error::Nombre de comptes inattendu, cible incertaine : arrêt."; exit 1; }
+            test "$HAS14" = "1" -a "$HAS18" = "1" || { echo "::error::SQL 14/18 absents : état inattendu, arrêt."; exit 1; }
+            T=$(psql -qAt -c "select count(*) from pg_trigger where tgname like 'trg_guard_issued_invoices%' and not tgisinternal")
+            test "$T" = "3" || { echo "::error::Déclencheurs de verrouillage absents ($T/3) : arrêt."; exit 1; }
+            ALREADY=$(psql -qAt -c "select count(*) from pg_proc where proname='guard_issued_invoices' and prosrc like '%skip_log%'")
+            test "$ALREADY" = "0" || { echo "::error::Correctif 19 déjà présent : rien à faire, arrêt."; exit 1; }
+            psql -qAt -c "select 'avant: doc_events='||(select count(*) from public.doc_events)||' doc_counters_somme='||coalesce((select sum(last_value) from public.doc_counters),0)||' user_data='||(select count(*) from public.user_data)" | tee /tmp/before.txt
+          fi
 
       - name: Sauvegarde chiffrée juste avant
-        if: steps.ph.outputs.phase == 'apply'
+        if: steps.ph.outputs.phase == 'apply' || steps.ph.outputs.phase == 'apply19'
         env:
           PP: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
@@ -102,7 +113,7 @@ jobs:
           ls -l *.gpg
 
       - name: Déposer la sauvegarde chiffrée
-        if: steps.ph.outputs.phase == 'apply'
+        if: steps.ph.outputs.phase == 'apply' || steps.ph.outputs.phase == 'apply19'
         uses: actions/upload-artifact@v4
         with:
           name: sauvegarde-avant-migration
@@ -151,6 +162,72 @@ jobs:
           ! grep -q "NOTICE:  KO" /tmp/c.out || { echo "::error::Un contrôle d'émission a échoué (KO). Voir le plan de retour arrière."; exit 1; }
           test "$(grep -c 'NOTICE:  OK' /tmp/c.out)" -ge 7 || { echo "::error::Moins de 7 contrôles OK."; exit 1; }
           psql -qAt -c "select 'compte_test_restant='||count(*) from auth.users where email='verif-sql14@test.invalid'"
+          psql -qAt -c "select 'user_data_final='||count(*) from public.user_data"
+
+      - name: Appliquer SQL 19 uniquement (une transaction, contrôles intégrés)
+        if: steps.ph.outputs.phase == 'apply19'
+        run: |
+          set -euo pipefail
+          cat > /tmp/checks19.sql <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT count(*) FROM pg_trigger WHERE tgname LIKE 'trg_guard_issued_invoices%' AND NOT tgisinternal) <> 3 THEN RAISE EXCEPTION 'CONTROLE: déclencheurs'; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname='guard_issued_invoices' AND pronamespace='public'::regnamespace AND prosrc LIKE '%skip_log%') THEN RAISE EXCEPTION 'CONTROLE: correctif absent'; END IF;
+            IF has_function_privilege('anon','public.guard_issued_invoices()','EXECUTE') OR has_function_privilege('authenticated','public.guard_issued_invoices()','EXECUTE') THEN RAISE EXCEPTION 'CONTROLE: fonction exposée'; END IF;
+            IF NOT (SELECT prosecdef FROM pg_proc WHERE proname='guard_issued_invoices' AND pronamespace='public'::regnamespace) THEN RAISE EXCEPTION 'CONTROLE: SECURITY DEFINER perdu'; END IF;
+            IF EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE')) THEN RAISE EXCEPTION 'CONTROLE: fonction SECURITY DEFINER exécutable par anon'; END IF;
+            RAISE NOTICE 'CONTROLES TRANSACTION : OK';
+          END $$;
+          SQL
+          psql -v ON_ERROR_STOP=1 --single-transaction -q -f sql/19_journal_sans_doublons.sql -f /tmp/checks19.sql 2>&1 | sed 's/^psql:[^ ]* //' | tail -10
+          echo "SQL 19 appliqué."
+
+      - name: Vérification immédiate après SQL 19 (aucune donnée conservée)
+        if: steps.ph.outputs.phase == 'apply19'
+        run: |
+          set -euo pipefail
+          psql -qAt -c "select 'après: doc_events='||(select count(*) from public.doc_events)||' doc_counters_somme='||coalesce((select sum(last_value) from public.doc_counters),0)||' user_data='||(select count(*) from public.user_data)" | tee /tmp/after.txt
+          python3 - <<'PY'
+          import re,sys
+          b=dict(re.findall(r'(\w+)=(\d+)',open('/tmp/before.txt').read())); a=dict(re.findall(r'(\w+)=(\d+)',open('/tmp/after.txt').read()))
+          for k in ('doc_events','doc_counters_somme'):
+              if int(a[k])<int(b[k]): print('::error::'+k+' a diminué (avant %s, après %s)'%(b[k],a[k])); sys.exit(1)
+          print('Aucune suppression d\'événement ni de compteur.')
+          PY
+          psql -qAt -c "select 'permissions: anon_exec='||has_function_privilege('anon','public.guard_issued_invoices()','EXECUTE')||' auth_exec='||has_function_privilege('authenticated','public.guard_issued_invoices()','EXECUTE')||' anon_next_doc='||has_function_privilege('anon','public.next_doc_number(text,int)','EXECUTE')||' anon_contact='||has_function_privilege('anon','public.get_contact_info()','EXECUTE')"
+          # Test de non-doublon sous ROLLBACK : compte éphémère, rien n'est conservé
+          cat > /tmp/dup.sql <<'SQL'
+          begin;
+            insert into auth.users(id,email,created_at) values ('00000000-0000-4000-8000-0000000000bb','verif-sql19@test.invalid',now());
+            set local role authenticated;
+            select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000bb',true);
+            do $$
+            declare n int; e int; i int; v jsonb;
+            begin
+              n := public.next_doc_number('invoice',0);
+              v := jsonb_build_array(jsonb_build_object('id','x','number','FAC-2026-'||lpad(n::text,4,'0'),'status','sent','type','invoice','date','2026-10-22','totalTTC',120,'paidAmount',0));
+              FOR i IN 1..4 LOOP
+                insert into public.user_data(user_id,key,value) values ('00000000-0000-4000-8000-0000000000bb','invoices',v)
+                on conflict (user_id,key) do update set value=excluded.value;
+              END LOOP;
+              select count(*) into e from public.doc_events where user_id='00000000-0000-4000-8000-0000000000bb' and action='emission';
+              raise notice '% 4 sauvegardes par upsert : % événement(s) emission (attendu 1)', case when e=1 then 'OK' else 'KO' end, e;
+              v := jsonb_set(v,'{0,status}','"paid"'); v := jsonb_set(v,'{0,paidAmount}','120');
+              insert into public.user_data(user_id,key,value) values ('00000000-0000-4000-8000-0000000000bb','invoices',v) on conflict (user_id,key) do update set value=excluded.value;
+              select count(*) into e from public.doc_events where user_id='00000000-0000-4000-8000-0000000000bb' and action='statut';
+              raise notice '% paiement : % événement(s) statut (attendu 1)', case when e=1 then 'OK' else 'KO' end, e;
+              begin
+                v := jsonb_set(v,'{0,totalTTC}','999');
+                insert into public.user_data(user_id,key,value) values ('00000000-0000-4000-8000-0000000000bb','invoices',v) on conflict (user_id,key) do update set value=excluded.value;
+                raise notice 'KO modification d''une facture émise acceptée';
+              exception when others then raise notice 'OK modification d''une facture émise refusée (%)', left(sqlerrm,22); end;
+            end $$;
+          rollback;
+          SQL
+          psql -v ON_ERROR_STOP=1 -q -f /tmp/dup.sql 2>&1 | tee /tmp/dup.out | sed 's/^psql:[^ ]* //'
+          ! grep -q "NOTICE:  KO" /tmp/dup.out || { echo "::error::Un contrôle de non-doublon a échoué."; exit 1; }
+          test "$(grep -c 'NOTICE:  OK' /tmp/dup.out)" -ge 3 || { echo "::error::Moins de 3 contrôles OK."; exit 1; }
+          psql -qAt -c "select 'compte_test_restant='||count(*) from auth.users where email='verif-sql19@test.invalid'"
           psql -qAt -c "select 'user_data_final='||count(*) from public.user_data"
 
       - name: Retour arrière (phase rollback) — seulement si aucun compteur ni journal produit
