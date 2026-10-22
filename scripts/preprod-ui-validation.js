@@ -436,6 +436,14 @@ async function cleanup() {
   CTX = await makeCtx();
   out('### 15. État final des données de test, puis nettoyage (comptes de cette campagne uniquement)');
   const us = await q('SELECT id::text id, email FROM auth.users WHERE email = ANY($1) ORDER BY email', [EMAILS]), uids = us.map((x) => x.id);
+  // C0 : identité exacte des comptes à supprimer (adresses, identifiants, date de création, correspondance avec le run indiqué dans ops/preprod-ui.json)
+  const scope = (() => { try { return require('../ops/preprod-ui.json').cleanup_scope; } catch { return null; } })();
+  const idRows = await q('SELECT id::text id, email, created_at FROM auth.users WHERE email = ANY($1) ORDER BY email', [EMAILS]);
+  const totalUsers = (await q1('SELECT count(*)::int n FROM auth.users')).n;
+  out('- Comptes ciblés (adresse exacte) : ' + idRows.map((r) => `${r.email} / ${r.id} / créé ${new Date(r.created_at).toISOString()}`).join(' ; ') + `. Comptes totaux dans la base : ${totalUsers}.`);
+  const inWin = scope && Array.isArray(scope.created_between) && idRows.every((r) => new Date(r.created_at) >= new Date(scope.created_between[0]) && new Date(r.created_at) <= new Date(scope.created_between[1]));
+  const runsNow = (await q1('SELECT count(*)::int n FROM public._mig_runs')).n;
+  rec('C0', `identité : exactement ${EMAILS.length} comptes aux adresses prévues, tous créés pendant le run ${scope && scope.run} (${scope && scope.created_between && scope.created_between.join(' → ')}), aucune ligne _mig_runs`, `${EMAILS.length} comptes, fenêtre respectée, _mig_runs = 0`, `${idRows.length} comptes, fenêtre ${inWin ? 'respectée' : 'NON respectée'}, _mig_runs = ${runsNow}`, idRows.length === EMAILS.length && !!inWin && runsNow === 0, { fatal: true, proof: 'adresses exactes, UUID et dates affichés ci-dessus' });
   const st = await q(`SELECT u.email, COALESCE((SELECT mode FROM public.doc_store_mode m WHERE m.user_id=u.id),'legacy') mode, (SELECT count(*) FROM public.documents d WHERE d.user_id=u.id)::int docs, (SELECT count(*) FROM public.doc_payments d WHERE d.user_id=u.id)::int pays,
       (SELECT count(*) FROM public.doc_history d WHERE d.user_id=u.id)::int hist, (SELECT count(*) FROM public.user_data d WHERE d.user_id=u.id)::int ud FROM auth.users u WHERE u.id::text = ANY($1) ORDER BY 1`, [uids]);
   out('| Compte | mode | documents | paiements | journal | lignes user_data |\n|---|---|---|---|---|---|\n' + st.map((r) => `| ${r.email.split('@')[0]} | ${r.mode} | ${r.docs} | ${r.pays} | ${r.hist} | ${r.ud} |`).join('\n'));
