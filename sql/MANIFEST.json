@@ -165,5 +165,14 @@
       "15_documents.sql",
       "16_migration_donnees.sql"
     ]
+  },
+  "durcissement_en_attente": {
+    "_comment": "PRÉPARÉ, NON EXÉCUTÉ : jamais installé par les outils automatiques. À lancer à la main, préproduction d'abord, puis production après accord écrit. Voir docs/SECURITE_PRIVILEGES.md.",
+    "fichiers": [
+      "24_moindre_privilege.sql"
+    ],
+    "retour_arriere": [
+      "rollback/24_retour_arriere.sql"
+    ]
   }
 }
