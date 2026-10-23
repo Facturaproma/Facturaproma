@@ -116,6 +116,16 @@
         "06",
         "08"
       ]
+    },
+    {
+      "file": "22_anti_double_abonnement.sql",
+      "role": "Refuse code et demande d'abonnement pour un client déjà abonné (sauf formule plus longue)",
+      "reexecutable": true,
+      "depend": [
+        "07",
+        "20",
+        "21"
+      ]
     }
   ],
   "exclus": [
