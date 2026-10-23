@@ -3116,7 +3116,7 @@ function renderRequests() {
             <td>${tierLabels[r.tier] || r.tier}</td>
             <td><strong>${parseFloat(r.final_price).toLocaleString('fr-FR')} DH</strong>${r.base_price !== r.final_price ? `<br><small style="text-decoration:line-through; color: var(--ink-mute);">${r.base_price} DH</small>` : ''}</td>
             <td>${r.promo_code ? `<span class="badge badge-trial">${r.promo_code}</span>` : '—'}</td>
-            <td>${statusBadges[r.status] || r.status}</td>
+            <td>${statusBadges[r.status] || r.status}${(r.status === 'pending' || r.status === 'contacted') && doubleSubscriptionBlock(r.client_email, r.tier) ? '<br><span class="badge badge-danger" title="Abonnement actif : seule une formule plus longue est possible">⛔ Déjà abonné</span>' : ''}</td>
             <td>
                 ${(r.status === 'pending' || r.status === 'contacted') ? `
                     <button class="btn ${r.status === 'pending' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="contactRequest('${esc(r.id)}')" title="Envoyer le montant et le RIB par e-mail ou WhatsApp">
@@ -3213,10 +3213,41 @@ async function contactRequest(requestId) {
 }
 
 // Étape 2 (après paiement) : génère le code puis l'envoie au client (e-mail ou WhatsApp)
+// ---- Règle « pas de double abonnement » (aussi appliquée par la base, sql/22) ----
+// Un client avec un abonnement payant ACTIF ne reçoit un nouveau code que pour une formule PLUS LONGUE.
+const ADMIN_TIER_DAYS = { monthly: 30, business: 30, semestrial: 183, annual: 365, founder: 365, lifetime: 1e9 };
+function adminTierDays(key) {
+    if (ADMIN_TIER_DAYS[key] != null) return ADMIN_TIER_DAYS[key];
+    const p = (typeof customPlans !== 'undefined' ? customPlans : []).find(x => x.key === key);
+    return p ? Number(p.duration_days) : 30;
+}
+// Durée de l'abonnement actif d'un compte (0 = aucun)
+function accountPaidDays(acct, codes) {
+    if (!acct || acct.status === 'suspended' || !PAID_TYPES.includes(acct.type)) return 0;
+    if (acct.type !== 'lifetime' && acct.expires_at && new Date(acct.expires_at) < new Date()) return 0;
+    if (acct.type === 'lifetime') return ADMIN_TIER_DAYS.lifetime;
+    const c = acct.code ? (codes || []).find(x => x.code === acct.code) : null;
+    return Math.max(adminTierDays(acct.type), c ? adminTierDays(c.type) : 0);
+}
+// Renvoie un message de refus, ou null si le code peut être généré
+function doubleSubscriptionBlock(email, type) {
+    if (!accountsAvailable || !email) return null;
+    const acct = allAccounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
+    const cur = accountPaidDays(acct, allCodes);
+    if (cur && adminTierDays(type) <= cur) {
+        const exp = acct.expires_at ? ' jusqu\'au ' + new Date(acct.expires_at).toLocaleDateString('fr-FR') : ' (à vie)';
+        return `${email} a déjà un abonnement actif${exp} : seule une formule plus longue peut lui être attribuée.`;
+    }
+    return null;
+}
+const isDoubleSubError = (e) => /already_subscribed/.test(String((e && e.message) || ''));
+
 async function processRequest(requestId) {
     const r = allRequests.find(x => x.id === requestId);
     if (!r) return;
     const email = r.client_email, tier = r.tier;
+    const blocked = doubleSubscriptionBlock(email, tier);
+    if (blocked) { showToast(blocked, 'error'); return; }
     const warn = r.status === 'pending' ? `\n\n⚠️ Le montant et le RIB n'ont pas encore été envoyés à ce client.` : '';
     if (!confirm(`Le paiement de ${r.final_price} DH est-il bien reçu ?\n\nGénérer le code de licence (${requestTierLabel(tier)}) pour ${email} ? La demande sera marquée « Traitée ».${warn}`)) return;
     
@@ -3253,7 +3284,7 @@ async function processRequest(requestId) {
         });
         await loadAllData();
     } catch (err) {
-        showToast('Erreur: ' + err.message, 'error');
+        showToast(isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message, 'error');
         console.error(err);
     }
 }
@@ -3658,6 +3689,8 @@ async function generateCode() {
         type = 'annual';
         note = ('FONDATEUR 299 DH/an ' + note).trim();
     }
+    const blockedGen = doubleSubscriptionBlock(email, type);
+    if (blockedGen) { showToast(blockedGen, 'error'); return; }
     
     const code = generateLicenseCode();
     
@@ -3685,7 +3718,7 @@ async function generateCode() {
         showToast('Code généré avec succès !', 'success');
         await loadAllData();
     } catch (err) {
-        showToast('Erreur: ' + err.message, 'error');
+        showToast(isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message, 'error');
         console.error(err);
     }
 }
@@ -3840,6 +3873,8 @@ async function activateLicense() {
         type = 'annual';
         finalNote = ('FONDATEUR 299 DH/an ' + note).trim();
     }
+    const blockedAct = doubleSubscriptionBlock(email, type);
+    if (blockedAct) { showToast(blockedAct, 'error'); return; }
 
     const code = generateLicenseCode();
     
@@ -3867,7 +3902,7 @@ async function activateLicense() {
         showToast('Code généré ! Envoie-le au client.', 'success');
         await loadAllData();
     } catch (err) {
-        showToast('Erreur: ' + err.message, 'error');
+        showToast(isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message, 'error');
     }
 }
 

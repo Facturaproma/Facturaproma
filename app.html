@@ -4258,7 +4258,7 @@
 
             <div class="pricing-cards" id="pricingCards">
                 <!-- Mensuel -->
-                <div class="pricing-tier">
+                <div class="pricing-tier" data-tier="monthly">
                     <h3>⭐ Mensuel</h3>
                     <div class="tier-tagline">Sans engagement</div>
                     <div class="tier-price">
@@ -4281,7 +4281,7 @@
                 </div>
 
                 <!-- Annuel (FEATURED) -->
-                <div class="pricing-tier featured">
+                <div class="pricing-tier featured" data-tier="annual">
                     <div class="featured-badge">🏆 Plus populaire</div>
                     <h3>🏆 Annuel</h3>
                     <div class="tier-tagline">Le meilleur rapport qualité/prix</div>
@@ -4308,7 +4308,7 @@
                 </div>
 
                 <!-- Semestriel (non vendu, masqué) -->
-                <div class="pricing-tier" style="display:none;">
+                <div class="pricing-tier" data-tier="semestrial" style="display:none;">
                     <h3>🔥 Semestriel</h3>
                     <div class="tier-tagline">Engagement moyen</div>
                     <div class="tier-price">
@@ -10927,6 +10927,31 @@ function planPeriodLabel(days) {
     if (d % 30 === 0) return (d / 30) + ' mois';
     return d + ' jours';
 }
+// Durée (jours) d'une formule : sert à n'autoriser, pour un client déjà abonné, qu'une formule PLUS LONGUE (règle aussi appliquée par la base, sql/22)
+const TIER_DAYS = { monthly: 30, business: 30, semestrial: 183, annual: 365, founder: 365, lifetime: 1e9 };
+function tierDays(key) {
+    if (TIER_DAYS[key] != null) return TIER_DAYS[key];
+    const p = CUSTOM_PLANS.find(x => x.key === key);
+    return p ? Number(p.duration_days) : 30;
+}
+// Durée de l'abonnement payant actif du client (0 = pas d'abonnement actif : essai, expiré, suspendu)
+function currentPaidDays() {
+    const info = License.get();
+    if (!info || info.status !== 'active') return 0;
+    if (info.type === 'lifetime') return TIER_DAYS.lifetime;
+    if (!PAID_TIER_TYPES.includes(info.type) || License.isExpired()) return 0;
+    return Math.max(tierDays(info.type), info.planKey ? tierDays(info.planKey) : 0);
+}
+// Masque les formules qui ne seraient pas plus longues que l'abonnement actif
+function applyPricingEligibility() {
+    const grid = document.getElementById('pricingCards');
+    if (!grid) return;
+    const cur = currentPaidDays();
+    if (!cur) return;
+    grid.querySelectorAll('.pricing-tier[data-tier]').forEach(card => {
+        if (tierDays(card.getAttribute('data-tier')) <= cur) card.style.display = 'none';
+    });
+}
 function planRank(days) { return days >= 365 ? 3 : days >= 183 ? 2 : 1; }
 function renderCustomPlanCards() {
     const grid = document.getElementById('pricingCards');
@@ -10936,6 +10961,7 @@ function renderCustomPlanCards() {
         const card = document.createElement('div');
         card.className = 'pricing-tier';
         card.setAttribute('data-custom-plan', p.key);
+        card.setAttribute('data-tier', p.key);
         const per = planPeriodLabel(p.duration_days);
         card.innerHTML = `<h3>🧩 ${escapeHtml(p.label)}</h3>` +
             `<div class="tier-tagline">${escapeHtml(p.tagline || '')}</div>` +
@@ -10945,6 +10971,7 @@ function renderCustomPlanCards() {
         card.querySelector('button').addEventListener('click', () => purchaseLicense(p.key));
         grid.appendChild(card);
     });
+    applyPricingEligibility();
 }
 async function loadCustomPlans() {
     if (!USE_SUPABASE || !ensureSupabase()) return;
@@ -11047,14 +11074,15 @@ function renderLicensePage() {
         heroSubtitle.textContent = `Votre abonnement est actif jusqu'au ${expDate}.`;
         
         // Pricing : permettre de switcher de palier (sauf si déjà au top)
-        if (info.type === 'annual') {
+        if (info.type === 'annual' && !CUSTOM_PLANS.some(p => tierDays(p.key) > currentPaidDays())) {
             // Annual = top tier, masquer les options "downgrade"
             if (pricingTitle) pricingTitle.textContent = '✨ Vous êtes au meilleur tarif';
             hide(pricingCards);
         } else {
-            if (pricingTitle) pricingTitle.textContent = '⬆️ Changer de formule';
+            if (pricingTitle) pricingTitle.textContent = '⬆️ Passer à une formule plus longue';
             show(pricingTitle);
             show(pricingCards);
+            applyPricingEligibility();
         }
         show(sectionPromo);
         show(sectionPayment);
@@ -11244,19 +11272,14 @@ async function purchaseLicense(tier) {
         return;
     }
     
-    const PAID_TIERS = ['monthly', 'semestrial', 'annual', 'business'];
-    if (PAID_TIERS.includes(currentLicense.type) && 
-        currentLicense.status === 'active' && !License.isExpired()) {
-        // Abonnement actif → autoriser uniquement upgrade vers tier supérieur
-        const tierOrder = { monthly: 1, semestrial: 2, annual: 3, business: 1 };
-        const currentRank = (currentLicense.planKey && TIER_CONFIG[currentLicense.planKey] && TIER_CONFIG[currentLicense.planKey].rank) || tierOrder[currentLicense.type] || 0;
-        const newRank = (TIER_CONFIG[tier] && TIER_CONFIG[tier].rank) || tierOrder[tier] || 0;
-        
-        if (newRank <= currentRank) {
-            showToast(`Vous avez déjà un abonnement actif (${TIER_CONFIG[currentLicense.type]?.label || currentLicense.type})`, 'info');
+    const curDays = currentPaidDays();
+    if (curDays) {
+        // Abonnement actif : seule une formule plus longue est possible (pas de double demande)
+        if (tierDays(tier) <= curDays) {
+            const exp = currentLicense.expiresAt ? new Date(currentLicense.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+            showToast(`Vous avez déjà un abonnement actif${exp ? ' jusqu\'au ' + exp : ''}. Vous pourrez en demander un nouveau à son expiration, ou choisir une formule plus longue.`, 'info');
             return;
         }
-        // Sinon, c'est un upgrade légitime, on continue
     }
     // ═════════════════════════════════════════════════
     
@@ -11304,6 +11327,10 @@ async function purchaseLicense(tier) {
             requestSent = true;
         } catch (err) {
             console.error('Failed to send subscription request:', err);
+            if (/already_subscribed/.test(String((err && err.message) || ''))) {
+                showToast('Vous avez déjà un abonnement actif : seule une formule plus longue peut être demandée.', 'info');
+                return;
+            }
             if (/demande déjà en attente/.test(String((err && err.message) || ''))) {
                 alert('ℹ️ Vous avez déjà une demande d\'abonnement en cours de traitement.\n\nPas besoin d\'en refaire une : notre équipe vous contacte pour le virement et vous envoie votre code d\'activation.\n\n' + contactLinesText());
                 return;
