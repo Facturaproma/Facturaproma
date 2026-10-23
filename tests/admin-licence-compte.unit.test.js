@@ -18,6 +18,7 @@ t('Mensuel actif -> Annuel : changement immédiat autorisé (plus long)', api.li
 t('Mensuel actif -> Mensuel : programmé', api.licenseChangeDecision(monthly, 'monthly', 30, []).mode === 'schedule');
 const old = { type: 'annual', status: 'active', expires_at: new Date(Date.now() - D).toISOString() };
 t('abonnement expiré, essai ou suspendu : changement libre', api.licenseChangeDecision(old, 'monthly', 30, []).mode === 'immediate' && api.licenseChangeDecision({ type: 'trial', status: 'active', expires_at: end }, 'monthly', 30, []).mode === 'immediate' && api.licenseChangeDecision({ ...annual, status: 'suspended' }, 'monthly', 30, []).mode === 'immediate');
-t('à vie : tout refusé, rien à programmer', api.licenseChangeDecision({ type: 'lifetime', status: 'active', expires_at: null }, 'monthly', 30, []).mode === 'blocked');
+const vie = api.licenseChangeDecision({ type: 'lifetime', status: 'active', expires_at: null }, 'monthly', 30, []);
+t('à vie (offert) : l\'admin peut le corriger, avec confirmation', vie.mode === 'immediate' && vie.warnLifetime === true && api.licenseChangeDecision({ type: 'lifetime', status: 'active', expires_at: null }, 'keep', 30, []).warnLifetime === false);
 t('interface : confirmation « PROGRAMMER », type conservé, indication dans la fenêtre', /PROGRAMMER \$\{decision\.days\} jours/.test(html) && /type = null;/.test(html) && /id="licHint"/.test(html) && /refreshLicenseHint\(\)/.test(html));
 console.log('OK');
