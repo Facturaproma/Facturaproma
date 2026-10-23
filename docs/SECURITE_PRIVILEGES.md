@@ -22,7 +22,7 @@ Droits par défaut : le rôle `postgres` accorde encore tous les droits aux **fu
 
 - `anon` : retire tout sur `user_data`, `doc_counters`, `doc_events`.
 - `authenticated` : retire TRUNCATE, REFERENCES, TRIGGER, MAINTAIN (PG 17) sur les tables listées dans le script.
-- Nombre de privilèges retirés attendu (message `NOTICE` en fin d'exécution) : **58 en production, 61 en préproduction** (si une valeur différente apparaît, s'arrêter et comparer).
+- Nombre de privilèges retirés attendu : **58 en production (dont 14 MAINTAIN), 61 en préproduction (dont 17 MAINTAIN)**. Le message `NOTICE` du SQL Editor n'est pas fiable : le décompte se lit avec `SELECT count(*), count(*) FILTER (WHERE privilege='MAINTAIN') FROM public._fp_acl_backup_24;` (si une valeur différente apparaît, s'arrêter et comparer). Détail préproduction : `anon` 16 + `authenticated` 45.
 - Ne touche : ni RLS (aucune politique modifiée, jamais désactivée), ni données, ni fonctions, ni EXECUTE, ni séquences, ni `service_role`, ni SELECT/INSERT/UPDATE/DELETE de `authenticated`.
 - Sauvegarde exacte des droits retirés dans `public._fp_acl_backup_24` (RLS active, aucun droit client). Transaction unique, contrôles finaux (aucun droit ciblé restant, droits essentiels inchangés, RLS toujours active) : au moindre écart, tout est annulé.
 - Réexécutable : la 2e exécution retire 0 privilège et conserve la sauvegarde d'origine.
@@ -33,7 +33,7 @@ TRUNCATE, VACUUM/REINDEX/LOCK (MAINTAIN), REFERENCES et TRIGGER ne sont jamais �
 ## 3. Procédure (à faire par vous, dans le SQL Editor)
 
 1. **Préproduction** : exécuter `tests/sql/privileges_comparaison.sql` → noter les résultats (AVANT).
-2. Exécuter `sql/24_moindre_privilege.sql` → relever le `NOTICE` (61 attendu).
+2. Exécuter `sql/24_moindre_privilege.sql` (fichier collé en entier, rien de sélectionné, un seul clic sur Run) → lire le décompte dans `_fp_acl_backup_24` (61 attendu, dont 17 MAINTAIN).
 3. Ré-exécuter `tests/sql/privileges_comparaison.sql` → APRÈS : requête 2 = 0 ; empreintes des requêtes 5 et 6 et comptes de la requête 7 **identiques** à AVANT ; requête 3 = 0 ; requête 4 = 0.
 4. Checklist fonctionnelle ci-dessous en préproduction.
 5. Seulement après votre accord écrit : même procédure en **production** (58 attendu).
@@ -72,6 +72,21 @@ Tests automatiques équivalents : `tests/sql/test_moindre_privilege.sql` (anon r
 
 ## 7. Reste à vérifier avant production
 
-- Le privilège **MAINTAIN** n'existe qu'en PostgreSQL 17 : la base locale de test est en 16, donc la branche MAINTAIN n'a **pas** été exécutée réellement ; elle ne l'est qu'en préproduction (PG 17.11). Résultat attendu : `NOTICE` = 61 (dont 17 MAINTAIN ; 14 en production).
+- Le privilège **MAINTAIN** n'existe qu'en PostgreSQL 17 : la base locale de test est en 16, donc la branche MAINTAIN n'a **pas** été exécutée réellement ; elle ne l'est qu'en préproduction (PG 17.11). Résultat attendu : 61 lignes dans `_fp_acl_backup_24` (dont 17 MAINTAIN ; 14 en production, total 58).
 - `grantor` des ACL : relevé indirect (ACL par défaut du propriétaire `postgres`). Si un `REVOKE` laissait un privilège accordé par un autre rôle, le contrôle final du script l'annule et le signale.
 - Aucun test automatisé ne remplace l'essai manuel de la checklist en préproduction.
+
+## 8. Essai en préproduction — pas-à-pas (accord donné le 23/10/2026 ; production exclue)
+
+Contexte relevé en lecture seule : préproduction sans compte ni donnée (seuls `admins` = 1 Master et l'outillage `_fp_*`/`_mig_*` existent) ; production avec données de test (13 comptes, 8 factures), non concernée par cette étape. Rien ne se supprime.
+
+1. **Projet** : URL du SQL Editor contenant `njjaomichdlnoscrnxlz` ; `SELECT current_user, (SELECT env FROM public._fp_env), current_setting('server_version_num');` → `postgres`, `preprod`, ≥ 170000. Sinon STOP.
+2. **Comptes de test** (par vous) : `node scripts/serve-preprod.js` avec `PREPROD_URL` / `PREPROD_ANON_KEY` dans votre terminal ; inscrire le Master (adresse présente dans `admins`), A et B ; confirmer les e-mails.
+3. **Passage de référence** de la checklist (section 4), AVANT la migration. Un FAIL ici n'est pas lié à `sql/24`.
+4. **Avant** : `tests/sql/privileges_comparaison.sql` en entier, résultats copiés dans un fichier. Requête 2 : 16 (`anon`) et 45 (`authenticated`) ; requêtes 3 et 4 : 0 ; garder les empreintes (5, 6) et les comptes (7).
+5. **Exécution** de `sql/24_moindre_privilege.sql`.
+6. **Après** : `_fp_acl_backup_24` = 61 dont 17 MAINTAIN ; la requête de vérification en commentaire de fin de script = 0 ligne ; `privileges_comparaison.sql` : requêtes 2, 3, 4 = 0, empreintes (5, 6) et comptes (7) identiques ; Advisors : 11 informations, 22 avertissements.
+7. **Second passage** de la checklist fonctionnelle.
+8. **Cycle du retour arrière** : `sql/rollback/24_retour_arriere.sql` → requête 2 = 16 et 45, empreintes identiques à l'étape 4 ; puis ré-exécuter `sql/24` → de nouveau 0 et 0.
+
+STOP au premier écart, au premier FAIL non présent à la référence, ou si l'URL / `_fp_env` / la version ne correspondent pas. Le retour arrière ne s'exécute jamais automatiquement (étape 8 : cycle voulu, sur accord).
