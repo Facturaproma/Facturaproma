@@ -3447,12 +3447,13 @@ function openLicenseModal(uid) {
 // Un abonnement payant ACTIF ne peut pas être remplacé par une formule non plus longue avant sa fin :
 // on propose alors de PROGRAMMER la nouvelle formule à la suite (la durée s'ajoute à la fin en cours, le type ne change qu'ensuite).
 function licenseChangeDecision(acct, plan, days, codes) {
+    // « À vie » = accès offert (pas un abonnement payé) : l'admin peut le corriger, avec confirmation
+    if (acct && acct.type === 'lifetime') return { mode: 'immediate', warnLifetime: plan !== 'keep' && plan !== 'lifetime' };
     const cur = accountPaidDays(acct, codes);
     if (!cur || plan === 'keep') return { mode: 'immediate' };
     const end = acct.expires_at ? new Date(acct.expires_at) : null;
     if (plan === 'trial') return { mode: 'blocked', reason: 'Cet abonnement payant est actif : on ne peut pas le remplacer par un essai.' };
     if (adminTierDays(plan) > cur) return { mode: 'immediate' };     // formule plus longue : changement immédiat autorisé
-    if (!end) return { mode: 'blocked', reason: 'Ce compte a déjà un accès à vie : rien à ajouter.' };
     const newEnd = new Date(end.getTime() + (days || 0) * 864e5);
     return { mode: 'schedule', end, newEnd, days };
 }
@@ -3499,6 +3500,7 @@ async function applyLicense() {
         noteToSend = ('Programmé : ' + lbl + ' à la suite de l\'abonnement en cours ' + note).trim();
     }
     if (plan === 'lifetime' && !confirm('Donner un accès À VIE à ' + a.email + ' ?')) return;
+    if (decision.warnLifetime && !confirm(a.email + ' a un accès À VIE (offert). Le remplacer par une formule datée ?')) return;
 
     try {
         const { data, error } = await supaClient.rpc('admin_set_license', {
@@ -3528,7 +3530,7 @@ async function applyLicense() {
         showToast(decision.mode === 'schedule' ? 'Abonnement programmé à la suite ✓' : 'Licence mise à jour ✓', 'success');
         await loadAllData();
     } catch (err) {
-        showToast('Erreur : ' + (err.message || err), 'error');
+        showToast(/already_subscribed/.test(String(err.message || err)) ? 'Abonnement actif : changement de formule refusé avant la fin. Programme la nouvelle formule à la suite.' : 'Erreur : ' + (err.message || err), 'error');
     }
 }
 

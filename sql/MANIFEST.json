@@ -126,6 +126,15 @@
         "20",
         "21"
       ]
+    },
+    {
+      "file": "23_licence_compte_logique.sql",
+      "role": "admin_set_license : refuse le changement de formule d'un abonnement actif vers une formule non plus longue",
+      "reexecutable": true,
+      "depend": [
+        "08",
+        "22"
+      ]
     }
   ],
   "exclus": [
