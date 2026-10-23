@@ -1104,6 +1104,27 @@
                 </div>
             </div>
 
+            <!-- Codes générés : par jour, par mois, par administrateur -->
+            <div class="card" id="codesGenCard">
+                <div class="card-header">
+                    <h2>🎟️ Codes générés</h2>
+                    <span style="font-size: 12px; color: var(--ink-mute);" id="codesGenScope">suit la période choisie</span>
+                </div>
+                <div style="padding: 16px 20px;">
+                    <div class="stats-grid" style="margin-bottom: 16px;">
+                        <div class="stat-card accent"><div class="stat-label">Sur la période</div><div class="stat-value" id="cgTotal">0</div><div class="stat-trend" id="cgTotalNote">—</div></div>
+                        <div class="stat-card"><div class="stat-label">Aujourd'hui</div><div class="stat-value" id="cgToday">0</div><div class="stat-trend">tous administrateurs</div></div>
+                        <div class="stat-card"><div class="stat-label">Ce mois</div><div class="stat-value" id="cgMonth">0</div><div class="stat-trend">tous administrateurs</div></div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+                        <div><h3 style="font-size: 13px; margin-bottom: 8px;">Par jour</h3><div style="overflow-x:auto; max-height: 260px;"><table><thead><tr><th>Jour</th><th>Codes</th></tr></thead><tbody id="cgByDay"></tbody></table></div></div>
+                        <div><h3 style="font-size: 13px; margin-bottom: 8px;">Par mois</h3><div style="overflow-x:auto; max-height: 260px;"><table><thead><tr><th>Mois</th><th>Codes</th></tr></thead><tbody id="cgByMonth"></tbody></table></div></div>
+                        <div><h3 style="font-size: 13px; margin-bottom: 8px;">Par administrateur</h3><div style="overflow-x:auto; max-height: 260px;"><table><thead><tr><th>Login</th><th>Codes</th><th>Depuis demande</th><th>Manuels</th></tr></thead><tbody id="cgByAdmin"></tbody></table></div></div>
+                    </div>
+                    <p style="font-size: 12px; color: var(--ink-mute); margin-top: 10px;">Tous les codes sont comptés, y compris ceux générés depuis « Nouvelles demandes ». L'auteur est enregistré par la base (sql/21) : les codes créés avant sa mise en place apparaissent comme « inconnu ».</p>
+                </div>
+            </div>
+
             <!-- Entonnoir de conversion -->
             <!-- Rapprochement codes / paiements : suit la période choisie ci-dessus -->
             <div class="card">
@@ -5431,7 +5452,11 @@ const AUDIT_ACTION_LABELS = {
     staff_payment: '💶 Paiement saisi (assistant)',
     staff_payment_cancel: '↩️ Paiement annulé (assistant)',
     add_staff: '➕ Assistant ajouté',
-    remove_staff: '➖ Assistant retiré'
+    remove_staff: '➖ Assistant retiré',
+    code_generated: '🎟️ Code généré',
+    code_revoked: '🚫 Code révoqué',
+    code_deleted: '🗑️ Code supprimé',
+    plan_save: '🧩 Formule enregistrée'
 };
 const auditActionLabel = (a) => AUDIT_ACTION_LABELS[a] || ('• ' + a);
 
@@ -5456,6 +5481,10 @@ function auditDetailText(r) {
         case 'set_license': return planTxt(d.before) + ' → ' + planTxt(d.after) + (d.note ? ' — ' + d.note : '');
         case 'staff_payment': return `${d.amount != null ? d.amount + ' DH' : ''}${d.type ? ' · ' + d.type : ''}${d.mode ? ' · ' + d.mode : ''}${d.note ? ' — ' + d.note : ''}`.trim() || '—';
         case 'staff_payment_cancel': return `${d.amount != null ? d.amount + ' DH' : ''}${d.type ? ' · ' + d.type : ''}${d.note ? ' — ' + d.note : ''}`.trim() || '—';
+        case 'code_generated': return `${d.type || ''} · ${d.source === 'demande' ? 'depuis une demande' : 'manuel'} · code …${d.code_end || '????'}`;
+        case 'code_revoked': return `${d.type || ''} · code …${d.code_end || '????'} (était : ${d.was || '?'})`;
+        case 'code_deleted': return `${d.type || ''} · code …${d.code_end || '????'} (statut : ${d.status || '?'})`;
+        case 'plan_save': return `${(d.after && d.after.label) || d.key || ''} · ${d.after ? d.after.price_dh + ' DH / ' + d.after.duration_days + ' j' : ''}${d.after && d.after.active === false ? ' · désactivée' : ''}`;
         case 'delete_account': return `Supprimés : ${d.data_rows || 0} données, ${d.licenses || 0} licence(s), ${d.codes || 0} code(s), ${d.payments || 0} paiement(s), ${d.requests || 0} demande(s)`;
         default: return d.note || '—';
     }
@@ -5615,6 +5644,49 @@ function isInRange(dateStr, range) {
     return date >= range.start && date <= range.end;
 }
 
+// Statistiques des codes générés (pure : testée). range = null pour tout l'historique.
+function codesGenStats(codes, range, nowDate) {
+    const now = nowDate || new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const monthKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    const fromDemand = c => /^Auto-généré depuis demande/i.test(c.note || '');
+    const inRange = codes.filter(c => c.created_at && isInRange(c.created_at, range));
+    const byDay = {}, byMonth = {}, byAdmin = {};
+    inRange.forEach(c => {
+        const d = new Date(c.created_at);
+        byDay[dayKey(d)] = (byDay[dayKey(d)] || 0) + 1;
+        byMonth[monthKey(d)] = (byMonth[monthKey(d)] || 0) + 1;
+        const a = (c.created_by || 'inconnu').toLowerCase();
+        const o = byAdmin[a] || (byAdmin[a] = { admin: a, count: 0, demande: 0, manuel: 0 });
+        o.count++; fromDemand(c) ? o.demande++ : o.manuel++;
+    });
+    const all = codes.filter(c => c.created_at);
+    return {
+        total: inRange.length,
+        today: all.filter(c => dayKey(new Date(c.created_at)) === dayKey(now)).length,
+        month: all.filter(c => monthKey(new Date(c.created_at)) === monthKey(now)).length,
+        byDay: Object.keys(byDay).sort().reverse().map(k => ({ key: k, count: byDay[k] })),
+        byMonth: Object.keys(byMonth).sort().reverse().map(k => ({ key: k, count: byMonth[k] })),
+        byAdmin: Object.values(byAdmin).sort((x, y) => y.count - x.count)
+    };
+}
+
+function renderCodesGenerated(range) {
+    if (!document.getElementById('cgTotal')) return;
+    const st = codesGenStats(allCodes, range);
+    const frDay = k => { const [y, m, d] = k.split('-'); return `${d}/${m}/${y}`; };
+    const frMonth = k => { const [y, m] = k.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); };
+    document.getElementById('cgTotal').textContent = st.total;
+    document.getElementById('cgTotalNote').textContent = st.byDay.length ? `sur ${st.byDay.length} jour${st.byDay.length > 1 ? 's' : ''} avec activité` : 'aucun code sur la période';
+    document.getElementById('cgToday').textContent = st.today;
+    document.getElementById('cgMonth').textContent = st.month;
+    const none = c => `<tr><td colspan="${c}" class="empty">Aucun code sur la période</td></tr>`;
+    document.getElementById('cgByDay').innerHTML = st.byDay.length ? st.byDay.map(r => `<tr><td>${frDay(r.key)}</td><td><strong>${r.count}</strong></td></tr>`).join('') : none(2);
+    document.getElementById('cgByMonth').innerHTML = st.byMonth.length ? st.byMonth.map(r => `<tr><td>${esc(frMonth(r.key))}</td><td><strong>${r.count}</strong></td></tr>`).join('') : none(2);
+    document.getElementById('cgByAdmin').innerHTML = st.byAdmin.length ? st.byAdmin.map(r => `<tr><td>${esc(r.admin)}</td><td><strong>${r.count}</strong></td><td>${r.demande}</td><td>${r.manuel}</td></tr>`).join('') : none(4);
+}
+
 function renderReports() {
     const period = document.getElementById('reportPeriod')?.value || 'month';
     const statusFilter = document.getElementById('rpStatusFilter')?.value || 'all';
@@ -5626,6 +5698,7 @@ function renderReports() {
     const filteredCodes = allCodes.filter(c => isInRange(c.created_at, range));
     const filteredPayments = allPayments.filter(p => isInRange(p.payment_date, range));
     const filteredRequests = allRequests.filter(r => isInRange(r.created_at, range));
+    renderCodesGenerated(range);
     
     // ═══════════════════════════════════════════
     // KPIs principaux
