@@ -1,0 +1,23 @@
+// Licence du compte : un abonnement actif n'est pas remplacé par une formule non plus longue ; on programme à la suite.
+const fs = require('fs'), path = require('path'), assert = require('assert');
+const html = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+const cut = (from, to) => { const a = html.indexOf(from), b = html.indexOf(to, a); assert(a > 0 && b > a, 'bloc introuvable : ' + from); return html.slice(a, b); };
+const t = (n, c) => { assert(c, n); console.log('PASS ' + n); };
+const src = cut('const ADMIN_TIER_DAYS', 'async function processRequest(requestId) {') + cut('function licenseChangeDecision', 'function onLicensePlanChange');
+const api = new Function('PAID_TYPES', 'customPlans', 'accountsAvailable', 'allAccounts', 'allCodes', src + '\nreturn { licenseChangeDecision };')(['monthly', 'semestrial', 'annual', 'business', 'lifetime'], [], true, [], []);
+const D = 864e5, end = new Date(Date.now() + 200 * D).toISOString();
+const annual = { type: 'annual', status: 'active', expires_at: end };
+let d = api.licenseChangeDecision(annual, 'monthly', 30, []);
+t('Annuel actif -> Mensuel : pas de changement immédiat, programmé à la suite', d.mode === 'schedule' && Math.round((d.newEnd - new Date(end)) / D) === 30);
+t('Annuel actif -> Annuel : programmé (prolongation à la suite)', api.licenseChangeDecision(annual, 'annual', 365, []).mode === 'schedule');
+t('Annuel actif -> À vie (plus généreux) : changement immédiat', api.licenseChangeDecision(annual, 'lifetime', 0, []).mode === 'immediate');
+t('Annuel actif -> essai : refusé', api.licenseChangeDecision(annual, 'trial', 7, []).mode === 'blocked');
+t('« Prolonger l\'offre actuelle » : toujours immédiat', api.licenseChangeDecision(annual, 'keep', 30, []).mode === 'immediate');
+const monthly = { type: 'monthly', status: 'active', expires_at: end };
+t('Mensuel actif -> Annuel : changement immédiat autorisé (plus long)', api.licenseChangeDecision(monthly, 'annual', 365, []).mode === 'immediate');
+t('Mensuel actif -> Mensuel : programmé', api.licenseChangeDecision(monthly, 'monthly', 30, []).mode === 'schedule');
+const old = { type: 'annual', status: 'active', expires_at: new Date(Date.now() - D).toISOString() };
+t('abonnement expiré, essai ou suspendu : changement libre', api.licenseChangeDecision(old, 'monthly', 30, []).mode === 'immediate' && api.licenseChangeDecision({ type: 'trial', status: 'active', expires_at: end }, 'monthly', 30, []).mode === 'immediate' && api.licenseChangeDecision({ ...annual, status: 'suspended' }, 'monthly', 30, []).mode === 'immediate');
+t('à vie : tout refusé, rien à programmer', api.licenseChangeDecision({ type: 'lifetime', status: 'active', expires_at: null }, 'monthly', 30, []).mode === 'blocked');
+t('interface : confirmation « PROGRAMMER », type conservé, indication dans la fenêtre', /PROGRAMMER \$\{decision\.days\} jours/.test(html) && /type = null;/.test(html) && /id="licHint"/.test(html) && /refreshLicenseHint\(\)/.test(html));
+console.log('OK');

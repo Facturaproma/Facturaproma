@@ -2175,11 +2175,12 @@
                 <option value="annual">🏆 Passer en Annuel (449 DH)</option>
                 <option value="lifetime">🎁 Accès à vie (offert)</option>
             </select>
+            <small id="licHint" style="display:none; margin-top:6px; padding:8px 10px; border-radius:8px; background: rgba(232,163,61,0.12); color: #8a5a00;"></small>
         </div>
 
         <div class="form-group" id="licDaysGroup">
             <label>Jours à ajouter (à partir de la fin en cours)</label>
-            <input type="number" id="licDays" min="1" max="3660" value="30">
+            <input type="number" id="licDays" min="1" max="3660" value="30" oninput="refreshLicenseHint()">
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -3442,6 +3443,20 @@ function openLicenseModal(uid) {
     document.getElementById('licenseModal').classList.add('active');
 }
 
+// Logique d'un changement de licence sur un compte (pure : testée).
+// Un abonnement payant ACTIF ne peut pas être remplacé par une formule non plus longue avant sa fin :
+// on propose alors de PROGRAMMER la nouvelle formule à la suite (la durée s'ajoute à la fin en cours, le type ne change qu'ensuite).
+function licenseChangeDecision(acct, plan, days, codes) {
+    const cur = accountPaidDays(acct, codes);
+    if (!cur || plan === 'keep') return { mode: 'immediate' };
+    const end = acct.expires_at ? new Date(acct.expires_at) : null;
+    if (plan === 'trial') return { mode: 'blocked', reason: 'Cet abonnement payant est actif : on ne peut pas le remplacer par un essai.' };
+    if (adminTierDays(plan) > cur) return { mode: 'immediate' };     // formule plus longue : changement immédiat autorisé
+    if (!end) return { mode: 'blocked', reason: 'Ce compte a déjà un accès à vie : rien à ajouter.' };
+    const newEnd = new Date(end.getTime() + (days || 0) * 864e5);
+    return { mode: 'schedule', end, newEnd, days };
+}
+
 function onLicensePlanChange() {
     const v = document.getElementById('licPlan').value;
     const defaults = { keep: 30, trial: 7, monthly: 30, annual: 365 };
@@ -3449,6 +3464,18 @@ function onLicensePlanChange() {
     if (defaults[v]) document.getElementById('licDays').value = defaults[v];
     const amount = { monthly: 49, annual: 449 }[v];
     if (amount) document.getElementById('licAmount').placeholder = String(amount);
+    refreshLicenseHint();
+}
+
+function refreshLicenseHint() {
+    const v = document.getElementById('licPlan').value;
+    const hint = document.getElementById('licHint');
+    if (hint) {
+        const d = licenseTarget ? licenseChangeDecision(licenseTarget, v, parseInt(document.getElementById('licDays').value, 10) || 30, allCodes) : { mode: 'immediate' };
+        if (d.mode === 'schedule') { hint.style.display = 'block'; hint.textContent = `⏳ Abonnement actif jusqu'au ${d.end.toLocaleDateString('fr-FR')} : le changement sera PROGRAMMÉ à la suite (nouvelle fin : ${d.newEnd.toLocaleDateString('fr-FR')}), pas immédiat.`; }
+        else if (d.mode === 'blocked') { hint.style.display = 'block'; hint.textContent = '⛔ ' + d.reason; }
+        else hint.style.display = 'none';
+    }
 }
 
 async function applyLicense() {
@@ -3461,7 +3488,16 @@ async function applyLicense() {
     const note = document.getElementById('licNote').value.trim();
 
     if (plan !== 'lifetime' && (!days || days < 1)) { showToast('Indique un nombre de jours', 'error'); return; }
-    const type = plan === 'keep' ? null : plan;
+    let type = plan === 'keep' ? null : plan;
+    let noteToSend = note;
+    const decision = licenseChangeDecision(a, plan, days, allCodes);
+    if (decision.mode === 'blocked') { showToast(decision.reason, 'error'); return; }
+    if (decision.mode === 'schedule') {
+        const lbl = PLAN_LABEL[plan] || plan;
+        if (!confirm(`${a.email} a déjà un abonnement actif jusqu'au ${decision.end.toLocaleDateString('fr-FR')}.\n\nImpossible de passer en ${lbl} avant la fin.\n\nPROGRAMMER ${decision.days} jours de ${lbl} à la suite ? Nouvelle fin : ${decision.newEnd.toLocaleDateString('fr-FR')}.`)) return;
+        type = null;   // le type actuel est conservé jusqu'à la fin ; seule la durée s'ajoute
+        noteToSend = ('Programmé : ' + lbl + ' à la suite de l\'abonnement en cours ' + note).trim();
+    }
     if (plan === 'lifetime' && !confirm('Donner un accès À VIE à ' + a.email + ' ?')) return;
 
     try {
@@ -3470,7 +3506,7 @@ async function applyLicense() {
             p_type: type,
             p_days: plan === 'lifetime' ? null : days,
             p_status: null,
-            p_note: note || null
+            p_note: noteToSend || null
         });
         if (error) throw error;
         if (!data || !data.ok) throw new Error((data && data.reason) || 'refusé');
@@ -3489,7 +3525,7 @@ async function applyLicense() {
         }
 
         closeModal('licenseModal');
-        showToast('Licence mise à jour ✓', 'success');
+        showToast(decision.mode === 'schedule' ? 'Abonnement programmé à la suite ✓' : 'Licence mise à jour ✓', 'success');
         await loadAllData();
     } catch (err) {
         showToast('Erreur : ' + (err.message || err), 'error');
