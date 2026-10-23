@@ -811,8 +811,9 @@
                     <h2>🆕 Nouvelles demandes</h2>
                     <select id="requestStatusFilter" class="search-input" style="width: 180px;" onchange="renderRequests()">
                         <option value="all">Toutes</option>
-                        <option value="pending" selected>⏳ En attente</option>
-                        <option value="contacted">📞 Contacté</option>
+                        <option value="open" selected>🔔 À traiter (attente + contacté)</option>
+                        <option value="pending">⏳ En attente</option>
+                        <option value="contacted">📞 Contacté (RIB envoyé)</option>
                         <option value="processed">✅ Traité</option>
                         <option value="rejected">❌ Rejeté</option>
                     </select>
@@ -2089,6 +2090,21 @@
 </div>
 
 <!-- ============ MODAL: ACTIVATE LICENSE ============ -->
+<!-- ============ MODAL: CHOIX DU CANAL D'ENVOI (e-mail / WhatsApp) ============ -->
+<div class="modal-overlay" id="channelModal">
+    <div class="modal">
+        <h2 id="channelTitle">Envoyer au client</h2>
+        <p id="channelSub" style="color: var(--ink-mute); font-size: 13px; margin-bottom: 16px;"></p>
+        <pre id="channelPreview" style="white-space: pre-wrap; font-family: inherit; font-size: 12px; background: var(--surface-soft, #f6f3ec); border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-height: 220px; overflow: auto;"></pre>
+        <div class="modal-actions" style="flex-wrap: wrap; gap: 8px;">
+            <button class="btn btn-secondary" onclick="closeModal('channelModal')">Fermer</button>
+            <button class="btn btn-secondary" onclick="channelSend('copy')">📋 Copier</button>
+            <button class="btn btn-primary" onclick="channelSend('email')">✉️ E-mail</button>
+            <button class="btn btn-success" onclick="channelSend('whatsapp')">💬 WhatsApp</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-overlay" id="activateModal">
     <div class="modal">
         <h2>🔑 Activer une licence pour un client</h2>
@@ -2758,7 +2774,7 @@ async function loadAllData() {
 }
 
 function updateRequestsBadge() {
-    const pending = allRequests.filter(r => r.status === 'pending').length;
+    const pending = allRequests.filter(r => r.status === 'pending' || r.status === 'contacted').length;
     const badge = document.getElementById('badgeRequests');
     if (badge) {
         if (pending > 0) {
@@ -2928,7 +2944,7 @@ function renderActionCenter() {
     if (!box) return;
     const blocks = [];
 
-    const pendingReq = allRequests.filter(r => r.status === 'pending').length;
+    const pendingReq = allRequests.filter(r => r.status === 'pending' || r.status === 'contacted').length;
     if (pendingReq > 0) {
         blocks.push(`<div style="padding:10px 0; border-bottom:1px solid var(--border);">
             <strong>📥 ${pendingReq} demande${pendingReq > 1 ? 's' : ''} d'abonnement en attente</strong>
@@ -3033,15 +3049,14 @@ function renderDashboard() {
 // REQUESTS (Demandes d'abonnement)
 // ============================================
 function renderRequests() {
-    const filter = document.getElementById('requestStatusFilter')?.value || 'pending';
+    const filter = document.getElementById('requestStatusFilter')?.value || 'open';
     
     let filtered = allRequests;
-    if (filter !== 'all') {
-        filtered = allRequests.filter(r => r.status === filter);
-    }
+    if (filter === 'open') filtered = allRequests.filter(r => r.status === 'pending' || r.status === 'contacted');
+    else if (filter !== 'all') filtered = allRequests.filter(r => r.status === filter);
     
     // Stats
-    const pending = allRequests.filter(r => r.status === 'pending');
+    const pending = allRequests.filter(r => r.status === 'pending' || r.status === 'contacted');
     const processed = allRequests.filter(r => r.status === 'processed');
     const potential = pending.reduce((s, r) => s + (parseFloat(r.final_price) || 0), 0);
     
@@ -3082,21 +3097,18 @@ function renderRequests() {
             <td>${r.promo_code ? `<span class="badge badge-trial">${r.promo_code}</span>` : '—'}</td>
             <td>${statusBadges[r.status] || r.status}</td>
             <td>
-                ${r.status === 'pending' ? `
-                    <button class="btn btn-success btn-sm" onclick="processRequest('${r.id}', '${r.client_email}', '${r.tier}')" title="Générer code et marquer traité">
+                ${(r.status === 'pending' || r.status === 'contacted') ? `
+                    <button class="btn ${r.status === 'pending' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="contactRequest('${esc(r.id)}')" title="Envoyer le montant et le RIB par e-mail ou WhatsApp">
+                        ${r.status === 'pending' ? '✉️💬 Contacter' : '✉️💬 Renvoyer RIB'}
+                    </button>
+                    <button class="btn ${r.status === 'contacted' ? 'btn-success' : 'btn-secondary'} btn-sm" onclick="processRequest('${esc(r.id)}')" title="Après réception du paiement : génère le code et l'envoie au client">
                         🎁 Générer code
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="markContacted('${r.id}')" title="Client contacté">
-                        📞
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="contactByWhatsApp('${r.client_email}', '${r.tier}', ${r.final_price})" title="WhatsApp">
-                        📱
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')" title="Rejeter">
+                    <button class="btn btn-danger btn-sm" onclick="rejectRequest('${esc(r.id)}')" title="Rejeter">
                         ❌
                     </button>
                 ` : `
-                    <button class="btn btn-secondary btn-sm" onclick="reopenRequest('${r.id}')">
+                    <button class="btn btn-secondary btn-sm" onclick="reopenRequest('${esc(r.id)}')">
                         🔄 Rouvrir
                     </button>
                 `}
@@ -3105,8 +3117,87 @@ function renderRequests() {
     `).join('');
 }
 
-async function processRequest(requestId, email, tier) {
-    if (!confirm(`Générer un code de licence ${tier} pour ${email} ?\n\nLa demande sera marquée comme "Traitée".`)) return;
+// ---- Messages clients (fonctions pures : testées) ----
+function buildPaymentMessage(email, tierLabel, price, cfg) {
+    const benef = cfg.bank_beneficiary || 'FacturaPro';
+    const bankLine = cfg.bank_name ? `\n   Banque : ${cfg.bank_name}` : '';
+    return `Bonjour 🇲🇦,\n\nMerci pour votre demande d'abonnement à FacturaPro !\n\n📋 Formule choisie : ${tierLabel}\n💰 Montant à régler : ${price} DH\n📧 Compte : ${email}\n\n💳 Paiement par virement bancaire :\n   Bénéficiaire : ${benef}${bankLine}\n   RIB : ${cfg.bank_rib}\n   Référence à indiquer : ${email}\n\nUne fois le virement effectué, envoyez-nous le justificatif par retour de message : vous recevrez votre code d'activation dès réception du paiement.\n\nUne question ? Répondez simplement à ce message.\n\n— FacturaPro`;
+}
+function buildCodeMessage(code) {
+    return `Bonjour 🇲🇦,\n\nNous avons bien reçu votre paiement, merci ! Voici votre code de licence FacturaPro :\n\n${code}\n\n👉 Comment l'activer :\n1. Connectez-vous à FacturaPro\n2. Ouvrez « Licence » dans le menu\n3. Saisissez le code et cliquez sur « Activer »\n\nMerci pour votre confiance !\n\n— L'équipe FacturaPro`;
+}
+function mailtoLink(email, subject, body) {
+    return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+// ---- Fenêtre « envoyer au client » : aperçu + e-mail / WhatsApp / copier ----
+let channelCtx = null;
+function openChannelModal(ctx) {
+    channelCtx = ctx;
+    document.getElementById('channelTitle').textContent = ctx.title;
+    document.getElementById('channelSub').textContent = ctx.sub || '';
+    document.getElementById('channelPreview').textContent = ctx.body;
+    document.getElementById('channelModal').classList.add('active');
+}
+async function channelSend(kind) {
+    const c = channelCtx;
+    if (!c) return;
+    if (kind === 'email') window.location.href = mailtoLink(c.email, c.subject, c.body);
+    else if (kind === 'whatsapp') window.open(`https://wa.me/?text=${encodeURIComponent(c.body)}`, '_blank');
+    else { try { await navigator.clipboard.writeText(c.body); showToast('Message copié', 'success'); } catch { showToast('Copie impossible', 'error'); } }
+    if (kind !== 'copy' && c.afterSend) { const f = c.afterSend; c.afterSend = null; try { await f(); } catch (e) { console.warn(e); } }
+}
+
+// Coordonnées bancaires lues dans Admin → Réglages (jamais de RIB factice envoyé à un client)
+async function readBankSettings() {
+    const cfg = {};
+    try {
+        const { data, error } = await supaClient.from('admin_settings').select('key, value');
+        if (error) throw error;
+        (data || []).forEach(row => cfg[row.key] = (row.value || '').trim());
+    } catch (err) {
+        showToast('Réglages illisibles : ' + err.message, 'error');
+        return null;
+    }
+    if (!cfg.bank_rib) {
+        showToast('Renseignez d\'abord le RIB dans Réglages avant d\'écrire au client', 'error');
+        return null;
+    }
+    return cfg;
+}
+
+const requestTierLabel = (tier) => ({ ...planLabelMap(), lifetime: 'À vie (offert)', monthly: 'Mensuel (49 DH/mois)', annual: 'Annuel (449 DH/an)', founder: 'Fondateur (299 DH/an)', business: 'Business Mensuel' })[tier] || tier;
+
+// Étape 1 : envoyer montant + RIB au client (e-mail ou WhatsApp) ; la demande passe à « Contacté » après l'envoi
+async function contactRequest(requestId) {
+    const r = allRequests.find(x => x.id === requestId);
+    if (!r) return;
+    const cfg = await readBankSettings();
+    if (!cfg) return;
+    openChannelModal({
+        title: '✉️💬 Envoyer le montant et le RIB',
+        sub: `Pour ${r.client_email} — ${requestTierLabel(r.tier)} · ${r.final_price} DH`,
+        email: r.client_email,
+        subject: 'Votre abonnement FacturaPro : montant et RIB',
+        body: buildPaymentMessage(r.client_email, requestTierLabel(r.tier), r.final_price, cfg),
+        afterSend: async () => {
+            if (r.status === 'pending') {
+                const { error } = await supaClient.from('subscription_requests').update({ status: 'contacted' }).eq('id', requestId);
+                if (error) throw error;
+                showToast('Client contacté : après réception du paiement, clique sur « Générer code »', 'success');
+                await loadAllData();
+            }
+        }
+    });
+}
+
+// Étape 2 (après paiement) : génère le code puis l'envoie au client (e-mail ou WhatsApp)
+async function processRequest(requestId) {
+    const r = allRequests.find(x => x.id === requestId);
+    if (!r) return;
+    const email = r.client_email, tier = r.tier;
+    const warn = r.status === 'pending' ? `\n\n⚠️ Le montant et le RIB n'ont pas encore été envoyés à ce client.` : '';
+    if (!confirm(`Le paiement de ${r.final_price} DH est-il bien reçu ?\n\nGénérer le code de licence (${requestTierLabel(tier)}) pour ${email} ? La demande sera marquée « Traitée ».${warn}`)) return;
     
     const code = generateLicenseCode();
     
@@ -3131,23 +3222,14 @@ async function processRequest(requestId, email, tier) {
         if (reqErr) throw reqErr;
         
         lastGeneratedCode = code;
-        
-        // Show modal with code
-        const action = confirm(
-            `✅ Code généré : ${code}\n\n` +
-            `Voulez-vous l'envoyer maintenant par WhatsApp ?\n\n` +
-            `(Annuler = juste copier le code)`
-        );
-        
-        if (action) {
-            const msg = `Bonjour 🇲🇦,\n\nVoici votre code de licence FacturaPro :\n\n*${code}*\n\n👉 Comment l'activer :\n1. Connectez-vous à FacturaPro\n2. Cliquez sur "Licence" dans le menu\n3. Entrez le code et cliquez "Activer"\n\nMerci pour votre confiance !\n\n— L'équipe FacturaPro`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-        } else {
-            navigator.clipboard.writeText(code);
-            showToast('Code copié !', 'success');
-        }
-        
-        showToast('Demande traitée ✓', 'success');
+        showToast('Code généré ✓ : envoie-le maintenant au client', 'success');
+        openChannelModal({
+            title: '🎁 Envoyer le code au client',
+            sub: `Code ${code} pour ${email}`,
+            email: email,
+            subject: 'Votre code de licence FacturaPro',
+            body: buildCodeMessage(code)
+        });
         await loadAllData();
     } catch (err) {
         showToast('Erreur: ' + err.message, 'error');
@@ -3200,37 +3282,6 @@ async function reopenRequest(requestId) {
     } catch (err) {
         showToast('Erreur: ' + err.message, 'error');
     }
-}
-
-async function contactByWhatsApp(email, tier, price) {
-    const tierLabels = { ...planLabelMap(),
-        lifetime: 'À vie (offert)',
-        monthly: 'Mensuel (49 DH/mois)',
-        annual: 'Annuel (449 DH/an)',
-        founder: 'Fondateur (299 DH/an)',
-        business: 'Business Mensuel'
-    };
-    
-    // Coordonnées bancaires lues dans Admin → Réglages (jamais de RIB factice envoyé à un client)
-    let cfg = {};
-    try {
-        const { data, error } = await supaClient.from('admin_settings').select('key, value');
-        if (error) throw error;
-        (data || []).forEach(row => cfg[row.key] = (row.value || '').trim());
-    } catch (err) {
-        showToast('Réglages illisibles : ' + err.message, 'error');
-        return;
-    }
-    if (!cfg.bank_rib) {
-        showToast('Renseignez d\'abord le RIB dans Réglages avant d\'écrire au client', 'error');
-        return;
-    }
-    const benef = cfg.bank_beneficiary || 'FacturaPro';
-    const bankLine = cfg.bank_name ? `\n   Banque : ${cfg.bank_name}` : '';
-
-    const msg = `Bonjour 🇲🇦,\n\nMerci pour votre demande d'abonnement à FacturaPro !\n\n📋 Plan choisi : ${tierLabels[tier]}\n💰 Montant : ${price} DH\n📧 Email : ${email}\n\n💳 Voici les modalités de paiement :\n\n1️⃣ VIREMENT BANCAIRE\n   Bénéficiaire : ${benef}${bankLine}\n   RIB : ${cfg.bank_rib}\n   Référence : ${email}\n\n2️⃣ Une fois le paiement effectué, envoyez-nous le justificatif par retour de message.\n\n3️⃣ Vous recevrez votre code d'activation sous 24h.\n\nDes questions ? Je suis là !\n\n— FacturaPro`;
-    
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 function formatTime(d) {
