@@ -106,6 +106,16 @@
         "09",
         "10"
       ]
+    },
+    {
+      "file": "21_tracabilite_codes.sql",
+      "role": "Traçabilité (auteur, journal) et verrouillage des codes de licence générés par l'administration",
+      "reexecutable": true,
+      "depend": [
+        "05",
+        "06",
+        "08"
+      ]
     }
   ],
   "exclus": [
