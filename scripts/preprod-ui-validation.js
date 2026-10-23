@@ -149,8 +149,16 @@ async function checkForeign(label, id) {
   const base = await q1("SELECT sha256, detail FROM public._fp_rehearsal WHERE name='mode_baseline_foreign'");
   if (!base) throw new Error('référence « mode_baseline_foreign » absente.');
   const now = await foreignHash();
-  const diff = Object.keys(now.parts).filter((k) => now.parts[k] !== base.detail[k]).concat(Object.keys(base.detail).filter((k) => !(k in now.parts)));
-  return rec(id, `données préexistantes inchangées (${label})`, `empreinte = référence ${base.sha256.slice(0, 12)}`, `empreinte ${now.hash.slice(0, 12)}${diff.length ? ' ; tables différentes : ' + diff.join(',') : ''}`, now.hash === base.sha256, { proof: `référence ${base.sha256.slice(0, 12)} / actuelle ${now.hash.slice(0, 12)}`, fatal: true });
+  // Tables créées APRÈS la référence par des scripts autorisés (sql/20 : plans ; sql/24 : sauvegarde des droits) : tolérées seulement si
+  // elles figurent dans cette liste fermée ; toute autre table nouvelle reste un échec. Les tables de la référence sont comparées à l'identique.
+  const NEW_OK = new Set(['public.plans', 'public._fp_acl_backup_24']);
+  const added = Object.keys(now.parts).filter((k) => !(k in base.detail));
+  const unexpected = added.filter((k) => !NEW_OK.has(k));
+  const cmp = {}; for (const k of Object.keys(now.parts)) if (k in base.detail) cmp[k] = now.parts[k];
+  const cmpHash = sha(jstr(cmp));
+  const diff = Object.keys(cmp).filter((k) => cmp[k] !== base.detail[k]).concat(Object.keys(base.detail).filter((k) => !(k in now.parts))).concat(unexpected);
+  now.hash = cmpHash;
+  return rec(id, `données préexistantes inchangées (${label})`, `empreinte = référence ${base.sha256.slice(0, 12)} (tables nouvelles tolérées : ${[...NEW_OK].join(', ')})`, `empreinte ${now.hash.slice(0, 12)}${added.length ? ' ; tables nouvelles : ' + added.join(',') : ''}${diff.length ? ' ; tables différentes : ' + diff.join(',') : ''}`, now.hash === base.sha256 && unexpected.length === 0, { proof: `référence ${base.sha256.slice(0, 12)} / actuelle ${now.hash.slice(0, 12)}`, fatal: true });
 }
 
 // ---------------------------------------------------------------- bascule (comptes jetables uniquement)
