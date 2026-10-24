@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
 const a = html.indexOf('// <PAIEMENTS-CALC>'), b = html.indexOf('// </PAIEMENTS-CALC>');
 assert(a > 0 && b > a, 'bloc PAIEMENTS-CALC introuvable');
-const api = new Function(html.slice(a, b) + '\nreturn { money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal };')();
+const api = new Function(html.slice(a, b) + '\nreturn { money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 const inv = (o) => Object.assign({ id: 'f1', status: 'sent', totalTTC: 1200 }, o);
 const pay = (amount, id = 'f1') => ({ id: 'p' + Math.random(), invoiceId: id, amount });
@@ -45,4 +45,18 @@ ok('facture inconnue refusée', api.checkPaymentAmount(undefined, 10, []).ok ===
   ok('refus : facture déjà cohérente → aucun changement', rec([{ id: 'f1', status: 'sent', paidAmount: 800, totalTTC: 1200 }], srv, refused).changed === 0);
   ok('refus : brouillons et entrées vides ignorés, aucune exception', rec([null, { id: 'd', status: 'draft' }], srv, refused).changed === 0 && rec(undefined, undefined, undefined).changed === 0);
 }
+
+// --- Facture annulée par un avoir ---
+const cr = (o) => Object.assign({ id: 'a1', type: 'credit', status: 'sent', totalTTC: -1200, relatedInvoiceId: 'f1', relatedInvoiceNumber: 'FAC-1' }, o);
+const f1 = inv({ number: 'FAC-1' });
+ok('avoir total : facture annulée, reste 0', api.isCancelledByCredit(f1, [f1, cr()]) && api.invoiceRemaining(f1, [], [f1, cr()]) === 0);
+ok('avoir total : paiement refusé avec message dédié', /annulée par un avoir/.test(api.checkPaymentAmount(f1, 100, [], [f1, cr()]).reason));
+ok('avoir partiel (500) : reste = 1200 - 500, paiement du reste accepté', api.invoiceRemaining(f1, [], [f1, cr({ totalTTC: -500 })]) === 700 && api.checkPaymentAmount(f1, 700, [], [f1, cr({ totalTTC: -500 })]).ok === true && !api.isCancelledByCredit(f1, [f1, cr({ totalTTC: -500 })]));
+ok('avoir partiel : paiement supérieur à 700 refusé', api.checkPaymentAmount(f1, 800, [], [f1, cr({ totalTTC: -500 })]).ok === false);
+ok('avoir en brouillon ignoré', api.invoiceRemaining(f1, [], [f1, cr({ status: 'draft' })]) === 1200);
+ok('avoir d\'une autre facture ignoré', api.invoiceRemaining(f1, [], [f1, cr({ relatedInvoiceId: 'f9', relatedInvoiceNumber: 'FAC-9' })]) === 1200);
+ok('ancien avoir sans identifiant : rapproché par numéro', api.isCancelledByCredit(f1, [f1, cr({ relatedInvoiceId: undefined })]));
+ok('facture déjà payée puis créditée : reste « payée » (remboursement non géré)', api.isCancelledByCredit(inv({ status: 'paid', number: 'FAC-1' }), [cr()]) === false);
+ok('sans liste de pièces, comportement inchangé', api.invoiceRemaining(f1, []) === 1200 && api.checkPaymentAmount(f1, 100, []).ok === true);
+ok('encaissement partiel puis avoir total : reste 0', api.invoiceRemaining(f1, [pay(400)], [f1, cr()]) === 0);
 console.log('\nOK : ' + n + ' contrôles (paiements)');

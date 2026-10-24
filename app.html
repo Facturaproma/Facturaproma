@@ -630,6 +630,7 @@
         .status-pending { background: rgba(232, 163, 61, 0.12); color: #B5821F; }
         .status-overdue { background: rgba(200, 74, 74, 0.1); color: var(--danger); }
         .status-draft { background: rgba(139, 149, 168, 0.15); color: var(--ink-mute); }
+        .status-cancelled { background: rgba(139, 149, 168, 0.15); color: var(--ink-mute); text-decoration: line-through; }
         .status-sent { background: rgba(27, 58, 107, 0.1); color: var(--primary); }
         .status-accepted { background: rgba(46, 125, 91, 0.1); color: var(--success); }
         .status-refused { background: rgba(200, 74, 74, 0.1); color: var(--danger); }
@@ -6710,6 +6711,7 @@ function statusLabel(status) {
         sent: 'Envoyée',
         paid: 'Payée',
         overdue: 'En retard',
+        cancelled: 'Annulée (avoir)',
         accepted: 'Acceptée',
         refused: 'Refusée',
         pending: 'En attente'
@@ -9220,7 +9222,7 @@ function isInReportRange(dateStr, range) {
 function renderReportInvoices() {
     const range = getReportDateRange();
     const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
-        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0 && getInvoiceWithStatus(i).status !== 'cancelled'   // annulées par avoir : ni en attente ni en retard
     );
     const filtered = allInvoices.filter(i => isInReportRange(i.date, range));
     
@@ -11791,18 +11793,33 @@ function invoicePaidAmount(inv, payments) {
         .reduce((t, p) => t + money2(p.amount), 0);
     return Math.min(ttc, Math.max(0, money2(Math.max(sum, Number(inv.paidAmount) || 0))));
 }
-// Reste à payer (0 pour un brouillon, un avoir ou une facture soldée).
-function invoiceRemaining(inv, payments) {
+// Montant (positif) crédité par des avoirs émis sur cette facture. Règle interne : un avoir réduit la somme due ; l'application
+// n'émet qu'un avoir par facture, toujours égal au TTC (annulation totale).
+function invoiceCreditedAmount(inv, invoices) {
+    if (!inv || inv.type === 'credit' || !Array.isArray(invoices)) return 0;
+    return money2(invoices.filter(c => c && c.type === 'credit' && c.status !== 'draft' &&
+        ((c.relatedInvoiceId && c.relatedInvoiceId === inv.id) || (!c.relatedInvoiceId && c.relatedInvoiceNumber && c.relatedInvoiceNumber === inv.number)))
+        .reduce((t, c) => t + Math.abs(money2(c.totalTTC)), 0));
+}
+// Facture entièrement annulée par un avoir (et non payée : une facture déjà payée puis créditée relève d'un remboursement, non géré).
+function isCancelledByCredit(inv, invoices) {
+    const ttc = money2(inv && inv.totalTTC);
+    if (!inv || ttc <= 0 || inv.status === 'draft' || inv.status === 'paid') return false;
+    return invoiceCreditedAmount(inv, invoices) >= ttc - 0.005;
+}
+// Reste à payer (0 pour un brouillon, un avoir, une facture soldée ou annulée par avoir). `invoices` : toutes les pièces, pour tenir compte des avoirs.
+function invoiceRemaining(inv, payments, invoices) {
     const ttc = money2(inv && inv.totalTTC);
     if (!inv || ttc <= 0 || inv.status === 'draft') return 0;
-    return money2(Math.max(0, ttc - invoicePaidAmount(inv, payments)));
+    return money2(Math.max(0, ttc - invoicePaidAmount(inv, payments) - invoiceCreditedAmount(inv, invoices)));
 }
 // Un paiement est-il acceptable ? { ok, reason }
-function checkPaymentAmount(inv, amount, payments) {
+function checkPaymentAmount(inv, amount, payments, invoices) {
     const a = money2(amount);
     if (!inv) return { ok: false, reason: 'Sélectionnez une facture' };
     if (!(a > 0)) return { ok: false, reason: 'Date et montant requis' };
-    const rest = invoiceRemaining(inv, payments);
+    if (isCancelledByCredit(inv, invoices)) return { ok: false, reason: 'Cette facture est annulée par un avoir' };
+    const rest = invoiceRemaining(inv, payments, invoices);
     if (rest <= 0) return { ok: false, reason: 'Cette facture est déjà soldée' };
     if (a > rest + 0.005) return { ok: false, reason: 'Montant supérieur au reste à payer' };
     return { ok: true, remaining: rest };
@@ -11830,7 +11847,14 @@ function reconcileInvoicesAfterPaymentRefusal(invoices, serverPayments, refusedP
 }
 // </PAIEMENTS-CALC>
 
+let _creditCache = { ref: null, list: null };
 function getInvoiceWithStatus(invoice) {
+    // Facture annulée par un avoir : ni en attente, ni en retard, ni relançable
+    if (invoice.type !== 'credit' && invoice.status !== 'paid' && invoice.status !== 'draft') {
+        const all = Storage.get('invoices', []) || [];
+        if (_creditCache.ref !== all) _creditCache = { ref: all, list: all.filter(c => c && c.type === 'credit') };
+        if (_creditCache.list.length && isCancelledByCredit(invoice, _creditCache.list)) return { ...invoice, status: 'cancelled' };
+    }
     // Auto-detect overdue status
     if (invoice.status !== 'paid' && invoice.status !== 'draft') {
         const overdueDays = getOverdueDays(invoice);
@@ -11937,7 +11961,7 @@ function renderPayments() {
                                 <td><strong>${formatCurrency(inv.totalTTC)}</strong>${invoicePaidAmount(inv, payments) > 0 && inv.status !== 'paid' ? `<br><span style="font-size: 11px; color: var(--ink-mute);">reste ${formatCurrency(invoiceRemaining(inv, payments))}</span>` : ''}</td>
                                 <td><span class="status-pill status-${inv.status}">${statusLabel(inv.status)}</span></td>
                                 <td>
-                                    ${inv.status !== 'paid' ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">${invoicePaidAmount(inv, payments) > 0 ? '✓ Solde / paiement' : '✓ Marquer payée'}</button>` : ''}
+                                    ${inv.status !== 'paid' && inv.status !== 'cancelled' ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">${invoicePaidAmount(inv, payments) > 0 ? '✓ Solde / paiement' : '✓ Marquer payée'}</button>` : ''}
                                     <button class="btn btn-ghost btn-sm" onclick="editInvoice('${inv.id}')" title="Voir">👁</button>
                                 </td>
                             </tr>
@@ -12003,7 +12027,7 @@ function recordPayment() {
     
     // Populate invoices select
     const invoices = (Storage.get('invoices', []) || []).map(getInvoiceWithStatus);
-    const unpaid = invoices.filter(i => i.status !== 'paid' && i.status !== 'draft');
+    const unpaid = invoices.filter(i => i.status !== 'paid' && i.status !== 'draft' && i.status !== 'cancelled');
     
     const select = document.getElementById('paymentInvoice');
     select.innerHTML = '<option value="">— Sélectionner une facture —</option>' +
@@ -12072,7 +12096,7 @@ function savePaymentOnce() {
     // Contrôles : facture existante, pas déjà soldée, pas de trop-perçu
     const payments = Storage.get('payments', []) || [];
     const target = (Storage.get('invoices', []) || []).find(i => i.id === invoiceId);
-    const verdict = checkPaymentAmount(target, amount, payments);
+    const verdict = checkPaymentAmount(target, amount, payments, Storage.get('invoices', []) || []);
     if (!verdict.ok) {
         showToast(verdict.reason + (verdict.reason === 'Montant supérieur au reste à payer' && target ? ' (' + formatCurrency(invoiceRemaining(target, payments)) + ')' : ''), 'error');
         return;
