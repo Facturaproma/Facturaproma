@@ -41,3 +41,15 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 - **Reçu de paiement** : PDF par paiement, depuis le bouton « 🧾 Reçu » de l'historique des paiements. Même en-tête, logo et cachet que les factures. Contenu : montant reçu, date, mode, référence, facture concernée, total de la facture, total payé à ce jour (ce versement inclus), reste dû ou « Facture soldée ». Numéro dérivé sans compteur : `REÇU <n° de facture>-<rang du paiement>` (rang = ordre des dates, puis de création).
 - Le reçu est un **justificatif d'encaissement, non fiscal** : il ne remplace pas la facture. Je n'ai pas vérifié si la loi marocaine impose des mentions ou une numérotation particulières ; à faire valider par un comptable avant de le présenter comme conforme.
 - Le cachet du client n'est pas géré (circuit de signature hors périmètre) : une ligne « Bon pour accord » peut être envisagée sur les devis.
+
+## Numérotation de départ (souscription en cours d'année)
+
+- Mon Entreprise > « Numérotation de départ » : l'utilisateur indique le **dernier numéro déjà utilisé** (factures, devis, avoirs ; entier de 0 à 1 000 000). La prochaine pièce portera le numéro suivant (42 → `FAC-<année>-043`).
+- Mécanisme : ce réglage alimente le compteur local, utilisé comme plancher de la **première** attribution serveur (`next_doc_number`, sql/14). Ensuite le serveur tient la suite (`doc_counters`, non modifiable par le client) : le champ est donc **verrouillé** dès qu'un document de ce type a été émis ici.
+- Limite connue : le format affiche l'année en cours (`PRÉFIXE-AAAA-NNN`). Si l'ancien système numérotait autrement, la continuité de la suite est à valider avec le comptable. Aucune conformité n'est promise.
+- Non testé sur un vrai Supabase ni sur téléphone : simulation locale uniquement.
+
+## Exemples et sauvegarde technique
+
+- « Facture d'exemple » / « Reçu d'exemple » (Mon Entreprise) : PDF fictifs portant le filigrane EXEMPLE, avec les réglages réels de l'entreprise (en-tête, logo, cachet, préfixe, prochain numéro). Rien n'est enregistré, aucun numéro n'est consommé. Ils ne permettent pas de tester l'enregistrement d'un vrai paiement.
+- « Sauvegarde technique (JSON) » : fichier de dépannage (format `facturapro-sauvegarde-technique`, version 1), pas un document comptable ni la sauvegarde officielle (celle du serveur). L'import est additif : il ajoute clients, produits, brouillons de facture et devis absents, n'écrase rien, ignore factures émises, paiements, compteur et entreprise (verrouillés ou sensibles côté serveur). Confirmation obligatoire avant écriture.

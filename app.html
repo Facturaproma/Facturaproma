@@ -4616,6 +4616,16 @@
                             <input type="text" id="cmpCreditPrefix" placeholder="AVR">
                             <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">Ex: AVR-2026-001 (notes de crédit)</div>
                         </div>
+                        <div class="form-group" id="startNumbersBox" style="border-top:1px solid var(--line, #e5e1d8); padding-top:10px;">
+                            <label>Numérotation de départ</label>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin: 2px 0 8px;">Vous vous abonnez en cours d'année ? Indiquez le <b>dernier numéro déjà utilisé</b> (0 si aucun) pour poursuivre votre suite. Ex : 42 → la prochaine facture sera FAC-<span class="yr">2026</span>-043. À régler <b>avant</b> votre première facture émise ici : ensuite le numéro est tenu par le serveur et ne peut plus être modifié.</div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                                <div><div style="font-size:11px;color:var(--ink-mute)">Factures</div><input type="number" id="cmpStartInvoice" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></div>
+                                <div><div style="font-size:11px;color:var(--ink-mute)">Devis</div><input type="number" id="cmpStartQuote" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></div>
+                                <div><div style="font-size:11px;color:var(--ink-mute)">Avoirs</div><input type="number" id="cmpStartCredit" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></div>
+                            </div>
+                            <div id="startNumbersHint" style="font-size: 11px; color: var(--ink-mute); margin-top: 6px;"></div>
+                        </div>
                         <div class="form-group">
                             <label>Devise</label>
                             <select id="cmpCurrency">
@@ -4725,11 +4735,23 @@
                         </div>
                     </div>
 
+                    <div class="aside-card" id="sampleCard">
+                        <h3>🧪 Vérifier avant de commencer</h3>
+                        <div style="font-size: 11px; color: var(--ink-mute); margin-bottom: 8px;">Voyez le rendu avec vos réglages (en-tête, logo, cachet, préfixes, prochain numéro). Ce sont des <b>exemples fictifs</b> marqués « EXEMPLE » : rien n'est enregistré, aucun numéro n'est consommé, aucune donnée n'est modifiée.</div>
+                        <button class="btn btn-secondary" id="sampleInvoiceBtn" onclick="downloadSampleInvoice()" style="width: 100%; margin-bottom: 8px;">📄 Facture d'exemple (PDF)</button>
+                        <button class="btn btn-secondary" id="sampleReceiptBtn" onclick="downloadSampleReceipt()" style="width: 100%;">🧾 Reçu de paiement d'exemple (PDF)</button>
+                    </div>
+
+                    <div class="aside-card" id="techBackupCard">
+                        <h3>💾 Sauvegarde technique (JSON)</h3>
+                        <div style="font-size: 11px; color: var(--ink-mute); margin-bottom: 8px;">Fichier de secours <b>pour développeurs / dépannage</b>, pas un document comptable. Votre sauvegarde officielle reste celle du serveur. L'import ajoute uniquement les clients, produits, brouillons et devis absents ; il n'écrase rien et ne réimporte ni factures émises, ni paiements, ni numérotation (ils sont verrouillés par le serveur).</div>
+                        <button class="btn btn-secondary" id="techBackupExportBtn" onclick="exportData()" style="width: 100%; margin-bottom: 8px;">📥 Exporter la sauvegarde technique</button>
+                        <input type="file" id="techBackupFile" accept="application/json,.json" style="display:none" onchange="importTechnicalBackup(event)">
+                        <button class="btn btn-secondary" id="techBackupImportBtn" onclick="document.getElementById('techBackupFile').click()" style="width: 100%;">📤 Importer une sauvegarde technique</button>
+                    </div>
+
                     <div class="aside-card">
                         <h3>🗑️ Zone de danger</h3>
-                        <button class="btn btn-secondary" onclick="exportData()" style="width: 100%; margin-bottom: 8px;">
-                            📥 Exporter les données
-                        </button>
                         <button class="btn btn-danger" onclick="resetApp()" style="width: 100%;">
                             🔄 Tout réinitialiser
                         </button>
@@ -10665,6 +10687,7 @@ function loadCompanyForm() {
     
     // Logo handling - only for licensed users
     updateLogoSection();
+    updateStartNumbersSection();
     
     // Stats (filtrables par période)
     try { const sel = document.getElementById('cmpStatPeriod'); const v = localStorage.getItem('fp_stat_period'); if (sel && v) sel.value = v; } catch {}
@@ -10700,6 +10723,7 @@ function renderCompanyStats() {
 
 function saveCompany() {
     const company = Storage.get('company', {});
+    if (!applyStartNumbers()) return;   // valeur invalide : rien n'est enregistré
     
     const updated = {
         ...company,
@@ -10730,8 +10754,95 @@ function saveCompany() {
     renderDashboard();
 }
 
+// ---- Numérotation de départ (souscription en cours d'année) ----------------
+// Le compteur local sert de plancher à la PREMIÈRE attribution serveur (next_doc_number, sql/14) ;
+// ensuite le serveur tient la suite et le client ne peut plus la modifier. On verrouille donc le champ
+// dès qu'un document de ce type a déjà été émis ici.
+const START_NUMBER_MAX = 1000000;
+const START_NUMBER_FIELDS = { invoice: 'cmpStartInvoice', quote: 'cmpStartQuote', credit: 'cmpStartCredit' };
+function hasIssuedDocs(type) {
+    if (type === 'quote') return (Storage.get('quotes', []) || []).some(d => d && d.number && !isDraftNumber(d.number));
+    return (Storage.get('invoices', []) || []).some(d => d && d.number && !isDraftNumber(d.number) && (d.type || 'invoice') === type);
+}
+function updateStartNumbersSection() {
+    const counter = Storage.get('counter', {}) || {};
+    let locked = 0;
+    for (const t of Object.keys(START_NUMBER_FIELDS)) {
+        const el = document.getElementById(START_NUMBER_FIELDS[t]);
+        if (!el) continue;
+        el.value = String(counter[t] || 0);
+        const l = hasIssuedDocs(t);
+        el.disabled = l;
+        if (l) locked++;
+    }
+    const yr = document.querySelector('#startNumbersBox .yr'); if (yr) yr.textContent = String(new Date().getFullYear());
+    const hint = document.getElementById('startNumbersHint');
+    if (hint) hint.textContent = locked
+        ? 'Les champs grisés sont verrouillés : des documents de ce type ont déjà été émis, le serveur tient la suite.'
+        : 'Aucun document émis pour l\'instant : vous pouvez encore régler le départ.';
+}
+// Retourne false (et affiche l'erreur) si une valeur est invalide ; n'écrit rien dans ce cas.
+function applyStartNumbers() {
+    const counter = Object.assign({ invoice: 0, quote: 0, credit: 0 }, Storage.get('counter', {}) || {});
+    let changed = false;
+    for (const t of Object.keys(START_NUMBER_FIELDS)) {
+        const el = document.getElementById(START_NUMBER_FIELDS[t]);
+        if (!el || el.disabled) continue;
+        const raw = String(el.value).trim();
+        if (el.validity && el.validity.badInput) { showToast('Numérotation de départ invalide : entier entre 0 et ' + START_NUMBER_MAX, 'error'); return false; }
+        if (raw === '') continue;
+        const n = Number(raw);
+        if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 0 || n > START_NUMBER_MAX) {
+            showToast('Numérotation de départ invalide : entier entre 0 et ' + START_NUMBER_MAX, 'error');
+            return false;
+        }
+        if (n !== (counter[t] || 0)) { counter[t] = n; changed = true; }
+    }
+    if (changed) { Storage.set('counter', counter); updateStartNumbersSection(); }
+    return true;
+}
+
+// ---- Exemples (aperçu seulement : rien n'est enregistré, aucun numéro consommé) ----
+function buildSampleData() {
+    const iso = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    const items = [
+        { description: 'Prestation d\'exemple', quantity: 2, price: 500, unitPrice: 500, tva: 20, discount: 0, totalHT: 1000, totalTVA: 200, totalTTC: 1200 },
+        { description: 'Produit d\'exemple', quantity: 1, price: 250, unitPrice: 250, tva: 20, discount: 0, totalHT: 250, totalTVA: 50, totalTTC: 300 }
+    ];
+    const invoice = { id: 'sample-invoice', type: 'invoice', number: getNextNumberPreview('invoice') + ' (EXEMPLE)', clientId: 'sample-client',
+        clientName: 'CLIENT EXEMPLE SARL', clientICE: '000000000000000', clientAddress: 'Adresse fictive, Casablanca', date: iso(0), dueDate: iso(-30), status: 'draft',
+        items, totalHT: 1250, totalTVA: 250, totalTTC: 1500, notes: 'EXEMPLE FICTIF : document non valable, non enregistré.' };
+    const payment = { id: 'sample-payment', invoiceId: invoice.id, date: iso(0), amount: 500, method: 'virement', reference: 'EXEMPLE', createdAt: new Date().toISOString() };
+    return { invoice, payment, client: { id: 'sample-client', name: invoice.clientName, ice: invoice.clientICE } };
+}
+function drawSampleWatermark(pdf) {
+    const n = pdf.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+        pdf.setPage(i);
+        pdf.saveGraphicsState();
+        pdf.setGState(new pdf.GState({ opacity: 0.15 }));
+        pdf.setTextColor(200, 30, 30); pdf.setFontSize(90); pdf.setFont('helvetica', 'bold');
+        pdf.text('EXEMPLE', 105, 165, { align: 'center', angle: -30 });
+        pdf.restoreGraphicsState();
+    }
+}
+async function downloadSampleInvoice() {
+    const sm = buildSampleData();
+    await generatePDF(sm.invoice.id, 'invoice', { sample: sm.invoice });
+}
+async function downloadSampleReceipt() {
+    const sm = buildSampleData();
+    await generatePaymentReceiptPDF(sm.payment.id, { sample: sm });
+}
+
+// ---- Sauvegarde technique (JSON) --------------------------------------------
+const TECH_BACKUP_FORMAT = 'facturapro-sauvegarde-technique';
+const TECH_BACKUP_MAX_BYTES = 10 * 1024 * 1024;
+const TECH_BACKUP_MAX_ITEMS = 5000;
 function exportData() {
     const data = {
+        format: TECH_BACKUP_FORMAT,
+        version: 1,
         company: Storage.get('company'),
         clients: Storage.get('clients', []),
         products: Storage.get('products', []),
@@ -10747,10 +10858,90 @@ function exportData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `facturapro-export-${todayISO()}.json`;
+    a.download = `facturapro-sauvegarde-technique-${todayISO()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Export téléchargé ✓', 'success');
+    showToast('Sauvegarde technique téléchargée ✓', 'success');
+}
+// Copie « propre » : JSON pur, sans clés dangereuses (__proto__/constructor/prototype), profondeur bornée.
+function cleanImported(v, depth) {
+    if (depth > 8) return undefined;
+    if (v === null || typeof v === 'string' || typeof v === 'boolean') return v;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+    if (Array.isArray(v)) return v.slice(0, TECH_BACKUP_MAX_ITEMS).map(x => cleanImported(x, depth + 1)).filter(x => x !== undefined);
+    if (typeof v === 'object') {
+        const o = {};
+        for (const k of Object.keys(v)) {
+            if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+            const c = cleanImported(v[k], depth + 1);
+            if (c !== undefined) o[k] = c;
+        }
+        return o;
+    }
+    return undefined;
+}
+// Analyse + fusion sans écrasement. Pure (ne touche pas au stockage) : renvoie le plan.
+function planTechnicalImport(parsed, current) {
+    const errors = [];
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { errors: ['Le fichier n\'est pas une sauvegarde FacturaPro.'] };
+    if (parsed.format !== TECH_BACKUP_FORMAT && !(Array.isArray(parsed.clients) || Array.isArray(parsed.invoices))) return { errors: ['Format non reconnu : ce n\'est pas une sauvegarde technique FacturaPro.'] };
+    if (parsed.version !== undefined && parsed.version !== 1) errors.push('Version de sauvegarde non prise en charge : ' + String(parsed.version).slice(0, 20));
+    for (const k of ['clients', 'products', 'invoices', 'quotes', 'payments']) {
+        if (parsed[k] !== undefined && !Array.isArray(parsed[k])) errors.push('Champ « ' + k + ' » invalide (liste attendue).');
+        else if (Array.isArray(parsed[k]) && parsed[k].length > TECH_BACKUP_MAX_ITEMS) errors.push('Trop d\'éléments dans « ' + k + ' » (maximum ' + TECH_BACKUP_MAX_ITEMS + ').');
+    }
+    if (errors.length) return { errors };
+    const plan = { errors: [], add: { clients: [], products: [], invoices: [], quotes: [] }, skipped: { duplicates: 0, invalid: 0, issuedInvoices: 0, payments: 0 } };
+    const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+    const goodId = (x) => isObj(x) && typeof x.id === 'string' && x.id.length > 0 && x.id.length <= 100;
+    const ids = (arr) => new Set((arr || []).map(x => x && x.id));
+    const take = (key, label, test) => {
+        const have = ids(current[key]); const seen = new Set();
+        for (const raw of (parsed[key] || [])) {
+            if (!goodId(raw) || !test(raw)) { if (key === 'invoices' && isObj(raw) && raw.number && !isDraftNumber(raw.number) && (raw.status || 'draft') !== 'draft') plan.skipped.issuedInvoices++; else plan.skipped.invalid++; continue; }
+            if (have.has(raw.id) || seen.has(raw.id)) { plan.skipped.duplicates++; continue; }
+            seen.add(raw.id);
+            plan.add[key].push(cleanImported(raw, 0));
+        }
+    };
+    take('clients', 'clients', c => typeof c.name === 'string' && c.name.trim().length > 0);
+    take('products', 'produits', c => typeof c.name === 'string' && c.name.trim().length > 0);
+    // Factures : SEULS les brouillons (le serveur refuse tout document émis ou numéroté, sql/14)
+    take('invoices', 'factures', d => (d.status || 'draft') === 'draft' && (!d.number || isDraftNumber(d.number)) && Array.isArray(d.items));
+    // Devis : numéro libre mais jamais en double avec un devis existant
+    const haveNums = new Set((current.quotes || []).map(q => q && q.number).filter(Boolean));
+    take('quotes', 'devis', d => Array.isArray(d.items) && (!d.number || isDraftNumber(d.number) || !haveNums.has(d.number)));
+    plan.skipped.payments = Array.isArray(parsed.payments) ? parsed.payments.length : 0;
+    return plan;
+}
+function importTechnicalBackup(event) {
+    const input = event && event.target; const file = input && input.files && input.files[0];
+    if (!file) return;
+    const done = () => { try { input.value = ''; } catch (e) {} };
+    if (file.size > TECH_BACKUP_MAX_BYTES) { showToast('Fichier trop volumineux (10 Mo maximum).', 'error'); return done(); }
+    const reader = new FileReader();
+    reader.onerror = () => { showToast('Lecture du fichier impossible.', 'error'); done(); };
+    reader.onload = () => {
+        let parsed;
+        try { parsed = JSON.parse(String(reader.result)); } catch (e) { showToast('Fichier illisible : JSON invalide. Rien n\'a été modifié.', 'error'); return done(); }
+        const current = { clients: Storage.get('clients', []), products: Storage.get('products', []), invoices: Storage.get('invoices', []), quotes: Storage.get('quotes', []) };
+        const plan = planTechnicalImport(parsed, current);
+        if (plan.errors.length) { showToast(plan.errors[0] + ' Rien n\'a été modifié.', 'error'); return done(); }
+        const a = plan.add, n = a.clients.length + a.products.length + a.invoices.length + a.quotes.length;
+        const sk = plan.skipped;
+        const msg = 'Importer cette sauvegarde technique ?\n\nSeront AJOUTÉS : ' + a.clients.length + ' client(s), ' + a.products.length + ' produit(s), ' + a.invoices.length + ' brouillon(s) de facture, ' + a.quotes.length + ' devis.\n'
+            + 'Ignorés : ' + sk.duplicates + ' déjà présent(s), ' + sk.invalid + ' invalide(s), ' + sk.issuedInvoices + ' facture(s) émise(s) et ' + sk.payments + ' paiement(s) (non réimportables : verrouillés par le serveur).\n'
+            + 'Rien de ce qui existe déjà ne sera écrasé.';
+        if (n === 0) { showToast('Rien de nouveau à importer. Aucune donnée modifiée.', 'warning'); return done(); }
+        if (!confirm(msg)) { showToast('Import annulé. Rien n\'a été modifié.', 'warning'); return done(); }
+        for (const k of ['clients', 'products', 'invoices', 'quotes']) {
+            if (a[k].length) Storage.set(k, (Storage.get(k, []) || []).concat(a[k]));
+        }
+        try { renderDashboard(); } catch (e) {}
+        showToast('Import terminé : ' + n + ' élément(s) ajouté(s) ✓', 'success');
+        done();
+    };
+    reader.readAsText(file);
 }
 
 // ============================================
@@ -12620,7 +12811,7 @@ function drawStampOnPdf(pdf, company, xRight, y, boxW, boxH) {
 
 async function generatePDF(id, type, opts) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
-    const doc_data = collection.find(d => d.id === id);
+    const doc_data = (opts && opts.sample) || collection.find(d => d.id === id);
     if (!doc_data) return;
     
     const company = Storage.get('company', {});
@@ -12971,7 +13162,8 @@ async function generatePDF(id, type, opts) {
         });
     }
     
-    const pdfFileName = `${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`;
+    if (opts && opts.sample) drawSampleWatermark(pdf);
+    const pdfFileName = (opts && opts.sample) ? 'EXEMPLE-facture.pdf' : `${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`;
     // Partage direct (WhatsApp, e-mail…) : on renvoie le fichier sans le télécharger
     if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: pdfFileName };
     pdf.save(pdfFileName);
@@ -12999,10 +13191,11 @@ function paymentReceiptNumber(p, invoice, payments) {
 }
 
 async function generatePaymentReceiptPDF(paymentId, opts) {
-    const payments = Storage.get('payments', []) || [];
+    const sample = opts && opts.sample;
+    const payments = sample ? [sample.payment] : (Storage.get('payments', []) || []);
     const p = payments.find(x => x.id === paymentId);
     if (!p) { showToast('Paiement introuvable', 'error'); return; }
-    const invoice = (Storage.get('invoices', []) || []).find(i => i.id === p.invoiceId);
+    const invoice = sample ? sample.invoice : (Storage.get('invoices', []) || []).find(i => i.id === p.invoiceId);
     if (!invoice) { showToast('Facture du paiement introuvable', 'error'); return; }
     const company = Storage.get('company', {});
     const { jsPDF } = window.jspdf;
@@ -13056,7 +13249,7 @@ async function generatePaymentReceiptPDF(paymentId, opts) {
     if (info.length) { pdf.text(info.join('   ·   '), 15, y); y += 10; } else { y += 4; }
 
     // === REÇU DE ===
-    const client = (Storage.get('clients', []) || []).find(c => c.id === invoice.clientId);
+    const client = sample ? sample.client : (Storage.get('clients', []) || []).find(c => c.id === invoice.clientId);
     pdf.setTextColor(...primaryColor); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
     pdf.text('REÇU DE', 15, y); y += 6;
     pdf.setTextColor(...grayDark); pdf.setFontSize(12);
@@ -13118,7 +13311,8 @@ async function generatePaymentReceiptPDF(paymentId, opts) {
         pdf.setFontSize(8); pdf.setTextColor(180, 180, 180); pdf.setFont('helvetica', 'italic');
         pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 290, { align: 'center' });
     }
-    const fileName = number.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') + '.pdf';
+    if (sample) drawSampleWatermark(pdf);
+    const fileName = sample ? 'EXEMPLE-recu.pdf' : number.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') + '.pdf';
     if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: fileName };
     pdf.save(fileName);
     showToast('Reçu téléchargé ✓', 'success');
@@ -13167,7 +13361,7 @@ function blockedByLicense() {
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
      'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
      'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo','handleStampUpload','removeStamp',
-     'generateInvitationCode','cancelInvitation','removeTeamMember'
+     'importTechnicalBackup','generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
         const orig = window[name];
         if (typeof orig !== 'function') return;
