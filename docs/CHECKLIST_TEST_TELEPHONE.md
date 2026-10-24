@@ -16,7 +16,7 @@ Préparation : actualiser la page (tirer vers le bas, ou menu ⋮ → Actualiser
 - [ ] Filtre « Soldées » : seules les factures entièrement payées, sans bouton Encaisser.
 
 ## Écran Paiements
-- [ ] Les factures ouvertes sans paiement sont visibles (filtre « sans paiement »).
+- [ ] Filtre par défaut « À encaisser » ; filtre « Sans paiement » : les factures ouvertes sans aucun paiement ; « Partiellement payées », « En retard », « Soldées », « Toutes » filtrent correctement.
 - [ ] Un paiement partiel affiche le payé ET le reste dû sur la même ligne.
 - [ ] « Encaisser le reste » préremplit le montant restant.
 - [ ] Saisir un montant supérieur au reste : message d'erreur clair, aucun paiement créé.
