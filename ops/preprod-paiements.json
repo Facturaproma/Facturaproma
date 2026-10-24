@@ -3,6 +3,6 @@
   "phase": "cleanup",
   "authorized": true,
   "authorized_on": "2026-10-24",
-  "_run": 5,
-  "rollback": false
+  "_run": 6,
+  "rollback": true
 }
