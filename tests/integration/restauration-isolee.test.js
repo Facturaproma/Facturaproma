@@ -16,15 +16,15 @@ const uid = '11111111-1111-1111-1111-111111111111';
 function makeBackup(counterValue) {
   ps('postgres', `DROP DATABASE IF EXISTS ${src}`); ps('postgres', `CREATE DATABASE ${src}`);
   ps(src, `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN; END IF; END $$;
-    CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE auth.users(id uuid primary key,email text);
+    CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE auth.users(instance_id uuid, id uuid primary key, aud text, email text, encrypted_password text, raw_user_meta_data jsonb, created_at timestamptz DEFAULT now()); CREATE TABLE auth.identities(id uuid primary key, user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE, provider_id text, identity_data jsonb);
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $f$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true),'')::uuid $f$;`);
   for (const f of ['00_setup_complet', '14_numerotation_et_verrouillage', '15_documents']) psf(src, path.join(ROOT, 'sql', f + '.sql'));
-  ps(src, `INSERT INTO auth.users VALUES ('${uid}','fictif@facturapro-test.invalid')`);
+  ps(src, `INSERT INTO auth.users(id,aud,email,encrypted_password,raw_user_meta_data) VALUES ('${uid}','authenticated','fictif@facturapro-test.invalid','x','{"a":1}')`); ps(src, `INSERT INTO auth.identities VALUES ('${uid}','${uid}','fictif@facturapro-test.invalid','{"sub":"1"}')`);
   ps(src, `INSERT INTO public.documents(user_id,doc_type,id,number,status,total_ttc,body,body_sha) VALUES ('${uid}','invoice','i1','FAC-2026-0028','sent',120,'{"number":"FAC-2026-0028"}','x')`);
   ps(src, `INSERT INTO public.doc_counters VALUES ('${uid}','invoice',${counterValue})`);
   const out = path.join(tmp, 'out'); fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out);
   execFileSync('pg_dump', ['--no-owner', '--no-privileges', '-n', 'public', '-f', path.join(out, 'public-2026-10-19.sql'), src], { env });
-  execFileSync('pg_dump', ['--no-owner', '--no-privileges', '--data-only', '-t', 'auth.users', '-f', path.join(out, 'auth-2026-10-19.sql'), src], { env });
+  execFileSync('pg_dump', ['--no-owner', '--no-privileges', '--data-only', '-t', 'auth.users', '-t', 'auth.identities', '-f', path.join(out, 'auth-2026-10-19.sql'), src], { env });
   const tgz = path.join(tmp, `backup-${counterValue}.tar.gz`); execFileSync('tar', ['czf', tgz, '-C', out, '.']);
   const pf = path.join(tmp, '.pp'); fs.writeFileSync(pf, PASS, { mode: 0o600 });
   execFileSync('gpg', ['--batch', '--yes', '--pinentry-mode', 'loopback', '--passphrase-file', pf, '--symmetric', '--cipher-algo', 'AES256', '-o', tgz + '.gpg', tgz]);
