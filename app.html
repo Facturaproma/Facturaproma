@@ -998,6 +998,10 @@
         /* Barre de navigation mobile (bas d'écran) */
         .bottom-nav { display: none; }
         .create-sheet-backdrop { display: none !important; }
+        /* Bannière collante : fond opaque (sinon le contenu défile visiblement derrière elle) */
+        .main > .trial-banner { isolation: isolate; }
+        .main > .trial-banner::before { content: ''; position: absolute; inset: 0; background: var(--bg); border-radius: inherit; z-index: -2; }
+        .main > .trial-banner::after { content: ''; position: absolute; inset: 0; background: inherit; border-radius: inherit; z-index: -1; }
         .main > .trial-banner { margin-bottom: 16px; border-radius: 10px; }
         @media (max-width: 900px) {
             .bottom-nav {
