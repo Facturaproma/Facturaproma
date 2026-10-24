@@ -11,6 +11,11 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 - **À valider** : traitement comptable des acomptes avant facturation (non géré : un acompte se saisit comme paiement d'une facture existante).
 - **Tests** : `tests/paiements.unit.test.js` (17 contrôles), `tests/integration/paiements.browser.test.js` (13 contrôles, simulation locale).
 
+### Facture annulée par un avoir
+- **Règle** (gestion interne, usage comptable courant ; pas un texte légal cité) : un avoir réduit la somme due sur la facture d'origine. L'application n'émet qu'un avoir par facture et toujours égal au TTC : la facture est alors « Annulée (avoir) », sans reste à payer, ni retard, ni relance, et n'accepte plus de paiement. Un avoir partiel (non émis par l'application aujourd'hui) réduirait seulement le reste.
+- **Non géré** : facture déjà payée (en tout ou partie) puis créditée → un remboursement au client serait dû ; la facture reste « Payée » et aucun remboursement n'est suivi. À traiter dans un lot dédié avec validation comptable (remboursement ou compensation).
+- **Tests** : `tests/paiements.unit.test.js` (10 contrôles d'avoir), `tests/integration/avoir-facture.browser.test.js` (8 contrôles, simulation locale).
+
 ## 2. Facturation électronique DGI
 
 - **État constaté** (source : Upsilon Consulting, « Facturation électronique au Maroc 2026 », https://upsilon-consulting.com/facturation-electronique-maroc-2026/, page indiquant un état au 28/09/2026, consultée le 24/10/2026 ; source professionnelle, non officielle) : le principe figure à l'article 145-IX du CGI (système informatique de facturation répondant à des critères fixés par l'administration), mais aucun texte d'application n'est publié au Bulletin officiel : ni calendrier, ni seuils, ni format confirmés. Les auto-entrepreneurs sont exclus (art. 145-XI selon cette source).
