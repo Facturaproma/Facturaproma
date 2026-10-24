@@ -11,6 +11,7 @@ const must = (d, q) => { const r = sql(d, q); if (r.status !== 0) throw new Erro
 const U = '22222222-2222-2222-2222-222222222222';
 const pay = (id, inv, amt) => ({ id, invoiceId: inv, amount: amt, method: 'cash', date: '2026-10-24' });
 const put = (arr) => sql(db, `INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','${JSON.stringify(arr)}'::jsonb) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value`);
+(async () => {
 try {
   must('postgres', `CREATE DATABASE ${db}`);
   must(db, `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN; END IF; END $$;
@@ -40,7 +41,28 @@ try {
   // Concurrence : deux écritures simultanées de 600 sur 1000 (deux onglets) → pas de dépassement dans la base
   const a = spawnSync('bash', ['-c', `psql -X -q -d ${db} -c "INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','[{\\"id\\":\\"a\\",\\"invoiceId\\":\\"i1\\",\\"amount\\":600}]') ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value" & psql -X -q -d ${db} -c "INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','[{\\"id\\":\\"b\\",\\"invoiceId\\":\\"i1\\",\\"amount\\":600}]') ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value" ; wait`], { env, encoding: 'utf8' });
   const tot = must(db, `SELECT COALESCE(sum((e->>'amount')::numeric),0) FROM public.user_data u, jsonb_array_elements(u.value) e WHERE u.key='payments'`); ok('deux écritures simultanées (blobs distincts) : le total stocké reste <= 1000', Number(tot) <= 1000, 'total=' + tot + ' (dernier écrivain gagne : limite connue du mode legacy)');
+  // Modification, suppression, rattachement à une autre facture
+  must(db, `DELETE FROM public.user_data WHERE key='payments'`);
+  put([pay('m1', 'i1', 400)]);
+  r = put([pay('m1', 'i1', 5000)]); ok('modification à la hausse d\'un paiement existant (400 → 5000) : refusée', r.status !== 0 && /PAIEMENT_SUPERIEUR_AU_RESTE/.test(r.stderr));
+  r = put([pay('m1', 'i1', 300)]); ok('modification à la baisse (400 → 300) : acceptée', r.status === 0);
+  put([pay('m1', 'i1', 300), pay('m2', 'i1', 700)]);
+  r = put([pay('m1', 'i1', 300), pay('m2', 'i0', 700)]); ok('paiement rattaché à une facture à 0 : refusé', r.status !== 0 && /PAIEMENT_FACTURE_NULLE/.test(r.stderr));
+  r = put([pay('m1', 'i1', 300)]); ok('suppression d\'un paiement : acceptée', r.status === 0);
+  r = put([]); ok('suppression de tous les paiements : acceptée', r.status === 0);
+  // Écritures SIMULTANÉES réellement chevauchantes : B doit attendre A (verrou FOR UPDATE), puis être jugée sur la valeur validée par A
+  put([]);
+  const t0 = Date.now();
+  const { spawn } = require('child_process');
+  const A = spawn('psql', ['-X', '-q', '-d', db, '-c', `BEGIN; INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','${JSON.stringify([pay('a', 'i1', 600)])}'::jsonb) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value; SELECT pg_sleep(2); COMMIT;`], { env });
+  const Adone = new Promise((res) => A.on('close', res));
+  await new Promise((r2) => setTimeout(r2, 700));
+  const tB = Date.now(); const rb = sql(db, `INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','${JSON.stringify([pay('a', 'i1', 600), pay('b', 'i1', 700)])}'::jsonb) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value`); const waited = Date.now() - tB;
+  await Adone;
+  ok('B (cumul 1300 > 1000 par rapport à la valeur validée par A) est SÉRIALISÉE derrière A puis refusée', waited >= 1000 && rb.status !== 0 && /PAIEMENT_SUPERIEUR_AU_RESTE/.test(rb.stderr), 'attente=' + waited + ' ms');
+  const fin = must(db, `SELECT COALESCE(sum((e->>'amount')::numeric),0) FROM public.user_data u, jsonb_array_elements(u.value) e WHERE u.key='payments'`); ok('état final = blob de A (600), jamais 1300', Number(fin) === 600, fin);
   const tg = must(db, `SELECT count(*) FROM pg_trigger WHERE tgname='trg_10_payments_cap'`); ok('retour arrière documenté : le déclencheur se supprime proprement', (sql(db, 'DROP TRIGGER trg_10_payments_cap ON public.user_data').status === 0) && tg === '1');
 } catch (e) { console.log('ERREUR', e.message); R.push(false); }
 finally { try { must('postgres', `DROP DATABASE IF EXISTS ${db}`); } catch (e) {} }
 if (R.includes(false)) { console.log('\nÉCHEC : ' + R.filter((x) => !x).length); process.exit(1); } else console.log('\nOK : ' + R.length + ' contrôles (sql/26 legacy, PostgreSQL local jetable, données fictives)');
+})();

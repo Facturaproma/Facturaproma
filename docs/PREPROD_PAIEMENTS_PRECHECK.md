@@ -53,3 +53,19 @@ Préproduction (lecture seule, vérifiée) : 3 comptes, tous en legacy, 0 en mod
 - Test local `tests/integration/paiements.legacy-plafond.test.js` : **13 contrôles OK** (dont la preuve que, sans sql/26, un paiement de 1500 sur 1000 passe), PostgreSQL 16 local jetable, données fictives.
 - **Limites** : facture absente de `user_data` → paiement accepté ; cumul des lignes seulement (pas `paidAmount`) ; en mode legacy le dernier écrivain gagne (deux onglets simultanés écrasent, ce n'est pas nouveau) ; en cas de refus, **comportement de l'application à valider en préproduction** (message affiché, pas de réessai en boucle) avant toute production.
 - Ordre d'application proposé, après vos autorisations distinctes : préproduction sql/25 puis sql/26 → test navigateur avec comptes jetables → décision pour la production.
+
+### Concurrence, modification, suppression, refus : conclusions (24/10/2026, simulation locale)
+- **Pourquoi un trigger suffit pour les comptes legacy** : l'application écrit le tableau complet des paiements (dernier écrivain gagne). L'état final est donc toujours un tableau que le serveur a validé ; il n'existe pas de fusion qui pourrait additionner deux ajouts valides en un dépassement. Deux onglets qui ajoutent chacun 700 sur 1200 donnent un total ≤ 1200 mais **un des deux ajouts est perdu** (limite préexistante du mode legacy, à signaler à l'utilisateur ; la solution de fond est le mode « documents »).
+- **Sérialisation** : `sql/26` lit l'ancienne valeur `FOR UPDATE` (et les factures `FOR SHARE`) ; une seconde écriture attend la première puis est jugée sur la valeur validée (test à chevauchement réel : attente 1,3 s, puis refus).
+- **Modification / suppression** : la règle porte sur l'**augmentation du cumul** par facture (hausse de montant, nouveau paiement, rattachement à une autre facture : contrôlés ; baisse et suppression : toujours acceptées).
+- **Refus côté application** (correction dans `app.html`, `_syncToCloud`) : avant, un refus `PAIEMENT_SUPERIEUR_AU_RESTE` était traité comme une panne réseau → écriture remise en file **indéfiniment** et paiement fautif conservé localement (test sans correctif : encaissé 1400 pour une facture de 1200, reste 0, file non vide). Après : copie de sauvegarde, retour à la dernière valeur du serveur, file purgée, message « Paiement refusé », écrans recalculés (15 contrôles navigateur).
+- **Comptes en mode documents** : `record_payment` (sql/25) verrouille la ligne de facture (`FOR UPDATE`) ; test de concurrence SQL de #58 (15 contrôles) + répétition de #64.
+- **Limite restante** : si le refus de `payments` survient après l'acceptation de l'écriture de la facture (statut payé / `paidAmount` relevés), la facture peut afficher un avancement sans ligne de paiement correspondante ; `invoicePaidAmount` plafonne à son TTC, donc pas de dépassement affiché. À traiter dans un lot dédié si la préproduction le confirme.
+- **Aucun de ces résultats n'est une preuve de sécurité en production** : simulation locale (PostgreSQL 16), pas de Supabase réel (RLS, pooler, latence réels non couverts).
+
+### Migrations préparées, NON exécutées
+| Fichier | Portée | Retour arrière |
+|---|---|---|
+| `sql/25_plafond_paiements.sql` | comptes en mode documents | ré-exécuter le bloc `record_payment` de sql/15 |
+| `sql/26_plafond_paiements_legacy.sql` | comptes legacy (tous les clients actuels) | `DROP TRIGGER trg_10_payments_cap ON public.user_data; DROP FUNCTION public.guard_payments_cap_legacy();` |
+Ordre : préproduction (après autorisation) → tests navigateur avec comptes jetables → production (autre autorisation).
