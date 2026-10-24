@@ -76,9 +76,21 @@ function run(file, opts = {}) {
     // 3. Comptes d'abord (les données publiques référencent auth.users), puis schéma public (arrêt à la première erreur)
     let authOk = false;
     if (auth) {
+      // Les colonnes réelles de auth.users / auth.identities (Supabase) sont lues dans l'EN-TÊTE des instructions COPY du dump (noms de colonnes seulement,
+      // jamais les données) : tables factices de même forme (id/user_id en uuid, le reste en texte) pour que les clés étrangères du schéma public
+      // vers auth.users soient réellement vérifiées avec les vrais identifiants de comptes.
+      const authSql = fs.readFileSync(path.join(dir, auth), 'utf8');
+      const ddl = [];
+      for (const m of authSql.matchAll(/^COPY auth\.([a-z_]+) \(([^)]*)\) FROM stdin;$/gm)) {
+        const cols = m[2].split(',').map((c) => c.trim().replace(/^"|"$/g, '')).filter((c) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(c));
+        if (!cols.length) continue;
+        const def = cols.map((c) => `"${c}" ${c === 'id' ? 'uuid PRIMARY KEY' : (c === 'user_id' ? 'uuid' : 'text')}`).join(', ');
+        ddl.push(`DROP TABLE IF EXISTS auth."${m[1]}" CASCADE; CREATE TABLE auth."${m[1]}" (${def});`);
+      }
+      if (ddl.length) psql(env, db, ddl.join('\n'));
       const a = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-f', path.join(dir, auth)], { env, encoding: 'utf8' });
       authOk = a.status === 0;
-      if (!authOk) report.warnings.push('comptes auth non rechargés dans le schéma factice (colonnes Supabase réelles requises) : restauration publique faite sans contrôle des clés étrangères vers auth.users ; à valider dans un projet Supabase vierge');
+      if (!authOk) report.warnings.push('comptes auth non rechargés : les clés étrangères vers auth.users ne peuvent pas être vérifiées par ce test');
     }
     const envR = authOk ? env : { ...env, PGOPTIONS: '-c session_replication_role=replica' };
     const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-f', path.join(dir, pub)], { env: envR, encoding: 'utf8' });
