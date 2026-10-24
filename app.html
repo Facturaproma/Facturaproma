@@ -374,6 +374,27 @@
         .pay-sep { color: var(--ink-mute); }
         .pay-rest { display: block; font-size: 15px; color: var(--ink); }
         .pay-of { display: block; color: var(--ink-mute); font-size: 11px; }
+        /* Liste des factures : 3 colonnes lisibles sur téléphone ; brouillons nettement distincts des factures enregistrées */
+        table.tbl-inv td, table.tbl-inv th { white-space: normal; vertical-align: top; padding-left: 8px; padding-right: 8px; }
+        table.tbl-inv th:last-child, table.tbl-inv td:last-child { min-width: 0; width: 112px; position: static; box-shadow: none; }
+        table.tbl-inv td:last-child .btn { display: block; width: 100%; margin: 0 0 6px 0; text-align: center; }
+        table.tbl-inv td:last-child .btn-ghost { background: transparent; color: #1a2238 !important; border: 1px solid var(--border); height: auto; min-width: 0; font-size: 13px; padding: 7px 8px; }
+        .inv-client { color: var(--ink-soft); font-size: 13px; }
+        .inv-dates { color: var(--ink-mute); font-size: 11px; }
+        .inv-pay { font-size: 11px; color: var(--ink-soft); } .inv-pay-none { color: var(--ink-mute); }
+        .inv-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; letter-spacing: .02em; }
+        .inv-tag-draft { background: #fff4d6; color: #8a5a00; border: 1px dashed #d9a21b; }
+        .inv-tag-issued { background: #e7f3ec; color: #1f6b44; }
+        .inv-tag-credit { background: var(--warning); color: #fff; }
+        tr.inv-row-draft td { background: repeating-linear-gradient(135deg, #fffdf6, #fffdf6 8px, #fff9e8 8px, #fff9e8 16px); }
+        tr.inv-row-draft td:first-child { border-left: 4px dashed #d9a21b; }
+        tr.inv-row-issued td:first-child { border-left: 4px solid var(--success); }
+        tr.inv-row-credit td:first-child { border-left: 4px solid var(--warning); }
+        tr.inv-group td { background: var(--surface-soft); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); padding: 8px 10px; }
+        tr.inv-group td span { color: var(--ink-mute); }
+        table.tbl-inv tr.inv-group td:last-child { width: auto; }
+        details.inv-more > summary { list-style: none; cursor: pointer; margin-bottom: 6px; text-align: center; }
+        details.inv-more > summary::-webkit-details-marker { display: none; }
         /* Boutons d'action des tableaux : bien visibles et faciles à toucher */
         td .btn-ghost.btn-sm {
             min-width: 40px; height: 40px; padding: 0 10px;
@@ -3262,7 +3283,17 @@
 
             <div class="table-card">
                 <div class="table-header">
-                    <h3>Toutes les factures</h3>
+                    <h3>Factures</h3>
+                    <select id="invoiceFilter" onchange="renderInvoices()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px;">
+                        <option value="all">Toutes</option>
+                        <option value="draft">Brouillons (non enregistrés)</option>
+                        <option value="issued">Enregistrées</option>
+                        <option value="none">Non payées</option>
+                        <option value="partial">Payées partiellement</option>
+                        <option value="paid">Soldées</option>
+                        <option value="overdue">En retard</option>
+                        <option value="credit">Avoirs</option>
+                    </select>
                     <div class="search-box">
                         <span>🔍</span>
                         <input type="text" id="invoiceSearch" placeholder="Rechercher..." oninput="renderInvoices()">
@@ -7623,74 +7654,75 @@ function renderCAChart() {
 function renderInvoices() {
     const invoices = Storage.get('invoices', []);
     const search = document.getElementById('invoiceSearch')?.value.toLowerCase() || '';
-    
-    const filtered = invoices.filter(i => {
-        if (!search) return true;
-        return i.number.toLowerCase().includes(search) ||
-               (i.clientName || '').toLowerCase().includes(search);
-    });
-    
-    const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const filter = document.getElementById('invoiceFilter')?.value || 'all';
     const allPayments = Storage.get('payments', []) || [];
     
+    const filtered = invoices.filter(i => {
+        if (search && !((i.number || '').toLowerCase().includes(search) || (i.clientName || '').toLowerCase().includes(search))) return false;
+        return invoiceMatchesFilter(i, filter, allPayments, invoices);
+    });
+    
+    const byDate = (a, b) => new Date(b.date) - new Date(a.date);
+    const drafts = filtered.filter(i => invoiceListKind(i) === 'draft').sort(byDate);
+    const registered = filtered.filter(i => invoiceListKind(i) !== 'draft').sort(byDate);
+    
     const el = document.getElementById('invoicesList');
-    if (sorted.length === 0) {
+    if (filtered.length === 0) {
         el.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📄</div>
                 <h3>Aucune facture</h3>
-                <p>${search ? 'Aucun résultat' : 'Créez votre première facture'}</p>
-                ${!search ? '<button class="btn btn-primary" onclick="newInvoice()">+ Nouvelle facture</button>' : ''}
+                <p>${search || filter !== 'all' ? 'Aucun résultat pour ce filtre' : 'Créez votre première facture'}</p>
+                ${!search && filter === 'all' ? '<button class="btn btn-primary" onclick="newInvoice()">+ Nouvelle facture</button>' : ''}
             </div>`;
         return;
     }
     
+    const row = (i) => {
+        const kind = invoiceListKind(i), isCredit = kind === 'credit', isDraft = kind === 'draft';
+        const ps = kind === 'issued' ? paymentSituation(i, allPayments, invoices) : { state: 'closed', remaining: 0, paid: 0 };
+        const hasCredit = invoices.some(c => c && c.type === 'credit' && (c.relatedInvoiceId === i.id || (!c.relatedInvoiceId && c.relatedInvoiceNumber === i.number)));
+        const title = isDraft ? `<span class="inv-tag inv-tag-draft">Brouillon · non enregistré</span>`
+            : isCredit ? `<strong style="color: var(--warning);">${escapeHtml(dn(i.number))}</strong> <span class="inv-tag inv-tag-credit">AVOIR</span>`
+            : `<strong>${escapeHtml(dn(i.number))}</strong> <span class="inv-tag inv-tag-issued">🔒 Enregistrée</span>`;
+        const amount = `<strong style="${isCredit ? 'color: var(--danger);' : ''}">${formatCurrency(i.totalTTC)}</strong>`;
+        const statusPill = isDraft ? '' : (ps.state === 'paid' ? '<span class="status-pill status-paid">Soldée</span>' : `<span class="status-pill status-${i.status}">${statusLabel(i.status)}</span>`);
+        const payLine = ps.state === 'partial' ? `<span class="inv-pay">Payé ${formatCurrency(ps.paid)} · <strong>reste ${formatCurrency(ps.remaining)}</strong></span>`
+            : ps.state === 'none' ? `<span class="inv-pay inv-pay-none">Aucun paiement · reste ${formatCurrency(ps.remaining)}</span>` : '';
+        const actions = isDraft
+            ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')">✏️ Modifier</button>
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer ce brouillon" style="color: var(--danger);">🗑 Supprimer</button>`
+            : `${ps.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); recordPaymentForInvoice('${i.id}')" title="Enregistrer un paiement">${ps.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Voir la facture">👁 Voir</button>
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥 PDF</button>
+               <details class="inv-more" onclick="event.stopPropagation()"><summary class="btn btn-ghost btn-sm" title="Autres actions">⋯ Plus</summary>
+                   <button class="btn btn-ghost btn-sm" onclick="sendDocWhatsApp('${i.id}', 'invoice')" style="color: #25D366;">💬 WhatsApp</button>
+                   <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice('${i.id}')">📋 Dupliquer</button>
+                   ${!isCredit && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice('${i.id}')" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
+               </details>`;
+        return `
+            <tr class="inv-row inv-row-${kind}">
+                <td onclick="editInvoice('${i.id}')">${title}<br><span class="inv-client">${escapeHtml(i.clientName || '—')}</span><br><span class="inv-dates">Émise ${formatDate(i.date)}${i.dueDate && !isCredit ? ` · échéance ${formatDate(i.dueDate)}` : ''}${i.relatedInvoiceNumber ? `<br>↩️ relatif à ${escapeHtml(i.relatedInvoiceNumber)}` : ''}</span></td>
+                <td onclick="editInvoice('${i.id}')">${amount}${statusPill ? `<br>${statusPill}` : ''}${payLine ? `<br>${payLine}` : ''}</td>
+                <td>${actions}</td>
+            </tr>`;
+    };
+    const group = (label, n) => `<tr class="inv-group"><td colspan="3">${label} <span>(${n})</span></td></tr>`;
+    const body = (drafts.length && registered.length ? group('Brouillons — non enregistrés, modifiables', drafts.length) : '')
+        + drafts.map(row).join('')
+        + (drafts.length && registered.length ? group('Factures enregistrées — verrouillées', registered.length) : '')
+        + registered.map(row).join('');
+    
     el.innerHTML = `
-        <table class="tbl-act">
+        <table class="tbl-act tbl-inv">
             <thead>
                 <tr>
-                    <th>Numéro</th>
-                    <th>Client</th>
-                    <th>Date émission</th>
-                    <th>Échéance</th>
-                    <th>Montant TTC</th>
-                    <th>Statut</th>
+                    <th>Facture</th>
+                    <th>Montant</th>
                     <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                ${sorted.map(i => {
-                    const isCredit = i.type === 'credit' || (i.totalTTC || 0) < 0;
-                    const rowStyle = isCredit ? 'background: rgba(232, 177, 74, 0.04);' : '';
-                    const numberDisplay = isCredit ? `<strong style="color: var(--warning);">${escapeHtml(dn(i.number))}</strong> <span style="font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 100px; font-weight: 700;">AVOIR</span>` : `<strong>${escapeHtml(dn(i.number))}</strong>`;
-                    const amountDisplay = isCredit 
-                        ? `<strong style="color: var(--danger);">${formatCurrency(i.totalTTC)}</strong>`
-                        : `<strong>${formatCurrency(i.totalTTC)}</strong>`;
-                    
-                    const ps = isCredit ? { state: 'closed', remaining: 0, paid: 0 } : paymentSituation(i, allPayments, invoices);
-                    const payLine = ps.state === 'partial' ? `<br><span style="font-size: 11px; color: var(--ink-soft);">Payé ${formatCurrency(ps.paid)} · <strong>reste ${formatCurrency(ps.remaining)}</strong></span>`
-                        : ps.state === 'none' && i.status !== 'draft' ? `<br><span style="font-size: 11px; color: var(--ink-mute);">Aucun paiement · reste ${formatCurrency(ps.remaining)}</span>` : '';
-                    return `
-                        <tr style="${rowStyle}">
-                            <td onclick="editInvoice('${i.id}')">${numberDisplay}${i.relatedInvoiceNumber ? `<br><small style="color: var(--ink-mute); font-size: 10px;">↩️ relatif à ${i.relatedInvoiceNumber}</small>` : ''}</td>
-                            <td onclick="editInvoice('${i.id}')">${escapeHtml(i.clientName || '—')}</td>
-                            <td onclick="editInvoice('${i.id}')">${formatDate(i.date)}</td>
-                            <td onclick="editInvoice('${i.id}')">${formatDate(i.dueDate)}</td>
-                            <td onclick="editInvoice('${i.id}')">${amountDisplay}${payLine}</td>
-                            <td onclick="editInvoice('${i.id}')"><span class="status-pill status-${i.status}">${statusLabel(i.status)}</span></td>
-                            <td>
-                                ${ps.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); recordPaymentForInvoice('${i.id}')" title="Enregistrer un paiement">${ps.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Modifier / imprimer">✏️</button>
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥</button>
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${i.id}', 'invoice')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); duplicateInvoice('${i.id}')" title="Dupliquer">📋</button>
-                                ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); createCreditFromInvoice('${i.id}')" title="Créer un avoir (remboursement)" style="color: var(--warning);">↩️</button>` : ''}
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
+            <tbody>${body}</tbody>
         </table>`;
 }
 
@@ -11927,6 +11959,32 @@ function paymentSituation(inv, payments, invoices) {
     const paid = invoicePaidAmount(inv, payments), remaining = invoiceRemaining(inv, payments, invoices);
     if (remaining <= 0 || inv.status === 'paid') return { state: 'paid', total, paid, remaining: 0 };
     return { state: paid > 0 ? 'partial' : 'none', total, paid, remaining };
+}
+// Nature d'une pièce dans la liste des factures : 'draft' (brouillon non enregistré), 'credit' (avoir) ou 'issued' (facture enregistrée, numérotée, verrouillée).
+function invoiceListKind(inv) {
+    if (!inv) return 'draft';
+    if (inv.type === 'credit' || money2(inv.totalTTC) < 0) return 'credit';
+    if ((inv.status || 'draft') === 'draft' || (typeof inv.number === 'string' && inv.number.startsWith('BRO-'))) return 'draft';
+    return 'issued';
+}
+// La pièce passe-t-elle le filtre de la liste ? filter : all | draft | issued | none | partial | paid | overdue | credit
+function invoiceMatchesFilter(inv, filter, payments, invoices) {
+    const kind = invoiceListKind(inv);
+    if (!filter || filter === 'all') return true;
+    if (filter === 'draft') return kind === 'draft';
+    if (filter === 'credit') return kind === 'credit';
+    if (filter === 'issued') return kind === 'issued';
+    if (kind !== 'issued') return false;                                   // les filtres d'encaissement ne concernent que les factures enregistrées
+    const st = paymentSituation(inv, payments, invoices);
+    if (filter === 'none') return st.state === 'none';
+    if (filter === 'partial') return st.state === 'partial';
+    if (filter === 'paid') return st.state === 'paid';
+    if (filter === 'overdue') {
+        if (st.remaining <= 0 || !inv.dueDate) return false;
+        const due = new Date(inv.dueDate), t = new Date(); due.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
+        return t > due;
+    }
+    return true;
 }
 // </PAIEMENTS-CALC>
 
