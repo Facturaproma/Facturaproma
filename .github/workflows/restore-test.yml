@@ -16,6 +16,8 @@ jobs:
   restore:
     # Les secrets ne doivent servir qu'au code de la branche principale : une branche modifiée ne peut pas lancer ce test
     if: github.ref == 'refs/heads/main'
+    # Environnement protégé (« Required reviewers ») : le job attend l'approbation du propriétaire avant de démarrer et d'accéder au secret.
+    environment: restauration
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
