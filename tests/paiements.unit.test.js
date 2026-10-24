@@ -5,7 +5,7 @@ const a = html.indexOf('// <PAIEMENTS-CALC>'), b = html.indexOf('// </PAIEMENTS-
 assert(a > 0 && b > a, 'bloc PAIEMENTS-CALC introuvable');
 const fa = html.indexOf('// <FISCAL-CALC>'), fb = html.indexOf('// </FISCAL-CALC>');
 assert(fa > 0 && fb > fa, 'bloc FISCAL-CALC introuvable');
-const api = new Function(html.slice(fa, fb) + html.slice(a, b) + '\nreturn { paymentEvents, invoiceLastPaymentDate, invoicePaymentMethods, paymentsCsv, money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit };')();
+const api = new Function(html.slice(fa, fb) + html.slice(a, b) + '\nreturn { paymentEvents, invoiceLastPaymentDate, invoicePaymentMethods, paymentsCsv, money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit, paymentSituation };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 const inv = (o) => Object.assign({ id: 'f1', status: 'sent', totalTTC: 1200 }, o);
 const pay = (amount, id = 'f1') => ({ id: 'p' + Math.random(), invoiceId: id, amount });
@@ -78,4 +78,23 @@ ok('CSV paiements : en-tête + 3 lignes triées par date', lines.length === 4 &&
 ok('CSV paiements : formule dans un nom de client neutralisée', csv.includes("'=cmd") && !/;=cmd/.test(csv));
 ok('CSV paiements : somme des montants = encaissements', lines.slice(1).reduce((t, l) => t + parseFloat(l.split(';')[3]), 0) === 1100);
 
+
+// --- Situation d'encaissement pour l'affichage (écran Paiements, liste des factures) ---
+{
+  const ps = api.paymentSituation; const p = (id, inv, a) => ({ id, invoiceId: inv, amount: a });
+  const f = inv({ id: 'f1', totalTTC: 1200, status: 'sent' });
+  let r = ps(f, [], [f]);
+  ok('situation : aucun paiement -> none, reste = total', r.state === 'none' && r.remaining === 1200 && r.paid === 0);
+  r = ps(f, [p('a', 'f1', 400)], [f]);
+  ok('situation : paiement partiel -> partial, payé 400 / reste 800', r.state === 'partial' && r.paid === 400 && r.remaining === 800 && r.total === 1200);
+  r = ps(f, [p('a', 'f1', 400), p('b', 'f1', 800)], [f]);
+  ok('situation : soldée par les paiements -> paid, reste 0', r.state === 'paid' && r.remaining === 0);
+  ok('situation : statut payée sans ligne de paiement -> paid', ps(inv({ status: 'paid' }), [], []).state === 'paid');
+  ok('situation : brouillon, avoir et facture à 0 -> closed (ni à encaisser ni encaissable)', ['draft'].every(x => ps(inv({ status: x }), [], []).state === 'closed') && ps(inv({ type: 'credit', totalTTC: -100 }), [], []).state === 'closed' && ps(inv({ totalTTC: 0 }), [], []).state === 'closed');
+  const cr2 = { id: 'a1', type: 'credit', status: 'sent', totalTTC: -1200, relatedInvoiceId: 'f1' };
+  r = ps(f, [], [f, cr2]);
+  ok('situation : annulée par un avoir -> credited, reste 0 (pas de bouton Encaisser)', r.state === 'credited' && r.remaining === 0);
+  r = ps(f, [p('a', 'f1', 400)], [f, { ...cr2, totalTTC: -300 }]);
+  ok('situation : acompte 400 + avoir 300 -> reste 500 (même calcul que le contrôle du paiement)', r.state === 'partial' && r.remaining === 500 && r.remaining === api.invoiceRemaining(f, [p('a', 'f1', 400)], [f, { ...cr2, totalTTC: -300 }]));
+}
 console.log('\nOK : ' + n + ' contrôles (paiements)');

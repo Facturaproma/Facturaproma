@@ -359,6 +359,21 @@
         }
         table.tbl-act thead th:last-child { background: var(--surface-soft); }
         table.tbl-act td:last-child { display: table-cell; }
+        /* Écran Paiements : une ligne = facture + situation d'encaissement (payé / reste), lisible sans défilement horizontal */
+        table.tbl-pay td { vertical-align: top; }
+        table.tbl-pay td, table.tbl-pay th { white-space: normal; padding-left: 10px; padding-right: 10px; }
+        table.tbl-pay td:nth-child(2) { min-width: 0; }
+        table.tbl-pay th:last-child, table.tbl-pay td:last-child { min-width: 0; width: 112px; position: static; box-shadow: none; }
+        table.tbl-pay td:last-child .btn { display: block; width: 100%; margin: 0 0 6px 0; text-align: center; }
+        table.tbl-pay td:last-child .btn-ghost { background: transparent; color: #1a2238 !important; border: 1px solid var(--border); }
+        .pay-client { color: var(--ink-soft); font-size: 13px; }
+        .pay-due { color: var(--ink-mute); font-size: 11px; }
+        .pay-paid { color: var(--success); font-weight: 600; font-size: 13px; }
+        .pay-none, .pay-mute { color: var(--ink-mute); font-size: 13px; }
+        .pay-ok { color: var(--success); font-weight: 700; }
+        .pay-sep { color: var(--ink-mute); }
+        .pay-rest { display: block; font-size: 15px; color: var(--ink); }
+        .pay-of { display: block; color: var(--ink-mute); font-size: 11px; }
         /* Boutons d'action des tableaux : bien visibles et faciles à toucher */
         td .btn-ghost.btn-sm {
             min-width: 40px; height: 40px; padding: 0 10px;
@@ -4196,10 +4211,12 @@
                     <h3>Factures à suivre</h3>
                     <div style="display: flex; gap: 8px;">
                         <select id="paymentFilter" onchange="renderPayments()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px;">
-                            <option value="all">Toutes</option>
-                            <option value="pending" selected>En attente</option>
+                            <option value="open" selected>À encaisser</option>
+                            <option value="none">Sans paiement</option>
+                            <option value="partial">Partiellement payées</option>
                             <option value="overdue">En retard</option>
-                            <option value="paid">Payées</option>
+                            <option value="paid">Soldées</option>
+                            <option value="all">Toutes</option>
                         </select>
                         <button class="btn btn-secondary btn-sm" id="exportPaymentsBtn" onclick="exportPaymentsCSV()" title="Une ligne par encaissement">⬇ Exporter les paiements</button>
                     </div>
@@ -7614,6 +7631,7 @@ function renderInvoices() {
     });
     
     const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const allPayments = Storage.get('payments', []) || [];
     
     const el = document.getElementById('invoicesList');
     if (sorted.length === 0) {
@@ -7649,15 +7667,19 @@ function renderInvoices() {
                         ? `<strong style="color: var(--danger);">${formatCurrency(i.totalTTC)}</strong>`
                         : `<strong>${formatCurrency(i.totalTTC)}</strong>`;
                     
+                    const ps = isCredit ? { state: 'closed', remaining: 0, paid: 0 } : paymentSituation(i, allPayments, invoices);
+                    const payLine = ps.state === 'partial' ? `<br><span style="font-size: 11px; color: var(--ink-soft);">Payé ${formatCurrency(ps.paid)} · <strong>reste ${formatCurrency(ps.remaining)}</strong></span>`
+                        : ps.state === 'none' && i.status !== 'draft' ? `<br><span style="font-size: 11px; color: var(--ink-mute);">Aucun paiement · reste ${formatCurrency(ps.remaining)}</span>` : '';
                     return `
                         <tr style="${rowStyle}">
                             <td onclick="editInvoice('${i.id}')">${numberDisplay}${i.relatedInvoiceNumber ? `<br><small style="color: var(--ink-mute); font-size: 10px;">↩️ relatif à ${i.relatedInvoiceNumber}</small>` : ''}</td>
                             <td onclick="editInvoice('${i.id}')">${escapeHtml(i.clientName || '—')}</td>
                             <td onclick="editInvoice('${i.id}')">${formatDate(i.date)}</td>
                             <td onclick="editInvoice('${i.id}')">${formatDate(i.dueDate)}</td>
-                            <td onclick="editInvoice('${i.id}')">${amountDisplay}</td>
+                            <td onclick="editInvoice('${i.id}')">${amountDisplay}${payLine}</td>
                             <td onclick="editInvoice('${i.id}')"><span class="status-pill status-${i.status}">${statusLabel(i.status)}</span></td>
                             <td>
+                                ${ps.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); recordPaymentForInvoice('${i.id}')" title="Enregistrer un paiement">${ps.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Modifier / imprimer">✏️</button>
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥</button>
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${i.id}', 'invoice')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
@@ -11893,6 +11915,17 @@ function paymentsCsv(invoices, payments) {
     rows.forEach(e => { const i = byId[e.invoiceId] || {}; L.push([e.date, csvText(i.number || ''), csvText(i.clientName || ''), e.amount.toFixed(2), csvText(e.method), csvText(e.reference)].join(';')); });
     return L.join('\n');
 }
+// Situation d'encaissement d'une facture pour l'affichage : { state, total, paid, remaining }.
+// state : 'none' (rien payé), 'partial' (acompte), 'paid' (soldée), 'closed' (brouillon, avoir, annulée), 'credited' (annulée par avoir).
+// Source unique du « reste à payer » : invoiceRemaining (tient compte des avoirs), jamais un second calcul.
+function paymentSituation(inv, payments, invoices) {
+    const total = money2(inv && inv.totalTTC);
+    if (!inv || inv.status === 'draft' || inv.status === 'cancelled' || inv.type === 'credit' || total <= 0) return { state: 'closed', total, paid: 0, remaining: 0 };
+    const paid = invoicePaidAmount(inv, payments), remaining = invoiceRemaining(inv, payments, invoices);
+    if (isCancelledByCredit(inv, invoices)) return { state: 'credited', total, paid, remaining: 0 };
+    if (remaining <= 0 || inv.status === 'paid') return { state: 'paid', total, paid, remaining: 0 };
+    return { state: paid > 0 ? 'partial' : 'none', total, paid, remaining };
+}
 // </PAIEMENTS-CALC>
 
 let _creditCache = { ref: null, list: null };
@@ -11916,7 +11949,7 @@ function getInvoiceWithStatus(invoice) {
 function renderPayments() {
     const invoices = (Storage.get('invoices', []) || []).map(getInvoiceWithStatus);
     const payments = Storage.get('payments', []) || [];
-    const filter = document.getElementById('paymentFilter')?.value || 'pending';
+    const filter = document.getElementById('paymentFilter')?.value || 'open';
     
     // Stats
     const today = new Date();
@@ -11961,9 +11994,13 @@ function renderPayments() {
     
     // Filter invoices
     let filtered = invoices.filter(i => i.status !== 'draft');
-    if (filter === 'pending') filtered = filtered.filter(i => i.status === 'sent');
-    if (filter === 'overdue') filtered = filtered.filter(i => i.status === 'overdue');
-    if (filter === 'paid') filtered = filtered.filter(i => i.status === 'paid');
+    const sit = (i) => paymentSituation(i, payments, invoices);
+    filtered = filtered.filter(i => i.type !== 'credit' && sit(i).state !== 'closed');       // les avoirs et pièces sans montant ne sont pas « à encaisser »
+    if (filter === 'open') filtered = filtered.filter(i => ['none', 'partial'].includes(sit(i).state));
+    if (filter === 'none') filtered = filtered.filter(i => sit(i).state === 'none');
+    if (filter === 'partial') filtered = filtered.filter(i => sit(i).state === 'partial');
+    if (filter === 'overdue') filtered = filtered.filter(i => i.status === 'overdue' && sit(i).remaining > 0);
+    if (filter === 'paid') filtered = filtered.filter(i => sit(i).state === 'paid');
     
     const sorted = [...filtered].sort((a, b) => {
         // Overdue first, then by due date
@@ -11982,35 +12019,29 @@ function renderPayments() {
             </div>`;
     } else {
         listEl.innerHTML = `
-            <table class="tbl-act">
+            <table class="tbl-act tbl-pay">
                 <thead>
                     <tr>
                         <th>Facture</th>
-                        <th>Client</th>
-                        <th>Émission</th>
-                        <th>Échéance</th>
-                        <th>Montant</th>
-                        <th>Statut</th>
+                        <th>Encaissement</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${sorted.map(inv => {
-                        const overdueDays = inv.overdueDays || 0;
+                        const st = sit(inv), overdueDays = inv.overdueDays || 0;
+                        const money = (n) => formatCurrency(n);
+                        const line = st.state === 'paid' ? `<span class="pay-ok">✓ Soldée · ${money(st.total)}</span>`
+                            : st.state === 'credited' ? `<span class="pay-mute">Annulée par un avoir</span>`
+                            : st.state === 'partial' ? `<span class="pay-paid">Payé ${money(st.paid)}</span> <span class="pay-sep">·</span> <strong class="pay-rest">Reste ${money(st.remaining)}</strong><span class="pay-of">sur ${money(st.total)}</span>`
+                            : `<span class="pay-none">Aucun paiement</span> <span class="pay-sep">·</span> <strong class="pay-rest">Reste ${money(st.remaining)}</strong>`;
                         return `
                             <tr>
-                                <td><strong>${escapeHtml(inv.number)}</strong></td>
-                                <td>${escapeHtml(inv.clientName || '—')}</td>
-                                <td>${formatDate(inv.date)}</td>
+                                <td onclick="editInvoice('${inv.id}')"><strong>${escapeHtml(dn(inv.number))}</strong><br><span class="pay-client">${escapeHtml(inv.clientName || '—')}</span><br><span class="pay-due">Échéance ${formatDate(inv.dueDate)}${overdueDays > 0 ? ` <span style="color: var(--danger); font-weight: 700;">· +${overdueDays} j de retard</span>` : ''}</span></td>
+                                <td onclick="editInvoice('${inv.id}')">${line}</td>
                                 <td>
-                                    ${formatDate(inv.dueDate)}
-                                    ${overdueDays > 0 ? `<br><span style="color: var(--danger); font-size: 11px; font-weight: 700;">+${overdueDays} jours</span>` : ''}
-                                </td>
-                                <td><strong>${formatCurrency(inv.totalTTC)}</strong>${invoicePaidAmount(inv, payments) > 0 && inv.status !== 'paid' ? `<br><span style="font-size: 11px; color: var(--ink-mute);">reste ${formatCurrency(invoiceRemaining(inv, payments))}</span>` : ''}</td>
-                                <td><span class="status-pill status-${inv.status}">${statusLabel(inv.status)}</span></td>
-                                <td>
-                                    ${inv.status !== 'paid' && inv.status !== 'cancelled' ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">${invoicePaidAmount(inv, payments) > 0 ? '✓ Solde / paiement' : '✓ Marquer payée'}</button>` : ''}
-                                    <button class="btn btn-ghost btn-sm" onclick="editInvoice('${inv.id}')" title="Voir">👁</button>
+                                    ${st.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">${st.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
+                                    <button class="btn btn-ghost btn-sm" onclick="editInvoice('${inv.id}')" title="Voir la facture">👁</button>
                                 </td>
                             </tr>
                         `;
@@ -12054,9 +12085,9 @@ function renderPayments() {
                         return `
                             <tr>
                                 <td>${formatDate(p.date)}</td>
-                                <td><strong>${escapeHtml(inv?.number || '—')}</strong></td>
+                                <td>${inv ? `<a href="#" onclick="editInvoice('${inv.id}'); return false;" style="color: inherit; font-weight: 700; text-decoration: underline dotted;" title="Ouvrir la facture">${escapeHtml(dn(inv.number))}</a>` : '<strong>—</strong>'}</td>
                                 <td>${escapeHtml(inv?.clientName || '—')}</td>
-                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong></td>
+                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
                                 <td>${methodLabels[p.method] || p.method}</td>
                                 <td>${escapeHtml(p.reference || '—')}</td>
                             </tr>
