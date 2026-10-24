@@ -968,7 +968,14 @@
             }
             .sidebar.open { transform: translateX(0); }
             .main { margin-left: 0; padding: 16px; }
-            .topbar { flex-direction: column; align-items: flex-start; max-width: 100%; }
+            .topbar { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; max-width: 100%; }
+            .topbar h1 { flex: 1 1 0; min-width: 0; font-size: 24px; line-height: 1.15; }
+            .topbar .mobile-menu-btn { width: 40px; height: 40px; font-size: 20px; flex-shrink: 0; }
+            .topbar-user-menu { order: 3; margin-left: 0; }
+            .topbar-actions { order: 4; flex-basis: 100%; }
+            .topbar-actions .btn { padding: 10px 12px; font-size: 13px; }
+            .main > .trial-banner { padding: 8px 12px; font-size: 12px; gap: 8px; margin: -16px -16px 12px; border-radius: 0; }
+            .trial-banner button { padding: 5px 10px; font-size: 12px; }
             /* Les barres d'actions (éditeur : PDF, WhatsApp, Brouillon, Enregistrer…) passent à la ligne au lieu de déborder de l'écran */
             .topbar-actions { flex-wrap: wrap; width: 100%; max-width: 100%; }
             .topbar-actions .btn { flex: 1 1 auto; justify-content: center; }
@@ -980,6 +987,8 @@
 
         /* Barre de navigation mobile (bas d'écran) */
         .bottom-nav { display: none; }
+        .create-sheet-backdrop { display: none !important; }
+        .main > .trial-banner { margin-bottom: 16px; border-radius: 10px; }
         @media (max-width: 900px) {
             .bottom-nav {
                 display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 150;
@@ -994,12 +1003,35 @@
             }
             .bottom-nav button .bn-icon { font-size: 20px; line-height: 1; }
             .bottom-nav button.active { color: var(--primary, #1b3a6b); }
+            .bottom-nav .bn-create { flex: 0 0 56px; }
+            .bottom-nav .bn-plus {
+                width: 46px; height: 46px; margin-top: -18px; border-radius: 50%;
+                background: var(--primary, #1b3a6b); color: #fff; font-size: 26px; line-height: 46px; text-align: center;
+                box-shadow: 0 4px 12px rgba(27, 58, 107, 0.35);
+            }
+            .create-sheet-backdrop {
+                display: none; position: fixed; inset: 0; z-index: 160; background: rgba(15, 23, 42, 0.35);
+                align-items: flex-end; justify-content: center;
+            }
+            .create-sheet-backdrop.open { display: flex !important; }
+            .create-sheet {
+                width: 100%; background: var(--surface, #fff); border-radius: 18px 18px 0 0;
+                padding: 14px 16px calc(84px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px;
+            }
+            .create-sheet button {
+                display: flex; align-items: center; gap: 12px; padding: 14px; font-size: 16px; font-weight: 600;
+                font-family: inherit; background: var(--surface-soft, #f6f4ee); border: 1px solid var(--border, #e5e2da);
+                border-radius: 12px; color: var(--ink, #1a1a2e); cursor: pointer; text-align: left;
+            }
             .main { padding-bottom: 84px; }
         }
 
         /* Éléments flottants : ne pas recouvrir la barre de navigation mobile */
         @media (max-width: 900px) {
             .sync-indicator { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); left: 12px; right: auto; padding: 5px 10px; font-size: 11px; z-index: 140; }
+            /* Tout va bien : simple pastille, le texte n'apparaît qu'en cas d'attente ou de hors-ligne */
+            .sync-indicator:not(.offline):not(.syncing) { padding: 6px; opacity: .85; }
+            .sync-indicator:not(.offline):not(.syncing) #syncIndicatorText { display: none; }
             .toast { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; left: 12px; right: 12px; text-align: center; }
             .pwa-install-banner { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); z-index: 140; }
         }
@@ -2930,12 +2962,6 @@
 </div>
 
 <!-- ============ MAIN APP ============ -->
-<!-- ============ TRIAL BANNER ============ -->
-<div id="trialBanner" class="trial-banner hidden">
-    <span id="trialBannerText">Période d'essai active</span>
-    <button class="trial-banner-btn" onclick="navTo('license')">Activer ma licence →</button>
-</div>
-
 <div class="app" id="mainApp" style="display: none;">
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
@@ -3047,11 +3073,20 @@
         </div>
     </aside>
 
+    <!-- Feuille de création rapide (mobile) -->
+    <div class="create-sheet-backdrop" id="createSheet" onclick="toggleCreateSheet(false)">
+        <div class="create-sheet" role="menu" onclick="event.stopPropagation()">
+            <button role="menuitem" onclick="createFromSheet('invoice')"><span>📄</span> Nouvelle facture</button>
+            <button role="menuitem" onclick="createFromSheet('quote')"><span>📋</span> Nouveau devis</button>
+            <button role="menuitem" onclick="createFromSheet('client')"><span>👥</span> Nouveau client</button>
+        </div>
+    </div>
     <!-- MAIN -->
     <!-- Navigation mobile -->
     <nav class="bottom-nav" id="bottomNav" aria-label="Navigation principale">
         <button data-bn="dashboard" onclick="navTo('dashboard')"><span class="bn-icon">📊</span>Accueil</button>
         <button data-bn="invoices" onclick="navTo('invoices')"><span class="bn-icon">📄</span>Factures</button>
+        <button class="bn-create" onclick="toggleCreateSheet()" aria-label="Créer" aria-haspopup="true"><span class="bn-plus">＋</span></button>
         <button data-bn="clients" onclick="navTo('clients')"><span class="bn-icon">👥</span>Clients</button>
         <button data-bn="reminders" onclick="navTo('reminders')"><span class="bn-icon">🔔</span>Relances</button>
         <button data-bn="more" onclick="toggleSidebar()"><span class="bn-icon">☰</span>Plus</button>
@@ -3060,7 +3095,6 @@
     <main class="main">
         <!-- Trial Banner -->
         <div id="trialBanner" class="trial-banner calm" style="display: none;">
-            <span class="trial-banner-icon">✨</span>
             <span id="trialBannerText">Période d'essai active</span>
             <span class="trial-countdown" id="trialBannerCountdown">14 jours</span>
             <button onclick="navTo('license')">Activer maintenant →</button>
@@ -7196,6 +7230,18 @@ function finishOnboarding() {
 // ============================================
 // NAVIGATION
 // ============================================
+function toggleCreateSheet(force) {
+    const el = document.getElementById('createSheet');
+    if (!el) return;
+    el.classList.toggle('open', typeof force === 'boolean' ? force : !el.classList.contains('open'));
+}
+function createFromSheet(kind) {
+    toggleCreateSheet(false);
+    if (kind === 'invoice') { navTo('invoices'); newInvoice(); }
+    else if (kind === 'quote') { navTo('quotes'); newQuote(); }
+    else { navTo('clients'); newClient(); }
+}
+
 function navTo(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
