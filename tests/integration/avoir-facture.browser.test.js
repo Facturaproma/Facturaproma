@@ -6,7 +6,10 @@ const { createDb, dropDb, makeBackend } = require('./backend');
 const FAKE = fs.readFileSync(path.join(__dirname, 'fake_supabase.js'), 'utf8');
 const PORT = 8200;
 const srv = http.createServer((q, r) => {
-  const u = q.url.split('?')[0]; const f = path.join(R, u === '/' ? 'index.html' : u);
+  // Serveur de test local : chemin normalisé et borné au dépôt (aucune sortie du dossier possible)
+  let u = '/'; try { u = decodeURIComponent(q.url.split('?')[0]); } catch (e) { r.writeHead(400); return r.end(); }
+  const f = path.resolve(R, '.' + path.posix.normalize('/' + (u === '/' ? 'index.html' : u)));
+  if (f !== R && !f.startsWith(R + path.sep)) { r.writeHead(403); return r.end(); }
   fs.readFile(f, (e, d) => { if (e) { r.writeHead(404); return r.end(); } let body = d;
     if (/(app|admin)\.html$/.test(f)) body = d.toString('utf8').replace(/^const SUPABASE_URL = .*$/m, "const SUPABASE_URL = 'https://fake.supabase.test';").replace(/^const SUPABASE_ANON_KEY = .*$/m, "const SUPABASE_ANON_KEY = 'fake-anon-key';");
     const t = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.ttf': 'font/ttf', '.png': 'image/png', '.css': 'text/css' }[path.extname(f)] || 'application/octet-stream';
