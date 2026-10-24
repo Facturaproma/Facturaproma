@@ -18,7 +18,7 @@ try {
     CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE auth.users(id uuid primary key,email text);
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $f$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true),'')::uuid $f$;
     INSERT INTO auth.users VALUES ('${U}','fictif@facturapro-test.invalid')`);
-  for (const f of ['00_setup_complet', '14_numerotation_et_verrouillage', '15_documents']) { const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-f', path.join(ROOT, 'sql', f + '.sql')], { env, encoding: 'utf8' }); if (r.status) throw new Error(f + ' ' + r.stderr.slice(0, 200)); }
+  for (const f of (process.env.SCHEMA_PROD ? ['00_setup_complet', '14_numerotation_et_verrouillage'] : ['00_setup_complet', '14_numerotation_et_verrouillage', '15_documents'])) { const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-f', path.join(ROOT, 'sql', f + '.sql')], { env, encoding: 'utf8' }); if (r.status) throw new Error(f + ' ' + r.stderr.slice(0, 200)); }
   const inv = [{ id: 'i1', status: 'draft', totalTTC: 1000 }, { id: 'i0', status: 'draft', totalTTC: 0 }];
   must(db, `INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','invoices','${JSON.stringify(inv)}'::jsonb)`);
   // Avant installation : le trop-perçu passe (preuve de la lacune)
