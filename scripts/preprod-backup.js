@@ -239,10 +239,11 @@ function classifyErrors(stderr) {
       const tryq = async (sql, args) => { await rc.query('SAVEPOINT s'); try { await rc.query(sql, args); await rc.query('RELEASE SAVEPOINT s'); return null; } catch (e) { await rc.query('ROLLBACK TO SAVEPOINT s'); return e.message; } };
       await as(A, async () => {
         ck('licence (A → A) : visible', (await rc.query('SELECT public.has_active_license($1::uuid) v', [A.id])).rows[0].v === true);
-        ck('licence (A → B) : NULL, aucune information sur le compte de B', (await rc.query('SELECT public.has_active_license($1::uuid) v', [B.id])).rows[0].v === null);
+        const ab = (await rc.query('SELECT public.has_active_license($1::uuid) v, public.is_admin() adm', [B.id])).rows[0];
+        ck('licence (A → B) : NULL, aucune information sur le compte de B', ab.v === null, `valeur=${JSON.stringify(ab.v)} ; A administrateur=${JSON.stringify(ab.adm)}`);
         ck('RLS : A ne voit aucune ligne user_data de B', (await rc.query('SELECT count(*)::int n FROM public.user_data WHERE user_id = $1::uuid', [B.id])).rows[0].n === 0);
         const own = (await rc.query(`SELECT value FROM public.user_data WHERE key='invoices'`)).rows[0];
-        ck('RLS : A retrouve ses propres factures', !!own && Array.isArray(own.value) && own.value.length === (S1.invoices[A.u] || { numbers: [] }).numbers.length);
+        ck('RLS : A retrouve ses propres factures', !!own && Array.isArray(own.value) && own.value.length === (S1.invoices[A.u] || { numbers: [] }).numbers.length, `ligne invoices pour A : ${own ? 'présente (' + (Array.isArray(own.value) ? own.value.length : 'non-tableau') + ' factures)' : 'absente'} ; attendu ${(S1.invoices[A.u] || { numbers: [] }).numbers.length}`);
         const last = (await rc.query(`SELECT coalesce(max(last_value),0)::int v FROM public.doc_counters WHERE doc_type='invoice'`)).rows[0].v;
         const n1 = (await rc.query(`SELECT public.next_doc_number('invoice', 0) v`)).rows[0].v, n2 = (await rc.query(`SELECT public.next_doc_number('invoice', 0) v`)).rows[0].v;
         ck(`numérotation après restauration : dernier ${last} → prochains numéros ${n1} puis ${n2} (continuité, aucun doublon)`, n1 === last + 1 && n2 === last + 2);
