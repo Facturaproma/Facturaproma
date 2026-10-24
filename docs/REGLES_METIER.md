@@ -11,6 +11,12 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 - **À valider** : traitement comptable des acomptes avant facturation (non géré : un acompte se saisit comme paiement d'une facture existante).
 - **Tests** : `tests/paiements.unit.test.js` (17 contrôles), `tests/integration/paiements.browser.test.js` (13 contrôles, simulation locale).
 
+### Rapports et exports
+- **Règle** : « encaissé » = somme des paiements enregistrés, à la **date du paiement** (graphique 12 mois, encaissé du jour, délai de paiement = date du dernier paiement). Les anciennes factures « payées » sans ligne de paiement sont datées de `paidAt`. Avant ce lot, ces écrans lisaient un champ `paymentDate` jamais renseigné : graphique d'encaissement vide, délai « — jours », colonne « Date Paiement » vide.
+- **Exports CSV** : tous les champs texte sont protégés contre l'exécution de formules dans Excel (`=`, `+`, `-`, `@`). Rapport factures : colonnes Encaissé, Reste à payer, Date dernier paiement ajoutées (les colonnes suivantes sont décalées : à prévenir si un tableur externe les lit par position). Export comptable : colonnes et statuts techniques inchangés, date et mode de paiement désormais renseignés. Nouveau : export des paiements (une ligne par encaissement).
+- **Non modifié** : le rapport TVA (base encaissements) ne prend en compte que les factures entièrement payées ; le traitement de la TVA sur paiements partiels est une question fiscale à faire valider par un comptable. Le CA hors taxes des auto-entrepreneurs suit la même limite.
+- **Tests** : `tests/integration/rapports-exports.browser.test.js` (13 contrôles, simulation locale), `tests/paiements.unit.test.js` (8 contrôles d'encaissements et de CSV).
+
 ## 2. Facturation électronique DGI
 
 - **État constaté** (source : Upsilon Consulting, « Facturation électronique au Maroc 2026 », https://upsilon-consulting.com/facturation-electronique-maroc-2026/, page indiquant un état au 28/09/2026, consultée le 24/10/2026 ; source professionnelle, non officielle) : le principe figure à l'article 145-IX du CGI (système informatique de facturation répondant à des critères fixés par l'administration), mais aucun texte d'application n'est publié au Bulletin officiel : ni calendrier, ni seuils, ni format confirmés. Les auto-entrepreneurs sont exclus (art. 145-XI selon cette source).

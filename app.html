@@ -4200,6 +4200,7 @@
                             <option value="overdue">En retard</option>
                             <option value="paid">Payées</option>
                         </select>
+                        <button class="btn btn-secondary btn-sm" id="exportPaymentsBtn" onclick="exportPaymentsCSV()" title="Une ligne par encaissement">⬇ Exporter les paiements</button>
                     </div>
                 </div>
                 <div id="paymentsList"></div>
@@ -9355,21 +9356,17 @@ function renderReportCashflow() {
     document.getElementById('rpCfRate').textContent = `${rate}%`;
     
     // Délai moyen
-    const delays = paid.filter(i => i.paymentDate && i.date).map(i => {
+    const delays = paid.filter(i => invoiceLastPaymentDate(i, _cfPay) && i.date).map(i => {
         const d1 = new Date(i.date);
-        const d2 = new Date(i.paymentDate);
+        const d2 = new Date(invoiceLastPaymentDate(i, _cfPay));
         return Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
     });
     const avgDelay = delays.length > 0 ? Math.round(delays.reduce((a,b) => a+b, 0) / delays.length) : null;
     document.getElementById('rpCfAvgDelay').textContent = avgDelay !== null ? `${avgDelay} jours` : '— jours';
     
     // Trend
-    const todayReceived = paid.filter(i => {
-        if (!i.paymentDate) return false;
-        const d = new Date(i.paymentDate);
-        const t = new Date();
-        return d.toDateString() === t.toDateString();
-    }).reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const todayISO_ = todayISO();
+    const todayReceived = paymentEvents(filtered, _cfPay).filter(e => e.date === todayISO_).reduce((s, e) => s + e.amount, 0);
     document.getElementById('rpCfReceivedTrend').textContent = todayReceived > 0 
         ? `+${formatCurrency(todayReceived)} aujourd'hui`
         : 'Période sélectionnée';
@@ -9405,11 +9402,13 @@ function renderCashFlowChart() {
         const m = months.find(x => x.year === d.getFullYear() && x.month === d.getMonth());
         if (m) m.billed += inv.totalTTC || 0;
         
-        if (inv.status === 'paid' && inv.paymentDate) {
-            const dp = new Date(inv.paymentDate);
-            const mp = months.find(x => x.year === dp.getFullYear() && x.month === dp.getMonth());
-            if (mp) mp.received += inv.totalTTC || 0;
-        }
+    });
+    // Encaissé du mois = paiements reçus ce mois-là (date du paiement), partiels compris
+    paymentEvents(allInvoices, Storage.get('payments', []) || []).forEach(e => {
+        const dp = new Date(e.date);
+        if (isNaN(dp)) return;
+        const mp = months.find(x => x.year === dp.getFullYear() && x.month === dp.getMonth());
+        if (mp) mp.received += e.amount;
     });
     
     const max = Math.max(...months.map(m => Math.max(m.billed, m.received)), 1);
@@ -9434,17 +9433,20 @@ function renderCashFlowChart() {
 
 function renderSlowPayers() {
     const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
-        i.type !== 'credit' && i.status === 'paid' && i.paymentDate && i.date
+        i.type !== 'credit' && i.status === 'paid' && i.date
     );
+    const _spPay = Storage.get('payments', []) || [];
     
     const clientStats = {};
     allInvoices.forEach(i => {
+        const lastPay = invoiceLastPaymentDate(i, _spPay);
+        if (!lastPay) return;
         const key = i.clientName || 'Inconnu';
         if (!clientStats[key]) {
             clientStats[key] = { name: key, count: 0, totalDelay: 0, totalAmount: 0, clientId: i.clientId };
         }
         const d1 = new Date(i.date);
-        const d2 = new Date(i.paymentDate);
+        const d2 = new Date(lastPay);
         const delay = Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
         clientStats[key].count++;
         clientStats[key].totalDelay += delay;
@@ -9917,6 +9919,16 @@ function renderReportFiscal() {
 // ============================================
 // EXPORT CSV REPORTS
 // ============================================
+function exportPaymentsCSV() {
+    const invoices = Storage.get('invoices', []) || [], payments = Storage.get('payments', []) || [];
+    if (paymentEvents(invoices, payments).length === 0) { showToast('Aucun paiement à exporter', 'error'); return; }
+    const blob = new Blob(['\uFEFF' + paymentsCsv(invoices, payments)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = `facturapro-paiements-${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    showToast('Paiements exportés ✓', 'success');
+}
+
 function exportReportCSV(type) {
     const range = getReportDateRange();
     let headers, rows, filename;
@@ -9925,18 +9937,24 @@ function exportReportCSV(type) {
         const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
             i.type !== 'credit' && i.status !== 'draft' && isInReportRange(i.date, range)
         );
-        headers = ['N° Facture', 'Date', 'Client', 'Montant HT', 'TVA', 'Montant TTC', 'Échéance', 'Statut', 'Date Paiement'];
-        rows = allInvoices.map(i => [
-            i.number || '',
-            formatDate(i.date),
-            i.clientName || '',
-            (i.totalHT || 0).toFixed(2),
-            (i.totalTVA || 0).toFixed(2),
-            (i.totalTTC || 0).toFixed(2),
-            i.dueDate ? formatDate(i.dueDate) : '',
-            i.status || '',
-            i.paymentDate ? formatDate(i.paymentDate) : ''
-        ]);
+        const _rpPay = Storage.get('payments', []) || [], _rpAll = Storage.get('invoices', []) || [];
+        headers = ['N° Facture', 'Date', 'Client', 'Montant HT', 'TVA', 'Montant TTC', 'Encaissé', 'Reste à payer', 'Échéance', 'Statut', 'Date dernier paiement'];
+        rows = allInvoices.map(i => {
+            const st = getInvoiceWithStatus(i).status, lp = invoiceLastPaymentDate(i, _rpPay);
+            return [
+                i.number || '',
+                formatDate(i.date),
+                i.clientName || '',
+                (i.totalHT || 0).toFixed(2),
+                (i.totalTVA || 0).toFixed(2),
+                (i.totalTTC || 0).toFixed(2),
+                invoicePaidAmount(i, _rpPay).toFixed(2),
+                invoiceRemaining(i, _rpPay, _rpAll).toFixed(2),
+                i.dueDate ? formatDate(i.dueDate) : '',
+                statusLabel(st),
+                lp ? formatDate(lp) : ''
+            ];
+        });
         filename = 'rapport-factures';
     } else if (type === 'topclients') {
         const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
@@ -10008,10 +10026,7 @@ function exportReportCSV(type) {
     }
     
     let csv = headers.join(';') + '\n';
-    csv += rows.map(r => r.map(cell => {
-        const s = String(cell || '');
-        return s.includes(';') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(';')).join('\n');
+    csv += rows.map(r => r.map(csvText).join(';')).join('\n');   // csvText : guillemets, retours à la ligne et formules (=, +, -, @) neutralisées
     
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -10616,6 +10631,7 @@ function exportAccounting(format = 'csv') {
         ];
         
         const rows = [];
+        const _acPay = Storage.get('payments', []) || [], _acLast = (inv) => invoiceLastPaymentDate(inv, _acPay);
         invoices.forEach(inv => {
             const client = (Storage.get('clients', []).find(c => c.id === inv.clientId)) || {};
             
@@ -10639,17 +10655,14 @@ function exportAccounting(format = 'csv') {
                     Number(L.totalTVA || 0).toFixed(2),
                     Number(L.totalTTC || 0).toFixed(2),
                     inv.status || '',
-                    inv.paymentDate ? formatDate(inv.paymentDate) : '',
-                    inv.paymentMode || ''
+                    _acLast(inv) ? formatDate(_acLast(inv)) : '',
+                    invoicePaymentMethods(inv, _acPay)
                 ]);
             });
         });
         
         let csv = headers.join(';') + '\n'; // ; pour Excel français
-        csv += rows.map(r => r.map(cell => {
-            const s = String(cell || '');
-            return s.includes(';') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-        }).join(';')).join('\n');
+        csv += rows.map(r => r.map(csvText).join(';')).join('\n');
         
         const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -11758,6 +11771,41 @@ function checkPaymentAmount(inv, amount, payments) {
     if (rest <= 0) return { ok: false, reason: 'Cette facture est déjà soldée' };
     if (a > rest + 0.005) return { ok: false, reason: 'Montant supérieur au reste à payer' };
     return { ok: true, remaining: rest };
+}
+
+// Encaissements datés : une ligne par paiement enregistré (date du paiement) ; pour une facture « payée » ou avec un montant payé sans
+// ligne de paiement (anciennes données), le complément est daté de paidAt / paymentDate / date de la facture. Jamais de brouillon ni d'avoir.
+function paymentEvents(invoices, payments) {
+    const list = Array.isArray(payments) ? payments : [], ev = [];
+    (Array.isArray(invoices) ? invoices : []).forEach(inv => {
+        const ttc = money2(inv && inv.totalTTC);
+        if (!inv || inv.type === 'credit' || ttc <= 0 || inv.status === 'draft') return;
+        let covered = 0;
+        list.filter(p => p && p.invoiceId === inv.id).forEach(p => {
+            const a = money2(p.amount); if (a <= 0) return;
+            covered = money2(covered + a);
+            ev.push({ invoiceId: inv.id, date: String(p.date || inv.paidAt || inv.date || '').slice(0, 10), amount: a, method: p.method || '', reference: p.reference || '' });
+        });
+        const target = inv.status === 'paid' ? ttc : Math.min(ttc, money2(Number(inv.paidAmount) || 0));
+        if (target - covered > 0.005) ev.push({ invoiceId: inv.id, date: String(inv.paidAt || inv.paymentDate || inv.date || '').slice(0, 10), amount: money2(target - covered), method: '', reference: '' });
+    });
+    return ev;
+}
+// Date du dernier encaissement d'une facture ('' si aucun) et modes de paiement utilisés.
+function invoiceLastPaymentDate(inv, payments) {
+    const d = paymentEvents([inv], payments).map(e => e.date).filter(Boolean).sort();
+    return d.length ? d[d.length - 1] : '';
+}
+function invoicePaymentMethods(inv, payments) {
+    return Array.from(new Set(paymentEvents([inv], payments).map(e => e.method).filter(Boolean))).join(' / ');
+}
+// Export CSV des paiements (pièces justificatives) : une ligne par encaissement, neutralisation des formules, séparateur « ; ».
+function paymentsCsv(invoices, payments) {
+    const byId = {}; (invoices || []).forEach(i => { if (i) byId[i.id] = i; });
+    const rows = paymentEvents(invoices, payments).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const L = [['Date', 'N° facture', 'Client', 'Montant', 'Mode', 'Référence'].join(';')];
+    rows.forEach(e => { const i = byId[e.invoiceId] || {}; L.push([e.date, csvText(i.number || ''), csvText(i.clientName || ''), e.amount.toFixed(2), csvText(e.method), csvText(e.reference)].join(';')); });
+    return L.join('\n');
 }
 // </PAIEMENTS-CALC>
 
