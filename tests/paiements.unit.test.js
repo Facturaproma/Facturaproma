@@ -3,7 +3,9 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
 const a = html.indexOf('// <PAIEMENTS-CALC>'), b = html.indexOf('// </PAIEMENTS-CALC>');
 assert(a > 0 && b > a, 'bloc PAIEMENTS-CALC introuvable');
-const api = new Function(html.slice(a, b) + '\nreturn { money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit };')();
+const fa = html.indexOf('// <FISCAL-CALC>'), fb = html.indexOf('// </FISCAL-CALC>');
+assert(fa > 0 && fb > fa, 'bloc FISCAL-CALC introuvable');
+const api = new Function(html.slice(fa, fb) + html.slice(a, b) + '\nreturn { paymentEvents, invoiceLastPaymentDate, invoicePaymentMethods, paymentsCsv, money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 const inv = (o) => Object.assign({ id: 'f1', status: 'sent', totalTTC: 1200 }, o);
 const pay = (amount, id = 'f1') => ({ id: 'p' + Math.random(), invoiceId: id, amount });
@@ -59,4 +61,21 @@ ok('ancien avoir sans identifiant : rapproché par numéro', api.isCancelledByCr
 ok('facture déjà payée puis créditée : reste « payée » (remboursement non géré)', api.isCancelledByCredit(inv({ status: 'paid', number: 'FAC-1' }), [cr()]) === false);
 ok('sans liste de pièces, comportement inchangé', api.invoiceRemaining(f1, []) === 1200 && api.checkPaymentAmount(f1, 100, []).ok === true);
 ok('encaissement partiel puis avoir total : reste 0', api.invoiceRemaining(f1, [pay(400)], [f1, cr()]) === 0);
+// --- Encaissements datés, exports ---
+const P = (id, invoiceId, amount, date, method, reference) => ({ id, invoiceId, amount, date, method, reference });
+const evInv = [inv({ id: 'f1', number: 'F1', clientName: 'A', totalTTC: 1000 }), inv({ id: 'f2', number: 'F2', clientName: '=cmd', totalTTC: 600, status: 'paid', paidAt: '2026-09-15' }),
+  inv({ id: 'f3', number: 'F3', totalTTC: 300, status: 'draft' }), inv({ id: 'a1', type: 'credit', totalTTC: -100 })];
+const evPay = [P('p1', 'f1', 400, '2026-10-01', 'virement', 'V1'), P('p2', 'f1', 100, '2026-10-20', 'espèces', '')];
+const ev = api.paymentEvents(evInv, evPay);
+ok('encaissements : 2 paiements de f1 + solde sans ligne de f2 (daté paidAt), ni brouillon ni avoir', ev.length === 3 && ev.filter(e => e.invoiceId === 'f1').length === 2 && ev.some(e => e.invoiceId === 'f2' && e.amount === 600 && e.date === '2026-09-15'));
+ok('dernier paiement : la date du dernier encaissement (et pas la date de la facture)', api.invoiceLastPaymentDate(evInv[0], evPay) === '2026-10-20');
+ok('dernier paiement : facture payée sans ligne -> paidAt ; facture sans paiement -> vide', api.invoiceLastPaymentDate(evInv[1], []) === '2026-09-15' && api.invoiceLastPaymentDate(evInv[0], []) === '');
+ok('modes de paiement distincts', api.invoicePaymentMethods(evInv[0], evPay) === 'virement / espèces');
+ok('paiements supérieurs au TTC : somme des événements non plafonnée par erreur mais montants positifs seulement', api.paymentEvents([evInv[0]], [P('x', 'f1', -50, '2026-10-01'), P('y', 'f1', 0, '2026-10-01')]).length === 0);
+const csv = api.paymentsCsv(evInv, evPay);
+const lines = csv.split('\n');
+ok('CSV paiements : en-tête + 3 lignes triées par date', lines.length === 4 && lines[0] === 'Date;N° facture;Client;Montant;Mode;Référence' && lines[1].startsWith('2026-09-15') && lines[3].startsWith('2026-10-20'));
+ok('CSV paiements : formule dans un nom de client neutralisée', csv.includes("'=cmd") && !/;=cmd/.test(csv));
+ok('CSV paiements : somme des montants = encaissements', lines.slice(1).reduce((t, l) => t + parseFloat(l.split(';')[3]), 0) === 1100);
+
 console.log('\nOK : ' + n + ' contrôles (paiements)');
