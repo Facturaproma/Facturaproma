@@ -5,7 +5,7 @@ const a = html.indexOf('// <PAIEMENTS-CALC>'), b = html.indexOf('// </PAIEMENTS-
 assert(a > 0 && b > a, 'bloc PAIEMENTS-CALC introuvable');
 const fa = html.indexOf('// <FISCAL-CALC>'), fb = html.indexOf('// </FISCAL-CALC>');
 assert(fa > 0 && fb > fa, 'bloc FISCAL-CALC introuvable');
-const api = new Function(html.slice(fa, fb) + html.slice(a, b) + '\nreturn { paymentEvents, invoiceLastPaymentDate, invoicePaymentMethods, paymentsCsv, money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit, paymentSituation };')();
+const api = new Function(html.slice(fa, fb) + html.slice(a, b) + '\nreturn { paymentEvents, invoiceLastPaymentDate, invoicePaymentMethods, paymentsCsv, money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit, paymentSituation, invoiceListKind, invoiceMatchesFilter };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 const inv = (o) => Object.assign({ id: 'f1', status: 'sent', totalTTC: 1200 }, o);
 const pay = (amount, id = 'f1') => ({ id: 'p' + Math.random(), invoiceId: id, amount });
@@ -97,5 +97,21 @@ ok('CSV paiements : somme des montants = encaissements', lines.slice(1).reduce((
   ok('situation : annulée par un avoir -> credited, reste 0 (pas de bouton Encaisser)', r.state === 'credited' && r.remaining === 0);
   r = ps(f, [p('a', 'f1', 400)], [f, { ...cr2, totalTTC: -300 }]);
   ok('situation : acompte 400 + avoir 300 -> reste 500 (même calcul que le contrôle du paiement)', r.state === 'partial' && r.remaining === 500 && r.remaining === api.invoiceRemaining(f, [p('a', 'f1', 400)], [f, { ...cr2, totalTTC: -300 }]));
+}
+
+// --- Liste des factures : brouillons distincts des factures enregistrées, filtres d'encaissement ---
+{
+  const kind = api.invoiceListKind, mf = api.invoiceMatchesFilter; const p = (id, inv, a) => ({ id, invoiceId: inv, amount: a });
+  const draft = inv({ id: 'd1', status: 'draft', number: 'BRO-AB12' }), issued = inv({ id: 'f1', number: 'FAC-1', status: 'sent', totalTTC: 1000, dueDate: '2099-01-01' });
+  const late = inv({ id: 'f2', number: 'FAC-2', status: 'sent', totalTTC: 500, dueDate: '2000-01-01' }), paid = inv({ id: 'f3', number: 'FAC-3', status: 'paid', totalTTC: 300 });
+  const cred = { id: 'a1', type: 'credit', number: 'AVR-1', status: 'sent', totalTTC: -100, relatedInvoiceId: 'f9' };
+  const all = [draft, issued, late, paid, cred], pays = [p('x', 'f1', 400)];
+  ok('liste : brouillon (BRO- ou statut draft), enregistrée, avoir bien distingués', kind(draft) === 'draft' && kind(inv({ status: 'draft', number: 'FAC-9' })) === 'draft' && kind(inv({ number: 'BRO-1', status: 'sent' })) === 'draft' && kind(issued) === 'issued' && kind(cred) === 'credit');
+  const names = (f) => all.filter((i) => mf(i, f, pays, all)).map((i) => i.id).join(',');
+  ok('filtre Toutes : tout', names('all') === 'd1,f1,f2,f3,a1');
+  ok('filtre Brouillons : d1 seulement ; Enregistrées : f1, f2, f3 (ni brouillon ni avoir)', names('draft') === 'd1' && names('issued') === 'f1,f2,f3');
+  ok('filtre Non payées : f2 ; Payées partiellement : f1 ; Soldées : f3 (jamais un brouillon ni un avoir)', names('none') === 'f2' && names('partial') === 'f1' && names('paid') === 'f3');
+  ok('filtre En retard : f2 seulement (f1 non échue, f3 soldée)', names('overdue') === 'f2');
+  ok('filtre Avoirs : a1 seulement', names('credit') === 'a1');
 }
 console.log('\nOK : ' + n + ' contrôles (paiements)');
