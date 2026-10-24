@@ -26,6 +26,9 @@ function assertIsolatedTarget(env) {
   if (!(host === '' || host.startsWith('/') || LOCAL.has(host))) throw new Error('REFUS : hôte non local (' + host.replace(/[^\w.:-]/g, '?') + '). Seule une base locale jetable est autorisée.');
 }
 
+// Les messages d'erreur PostgreSQL peuvent citer des valeurs (e-mails, identifiants) : on n'en garde que la forme générale.
+function redact(msg) { return String(msg || '').split('\n')[0].replace(/'[^']*'/g, "'…'").replace(/"[^"]*"/g, '"…"').replace(/\([^)]*\)=\([^)]*\)/g, '(…)=(…)').replace(/[\w.+-]+@[\w.-]+/g, '…@…').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, '…uuid…').slice(0, 120); }
+
 function psql(env, db, sql, extra = []) {
   return execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-At', '-d', db, ...extra, '-c', sql], { env, encoding: 'utf8' }).trim();
 }
@@ -79,7 +82,7 @@ function run(file, opts = {}) {
     }
     const envR = authOk ? env : { ...env, PGOPTIONS: '-c session_replication_role=replica' };
     const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-f', path.join(dir, pub)], { env: envR, encoding: 'utf8' });
-    check('restauration du schéma public sans erreur', r.status === 0, r.status === 0 ? '' : (r.stderr || '').split('\n')[0].slice(0, 160));
+    check('restauration du schéma public sans erreur', r.status === 0, r.status === 0 ? '' : redact(r.stderr));
     if (r.status !== 0) return report;
 
     // 4. Contrôles d'intégrité (comptages seulement)
@@ -118,4 +121,4 @@ if (require.main === module) {
     process.exit(ko ? 1 : 0);
   } catch (e) { console.error(e.message); process.exit(2); }
 }
-module.exports = { run, assertIsolatedTarget };
+module.exports = { run, assertIsolatedTarget, redact };

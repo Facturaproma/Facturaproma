@@ -42,6 +42,12 @@ try {
   r = go(good, { PGDATABASE: 'postgres.mdozjptoecygmpkjlohr' }); ok('identifiant du projet de production dans l\'environnement : refusé', r.status === 2);
   r = go(good, {}, 'mauvaise-phrase-secrete-0000'); ok('mauvaise phrase secrète : échec propre, rien de restauré', r.status === 1 && /déchiffrement/.test(r.stdout) && leftovers() === '0');
   r = spawnSync('node', [SCRIPT, good], { env: { ...env, RESTORE_PASSPHRASE: '' }, encoding: 'utf8' }); ok('phrase secrète absente : refusé', r.status === 2);
+  const { redact } = require(SCRIPT);
+  const red = redact('ERROR:  invalid input syntax for type uuid: "x" Key (user_id)=(11111111-1111-1111-1111-111111111111) a@b.ma \'secret\'');
+  ok('messages d\'erreur expurgés (e-mail, uuid, valeurs entre quotes)', !/a@b\.ma|1111-1111|secret|user_id|"x"/.test(red), red);
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'restore-test.yml'), 'utf8');
+  ok('workflow : manuel seulement, branche principale, délai, nettoyage, pas de jeton persistant', /workflow_dispatch/.test(wf) && !/\n\s+(push|pull_request|schedule):/.test(wf) && /github\.ref == 'refs\/heads\/main'/.test(wf) && /timeout-minutes/.test(wf) && /if: always\(\)/.test(wf) && /persist-credentials: false/.test(wf));
+  ok('workflow : aucune URL ni identifiant de projet Supabase', !/supabase\.co|pooler|mdozjptoecygmpkjlohr|njjaomichdlnoscrnxlz/.test(wf));
   const bad = makeBackup(10);
   r = go(bad); ok('compteur de numérotation inférieur au plus grand numéro : détecté (échec)', r.status === 1 && /numérotation/.test(r.stdout + r.stderr), '');
   ok('aucune base jetable résiduelle', leftovers() === '0');

@@ -28,3 +28,14 @@ Déchiffrement ; présence des dumps `public` et `auth` ; restauration sans erre
 
 ## Pour l'exécuter (après fusion, depuis le téléphone)
 GitHub → Actions → « Test de restauration isolé » → Run workflow. Lire ensuite le résumé : tous les contrôles doivent être « OK ». Aucun secret nouveau n'est nécessaire (`BACKUP_PASSPHRASE` existe déjà).
+
+## Analyse des risques d'exposition (workflow `restore-test.yml`)
+| Risque | Mesure |
+|---|---|
+| Une branche modifiée lance le test et exfiltre la phrase secrète ou les données déchiffrées | Le travail ne démarre que sur `refs/heads/main` (condition `if`). Recommandé en plus : un *Environment* GitHub « restauration » avec relecteur obligatoire, à créer par le propriétaire du dépôt (je n'ai pas ce droit). |
+| Données dans le journal public (dépôt public) | Le script n'imprime que des noms de tables et des comptages ; les messages d'erreur PostgreSQL sont **expurgés** (valeurs entre quotes, e-mails, UUID, `(clé)=(valeur)`), test à l'appui. La phrase secrète est un secret masqué par GitHub. |
+| Copie déchiffrée qui subsiste | Le déchiffrement se fait dans un dossier temporaire supprimé en `finally` ; étape finale `if: always()` supprime tout ; le serveur d'exécution est détruit à la fin du job. Aucun `upload-artifact` dans ce workflow : rien de déchiffré n'est publié. |
+| Base jetable joignable de l'extérieur | Conteneur PostgreSQL du job, mot de passe fictif, port lié à la machine d'exécution éphémère ; aucune donnée de production n'en sort. |
+| Jeton persistant | `persist-credentials: false`, permissions `contents: read` et `actions: read` seulement. |
+| Connexion accidentelle à Supabase | Aucun secret de base ; le script refuse tout hôte non local et toute chaîne contenant l'identifiant de production ou « supabase » (testé). |
+**Risque résiduel** : les données (réelles) de production sont déchiffrées en clair sur un serveur GitHub pendant quelques minutes. C'est le niveau d'exposition de `backup.yml` lui-même, mais il doit être accepté en connaissance de cause avant le premier lancement.

@@ -14,7 +14,10 @@ permissions:
 
 jobs:
   restore:
+    # Les secrets ne doivent servir qu'au code de la branche principale : une branche modifiée ne peut pas lancer ce test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       pg:
         image: postgres:17
@@ -25,6 +28,8 @@ jobs:
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -49,3 +54,9 @@ jobs:
           test -n "$RESTORE_PASSPHRASE" || { echo "::error::Secret BACKUP_PASSPHRASE absent."; exit 1; }
           F=$(ls sauvegarde/*.gpg | head -1)
           node scripts/restore-test-isolated.js "$F"
+      - name: Nettoyage (toujours exécuté)
+        if: always()
+        run: |
+          # Supprime la sauvegarde chiffrée téléchargée et toute copie déchiffrée résiduelle ; le serveur d'exécution est de toute façon détruit
+          rm -rf sauvegarde /tmp/restore-* 2>/dev/null || true
+          echo "Nettoyage terminé : base jetable (conteneur du job) et fichiers temporaires supprimés."
