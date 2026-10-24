@@ -68,7 +68,13 @@ function run(file, opts = {}) {
       END $$;
       CREATE SCHEMA IF NOT EXISTS auth;
       CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text);
-      CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $f$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid $f$;`;
+      CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $f$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid $f$;
+      CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $f$ SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $f$;
+      CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $f$ SELECT auth.jwt()->>'role' $f$;
+      CREATE OR REPLACE FUNCTION auth.email() RETURNS text LANGUAGE sql STABLE AS $f$ SELECT auth.jwt()->>'email' $f$;
+      CREATE SCHEMA IF NOT EXISTS extensions;
+      DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions; EXCEPTION WHEN others THEN NULL; END $$;
+      DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA extensions; EXCEPTION WHEN others THEN NULL; END $$;`;
     psql(env, db, base);
     // Le dump « -n public » recrée le schéma public : on repart d'une base sans schéma public (base jetable uniquement)
     psql(env, db, 'DROP SCHEMA IF EXISTS public CASCADE');
@@ -92,7 +98,7 @@ function run(file, opts = {}) {
       authOk = a.status === 0;
       if (!authOk) report.warnings.push('comptes auth non rechargés : les clés étrangères vers auth.users ne peuvent pas être vérifiées par ce test');
     }
-    const envR = authOk ? env : { ...env, PGOPTIONS: '-c session_replication_role=replica' };
+    const envR = authOk ? { ...env, PGOPTIONS: '-c check_function_bodies=off' } : { ...env, PGOPTIONS: '-c session_replication_role=replica -c check_function_bodies=off' };
     const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-f', path.join(dir, pub)], { env: envR, encoding: 'utf8' });
     check('restauration du schéma public sans erreur', r.status === 0, r.status === 0 ? '' : redact(r.stderr));
     if (r.status !== 0) return report;
