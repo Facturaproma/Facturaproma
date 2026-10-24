@@ -4655,6 +4655,28 @@
                         </div>
                     </div>
 
+                    <div class="aside-card" id="stampCard">
+                        <h3>🖋️ Cachet et signature</h3>
+                        <div id="stampLockedSection" style="display: none;">
+                            <div style="font-size: 12px; color: var(--ink-mute);">🔒 Cachet et signature sur vos factures, devis et reçus : disponibles avec une licence active.</div>
+                        </div>
+                        <div id="stampActiveSection" style="display: none;">
+                            <div id="stampPreview" style="text-align: center; padding: 16px; background: var(--surface-soft); border-radius: 10px; margin-bottom: 12px; min-height: 100px; display: flex; align-items: center; justify-content: center;">
+                                <span style="color: var(--ink-mute); font-size: 12px;">Aucun cachet</span>
+                            </div>
+                            <input type="file" id="stampUploadInput" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;" onchange="handleStampUpload(event)">
+                            <button class="btn btn-secondary" onclick="document.getElementById('stampUploadInput').click()" style="width: 100%; margin-bottom: 8px; font-size: 13px;">
+                                📤 Envoyer mon cachet / ma signature
+                            </button>
+                            <button class="btn btn-secondary" onclick="removeStamp()" style="width: 100%; font-size: 12px; color: var(--danger);" id="removeStampBtn">
+                                🗑️ Supprimer le cachet
+                            </button>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">
+                                💡 Photo ou scan de votre cachet (idéalement sur fond blanc ou transparent, PNG de préférence). PNG, JPG ou WebP, 300 Ko maximum. Imprimé en bas à droite de vos factures, devis et reçus de paiement.
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="aside-card" id="docStyleCard">
                         <h3>🖌️ Style des documents</h3>
                         <div id="docStyleLocked" style="display: none; font-size: 12px; color: var(--ink-mute);">
@@ -10502,6 +10524,8 @@ function updateLogoSection() {
         activeSection.style.display = 'none';
     }
     
+    updateStampSection();
+
     // Update accounting export note based on tier
     const noteEl = document.getElementById('accountingExportNote');
     if (noteEl) {
@@ -10566,6 +10590,53 @@ function removeLogo() {
     if (input) input.value = '';
     
     showToast('Logo supprimé', 'success');
+}
+
+// Cachet et signature de l'entreprise : abonnés seulement (comme le logo), image stockée dans « company » (donc synchronisée avec le compte)
+const STAMP_MAX_BYTES = 300 * 1024;
+function updateStampSection() {
+    const locked = document.getElementById('stampLockedSection'), active = document.getElementById('stampActiveSection');
+    if (!locked || !active) return;
+    if (!isUserLicensed()) { locked.style.display = 'block'; active.style.display = 'none'; return; }
+    locked.style.display = 'none'; active.style.display = 'block';
+    const company = Storage.get('company', {});
+    const preview = document.getElementById('stampPreview'), btn = document.getElementById('removeStampBtn');
+    if (company.stamp) {
+        preview.innerHTML = '<img src="' + company.stamp + '" style="max-width: 100%; max-height: 90px; object-fit: contain;" alt="Cachet">';
+        if (btn) btn.style.display = 'block';
+    } else {
+        preview.innerHTML = '<span style="color: var(--ink-mute); font-size: 12px;">Aucun cachet</span>';
+        if (btn) btn.style.display = 'none';
+    }
+}
+
+function handleStampUpload(event) {
+    if (!isUserLicensed()) { showToast('🔒 Activez votre licence pour ajouter un cachet', 'error'); return; }
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > STAMP_MAX_BYTES) { showToast('Image trop volumineuse. Max 300 Ko.', 'error'); event.target.value = ''; return; }
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) { showToast('Format non supporté. Utilisez PNG, JPG ou WebP.', 'error'); event.target.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const company = Storage.get('company', {});
+        company.stamp = e.target.result; // base64
+        Storage.set('company', company);
+        updateStampSection();
+        showToast('Cachet enregistré ✓', 'success');
+    };
+    reader.onerror = () => showToast('Erreur lors de la lecture du fichier', 'error');
+    reader.readAsDataURL(file);
+}
+
+function removeStamp() {
+    if (!confirm('Supprimer le cachet et la signature ?')) return;
+    const company = Storage.get('company', {});
+    delete company.stamp;
+    Storage.set('company', company);
+    updateStampSection();
+    const input = document.getElementById('stampUploadInput');
+    if (input) input.value = '';
+    showToast('Cachet supprimé', 'success');
 }
 
 function loadCompanyForm() {
@@ -12147,7 +12218,7 @@ function renderPayments() {
                                 <td>${formatDate(p.date)}</td>
                                 <td>${inv ? `<a href="#" onclick="editInvoice('${inv.id}'); return false;" style="color: inherit; font-weight: 700; text-decoration: underline dotted;" title="Ouvrir la facture">${escapeHtml(dn(inv.number))}</a>` : '<strong>—</strong>'}</td>
                                 <td>${escapeHtml(inv?.clientName || '—')}</td>
-                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
+                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong><br><button class="btn btn-secondary btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="generatePaymentReceiptPDF('${p.id}')" title="Télécharger le reçu de paiement (PDF)">🧾 Reçu</button>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
                                 <td>${methodLabels[p.method] || p.method}</td>
                                 <td>${escapeHtml(p.reference || '—')}</td>
                             </tr>
@@ -12532,6 +12603,21 @@ async function enableArabicPdf(pdf) {
     };
 }
 
+// Cachet de l'entreprise sur un PDF (abonnés). Dessine l'image dans une boîte w × h mm, alignée à droite de x, sans la déformer.
+// Retourne la hauteur occupée (0 si pas de cachet / non abonné / image illisible).
+function drawStampOnPdf(pdf, company, xRight, y, boxW, boxH) {
+    if (!company || !company.stamp || !isUserLicensed()) return 0;
+    try {
+        const props = pdf.getImageProperties(company.stamp);
+        const k = Math.min(boxW / props.width, boxH / props.height);
+        const w = props.width * k, h = props.height * k;
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(120, 128, 145);
+        pdf.text('Cachet et signature', xRight - boxW / 2, y, { align: 'center' });
+        pdf.addImage(company.stamp, props.fileType, xRight - boxW / 2 - w / 2, y + 2, w, h);
+        return 2 + h + 2;
+    } catch (err) { console.warn('Could not add stamp to PDF:', err); return 0; }
+}
+
 async function generatePDF(id, type, opts) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
     const doc_data = collection.find(d => d.id === id);
@@ -12821,6 +12907,13 @@ async function generatePDF(id, type, opts) {
         yPos += noteLines.length * 4 + 5;
     }
     
+    // === CACHET ET SIGNATURE (abonnés) : bas de page, à droite, au-dessus du pied de page (270 mm) ===
+    if (company.stamp && isUserLicensed()) {
+        const STAMP_W = 55, STAMP_H = 30, need = STAMP_H + 8;
+        if (yPos + need > 266) { pdf.addPage(); yPos = 20; }
+        drawStampOnPdf(pdf, company, 195, Math.min(yPos, 266 - need), STAMP_W, STAMP_H);
+    }
+
     // === BANK INFO (Footer) ===
     if (company.rib || company.bank) {
         const footerY = 270;
@@ -12892,6 +12985,146 @@ async function generatePDF(id, type, opts) {
 }
 
 // ============================================
+// REÇU DE PAIEMENT (justificatif d'encaissement, NON fiscal) : en-tête, logo et cachet de l'entreprise comme sur les factures
+// Numéro dérivé (aucun compteur à gérer) : « REÇU <n° de facture>-<rang du paiement sur cette facture> ». Le rang suit l'ordre des dates.
+// ============================================
+function paymentReceiptRank(p, payments) {
+    const same = (payments || []).filter(x => x.invoiceId === p.invoiceId).slice().sort((a, b) =>
+        String(a.date || '').localeCompare(String(b.date || '')) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id).localeCompare(String(b.id)));
+    const idx = same.findIndex(x => x.id === p.id);
+    return { rank: idx + 1, paidThrough: money2(same.slice(0, idx + 1).reduce((t, x) => t + (Number(x.amount) || 0), 0)) };
+}
+function paymentReceiptNumber(p, invoice, payments) {
+    return 'REÇU ' + ((invoice && invoice.number) || 'SANS-FACTURE') + '-' + paymentReceiptRank(p, payments).rank;
+}
+
+async function generatePaymentReceiptPDF(paymentId, opts) {
+    const payments = Storage.get('payments', []) || [];
+    const p = payments.find(x => x.id === paymentId);
+    if (!p) { showToast('Paiement introuvable', 'error'); return; }
+    const invoice = (Storage.get('invoices', []) || []).find(i => i.id === p.invoiceId);
+    if (!invoice) { showToast('Facture du paiement introuvable', 'error'); return; }
+    const company = Storage.get('company', {});
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    if (ARABIC_RE.test(JSON.stringify([p, invoice, company]))) {
+        try { await enableArabicPdf(pdf); }
+        catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée). Le PDF sera généré sans lui.', 'warning'); }
+    }
+    const dStyle = getDocStyle(company);
+    const primaryColor = dStyle.primary, accentColor = dStyle.accent;
+    const sober = dStyle.template === 'sobre';
+    const hdrText = sober ? primaryColor : [255, 255, 255];
+    const hdrSub = sober ? [90, 98, 115] : [220, 220, 220];
+    const grayDark = [74, 84, 104], grayLight = [240, 237, 230];
+    const number = paymentReceiptNumber(p, invoice, payments);
+    const { paidThrough } = paymentReceiptRank(p, payments);
+    const total = money2(invoice.totalTTC || 0);
+    const remaining = Math.max(0, money2(total - paidThrough));
+
+    // === EN-TÊTE (même présentation que les factures) ===
+    if (!sober) { pdf.setFillColor(...primaryColor); pdf.rect(0, 0, 210, 38, 'F'); }
+    pdf.setFillColor(...accentColor); pdf.rect(0, 38, 210, 1.5, 'F');
+    let textX = 15;
+    if (company.logo && isUserLicensed()) {
+        try { pdf.addImage(company.logo, 'PNG', 12, 7, 24, 24); textX = 42; } catch (err) { console.warn('Could not add logo to PDF:', err); }
+    }
+    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
+    pdf.text(company.name || 'Mon Entreprise', textX, 18);
+    const statusLabels = { ae: 'Auto-Entrepreneur', freelance: 'Profession libérale', sarl: 'SARL', autre: 'Société' };
+    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
+    pdf.text(statusLabels[company.status] || '', textX, 25);
+    pdf.setTextColor(...hdrSub); pdf.setFontSize(8);
+    let addr = ''; if (company.address) addr += company.address;
+    if (company.city && !addr.includes(company.city)) addr += (addr ? ', ' : '') + company.city;
+    if (addr) pdf.text(addr, 15, 31);
+    if (dStyle.headerNote) { pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.text(String(dStyle.headerNote).slice(0, 90), 15, 35.5); pdf.setFont('helvetica', 'normal'); }
+    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
+    pdf.text('REÇU DE PAIEMENT', 195, 22, { align: 'right' });
+    pdf.setFontSize(10); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
+    pdf.text(number, 195, 30, { align: 'right' });
+
+    // === IDENTITÉ DE L'ENTREPRISE ===
+    let y = 48;
+    pdf.setTextColor(...grayDark); pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+    const info = [];
+    if (company.ice) info.push(`ICE : ${company.ice}`);
+    if (company.if) info.push(`IF : ${company.if}`);
+    if (company.rc) info.push(`RC : ${company.rc}`);
+    if (company.phone) info.push(`Tél : ${company.phone}`);
+    if (company.email) info.push(company.email);
+    if (info.length) { pdf.text(info.join('   ·   '), 15, y); y += 10; } else { y += 4; }
+
+    // === REÇU DE ===
+    const client = (Storage.get('clients', []) || []).find(c => c.id === invoice.clientId);
+    pdf.setTextColor(...primaryColor); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
+    pdf.text('REÇU DE', 15, y); y += 6;
+    pdf.setTextColor(...grayDark); pdf.setFontSize(12);
+    pdf.text(String(invoice.clientName || (client && client.name) || 'Client'), 15, y); y += 5;
+    pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal');
+    if (client && client.ice) { pdf.text(`ICE : ${client.ice}`, 15, y); y += 4.5; }
+    y += 6;
+
+    // === MONTANT REÇU (bandeau) ===
+    pdf.setFillColor(...primaryColor); pdf.roundedRect(15, y, 180, 20, 2, 2, 'F');
+    pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11);
+    pdf.text('Montant reçu', 21, y + 8);
+    pdf.setTextColor(...accentColor); pdf.setFontSize(18);
+    pdf.text(formatCurrencyForPDF(p.amount), 189, y + 13, { align: 'right' });
+    y += 30;
+
+    // === DÉTAIL ===
+    const methodLabels = { virement: 'Virement bancaire', cheque: 'Chèque', especes: 'Espèces', cmi: 'Carte bancaire (CMI)', effet: 'Effet', autre: 'Autre' };
+    const rows = [
+        ['Date du paiement', formatDate(p.date)],
+        ['Mode de paiement', methodLabels[p.method] || String(p.method || '—')],
+        ['Référence', String(p.reference || '—')],
+        ['Facture concernée', `${isDraftNumber(invoice.number) ? 'BROUILLON' : invoice.number} du ${formatDate(invoice.date)}`],
+        ['Total de la facture (TTC)', formatCurrencyForPDF(total)],
+        ['Total payé à ce jour (ce versement inclus)', formatCurrencyForPDF(paidThrough)],
+        [remaining > 0 ? 'Reste dû' : 'Situation', remaining > 0 ? formatCurrencyForPDF(remaining) : 'Facture soldée']
+    ];
+    pdf.setFontSize(10);
+    rows.forEach((r, i) => {
+        if (i % 2 === 0) { pdf.setFillColor(...grayLight); pdf.rect(15, y - 5, 180, 8, 'F'); }
+        pdf.setTextColor(...grayDark); pdf.setFont('helvetica', 'normal'); pdf.text(r[0], 18, y);
+        pdf.setFont('helvetica', 'bold'); pdf.text(r[1], 192, y, { align: 'right' });
+        y += 8;
+    });
+    if (p.notes) {
+        y += 4; pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...primaryColor); pdf.text('Notes', 15, y); y += 5;
+        pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...grayDark);
+        const nl = pdf.splitTextToSize(String(p.notes), 180).slice(0, 4); pdf.text(nl, 15, y); y += nl.length * 4 + 4;
+    }
+    y += 6;
+    pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(120, 128, 145);
+    const mention = pdf.splitTextToSize('Justificatif d\'encaissement, non fiscal. Il ne remplace pas la facture ci-dessus. Établi le ' + formatDate(todayISO()) + '.', 180);
+    pdf.text(mention, 15, y); y += mention.length * 4 + 8;
+
+    // === CACHET ET SIGNATURE (abonnés) ===
+    if (company.stamp && isUserLicensed()) {
+        const need = 38;
+        if (y + need > 285) { pdf.addPage(); y = 20; }
+        drawStampOnPdf(pdf, company, 195, y, 55, 30);
+    }
+    if (dStyle.footerNote) {
+        pdf.setFontSize(7.5); pdf.setTextColor(120, 128, 145); pdf.setFont('helvetica', 'normal');
+        const fl = pdf.splitTextToSize(String(dStyle.footerNote), 180).slice(0, 2);
+        pdf.text(fl, 105, fl.length > 1 ? 291 : 293, { align: 'center' });
+    }
+    if (!isUserLicensed()) {
+        pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity: 0.06 })); pdf.setTextColor(27, 58, 107); pdf.setFontSize(70); pdf.setFont('helvetica', 'bold');
+        pdf.text('FACTURAPRO', 105, 160, { align: 'center', angle: -30 }); pdf.restoreGraphicsState();
+        pdf.setFontSize(8); pdf.setTextColor(180, 180, 180); pdf.setFont('helvetica', 'italic');
+        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 290, { align: 'center' });
+    }
+    const fileName = number.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') + '.pdf';
+    if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: fileName };
+    pdf.save(fileName);
+    showToast('Reçu téléchargé ✓', 'success');
+}
+
+// ============================================
 // MODAL UTILS
 // ============================================
 function closeModal(id) {
@@ -12933,7 +13166,7 @@ function blockedByLicense() {
     ['newInvoice','newQuote','newClient','newProduct','editInvoice','duplicateInvoice',
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
      'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
-     'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo',
+     'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo','handleStampUpload','removeStamp',
      'generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
         const orig = window[name];
