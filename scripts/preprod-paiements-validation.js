@@ -58,7 +58,7 @@ async function precheck() {
   out(`- Données existantes (information) : ${n.u} comptes, ${n.d} documents, ${n.p} paiements, ${n.m} compte(s) en mode documents.`);
   ck('aucun compte pay-a / pay-b déjà présent (pas de reste d\'un essai précédent)', n.t === 0, String(n.t));
   const t26 = (await c.query("SELECT (SELECT count(*) FROM pg_trigger WHERE tgname='trg_10_payments_cap')::int t, to_regprocedure('public.guard_payments_cap_legacy()') f")).rows[0];
-  ck('sql/26 pas encore installé (ni déclencheur ni fonction)', t26.t === 0 && !t26.f, JSON.stringify(t26));
+  ck('sql/26 pas encore installé (ni déclencheur ni fonction)', t26.t === 0 && !t26.f && !(await c.query("SELECT to_regprocedure('public.fp_num_p26(text)') p")).rows[0].p, JSON.stringify(t26));
   const bk = (await c.query("SELECT to_regclass('public._fp_backup_record_payment') t")).rows[0].t;
   ck('table de sauvegarde de la définition absente (install pas encore fait)', !bk);
   await c.query('ROLLBACK'); await c.end();
@@ -157,7 +157,7 @@ async function cleanup() {
   const strange = (await c.query('SELECT (SELECT count(*) FROM public.doc_payments WHERE NOT (user_id::text = ANY($1)))::int p, (SELECT count(*) FROM public.documents WHERE NOT (user_id::text = ANY($1)))::int d', [uids])).rows[0];
   out(`- Lignes de paiements/documents étrangères aux comptes de test (information, non touchées) : ${strange.p} / ${strange.d}`);
   if (process.argv.includes('--rollback')) {
-    await c.query('DROP TRIGGER IF EXISTS trg_10_payments_cap ON public.user_data'); await c.query('DROP FUNCTION IF EXISTS public.guard_payments_cap_legacy()');
+    await c.query('DROP TRIGGER IF EXISTS trg_10_payments_cap ON public.user_data'); await c.query('DROP FUNCTION IF EXISTS public.guard_payments_cap_legacy()'); await c.query('DROP FUNCTION IF EXISTS public.fp_num_p26(text)');
     ck('sql/26 retiré (déclencheur et fonction supprimés)', (await c.query("SELECT count(*)::int n FROM pg_trigger WHERE tgname='trg_10_payments_cap'")).rows[0].n === 0);
     const b = await c.query('SELECT definition FROM public._fp_backup_record_payment WHERE id=1');
     if (!b.rows[0]) ck('définition sauvegardée trouvée pour le retour arrière', false);
