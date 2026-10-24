@@ -1,7 +1,8 @@
 -- ============================================================================================================
--- 26 — Plafond des paiements pour les comptes « legacy » (user_data, clé 'payments')   *** BROUILLON : NON APPLIQUÉ ***
+-- 26 — Plafond des paiements pour les comptes « legacy » (user_data, clé 'payments')   *** APPLIQUÉ EN PRODUCTION le 24/10/2026 ***
 -- ============================================================================================================
--- Ce script N'EST PAS dans sql/MANIFEST.json. À n'exécuter qu'après autorisation écrite explicite, en préproduction d'abord.
+-- Validé en préproduction (essais 30/30, retour arrière réel validé) puis appliqué en production le 24/10/2026 (éditeur SQL Supabase, par le propriétaire).
+-- Sur la production, sql/15-17 sont ABSENTS : seul ce script s'y applique (sql/25 exige sql/15). Contrôle post-application : déclencheur actif, droits anon/authenticated retirés, 5 lignes de paiement intactes.
 -- Pourquoi : sql/25 ne protège que les comptes en mode « documents » (record_payment). Les autres comptes écrivent le tableau
 -- complet des paiements dans user_data (clé 'payments') : sans ce déclencheur, seul le navigateur empêche le trop-perçu.
 -- Règle : à l'écriture de la clé 'payments', pour chaque facture dont le CUMUL de paiements AUGMENTE par rapport à la dernière valeur
