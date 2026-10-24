@@ -6401,6 +6401,22 @@ const Storage = {
                     try { renderInvoices(); } catch {}
                     return 'dropped';
                 }
+                if (/PAIEMENT_SUPERIEUR_AU_RESTE|PAIEMENT_FACTURE_NULLE/.test(error.message || '') && key === 'payments') {
+                    // Refus métier du serveur (plafond sql/26) : ce n'est pas une panne réseau, on ne réessaie PAS en boucle.
+                    // Copie de sauvegarde locale, retour à la dernière valeur validée par le serveur, écrans recalculés.
+                    DocStoreGlue.archiveRefused(key, value, 'PAIEMENT_REFUSE');
+                    try { SyncManager.pendingChanges = SyncManager.pendingChanges.filter(c => c.key !== key); SyncManager.savePendingChanges(); SyncManager.updateUI(); } catch {}
+                    try {
+                        const r = await supaClient.from('user_data').select('key, value').eq('user_id', this._currentUserId);
+                        const row = ((r && r.data) || []).find(x => x.key === key);
+                        const back = (row && Array.isArray(row.value)) ? row.value : [];
+                        this._cache[key] = back;
+                        localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(back));
+                    } catch {}
+                    if (typeof showToast === 'function') showToast('🔒 Paiement refusé par le serveur : le cumul dépasserait le montant de la facture. Données rechargées.', 'error');
+                    ['renderInvoices', 'renderPayments', 'renderDashboard'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch {} });
+                    return 'dropped';
+                }
                 throw error;
             }
             
