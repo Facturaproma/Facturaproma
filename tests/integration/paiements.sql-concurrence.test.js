@@ -59,7 +59,8 @@ const state = async (uid, id) => { const r = (await sel('SELECT paid_amount, sta
   const rp = await Promise.all(Array.from({ length: 8 }, () => pay(U, 'f3', { id: 'same', amount: 300, date: '2026-10-01' })));
   const s4 = await state(U, 'f3');
   ck('PROPOSÉ : même paiement (même identifiant) rejoué 8 fois en parallèle -> 8 réponses ok, une seule ligne, 300 une seule fois', rp.every((r) => r.ok) && s4.n === 1 && s4.sum === 300, JSON.stringify(s4));
-  const rp2 = await pay(U, 'f2', { id: 'p0', amount: 400, date: '2026-10-01' });
+  const acc = prop.findIndex((r) => r.ok);   // les 2 paiements acceptés dépendent de l'ordre d'arrivée : on rejoue un paiement réellement accepté
+  const rp2 = await pay(U, 'f2', { id: 'p' + acc, amount: 400, date: '2026-10-01' });
   ck('PROPOSÉ : rejeu d\'un ancien paiement sur facture déjà soldée -> réponse ok (replay), rien ajouté', rp2.ok && rp2.r.replay === true && (await state(U, 'f2')).n === 3);
   const bad = await Promise.all([pay(U, 'f4', { id: 'b0', amount: 0, date: '2026-10-01' }), pay(U, 'f4', { id: 'b1', amount: -5, date: '2026-10-01' }), pay(U, 'f4', { id: 'b2', amount: 'abc', date: '2026-10-01' }), pay(U, 'g1', { id: 'b3', amount: 10, date: '2026-10-01' })]);
   ck('PROPOSÉ : montant nul, négatif, non numérique et facture à 0 refusés', bad.every((r) => !r.ok), JSON.stringify(bad.map((r) => r.msg)));
