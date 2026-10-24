@@ -1,8 +1,8 @@
 {
   "_comment": "Pilote scripts/preprod-paiements-validation.js (PRÉPRODUCTION uniquement). Les phases d'écriture (install, test, cleanup) sont REFUSÉES tant que authorized n'est pas true avec une date : cela exige l'autorisation écrite explicite de l'utilisateur. Rien n'est exécuté automatiquement par ce fichier.",
-  "phase": "cleanup",
+  "phase": "install",
   "authorized": true,
   "authorized_on": "2026-10-24",
-  "_run": 8,
-  "rollback": true
+  "_run": 9,
+  "rollback": false
 }
