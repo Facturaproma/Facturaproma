@@ -47,6 +47,7 @@ try {
   ok('messages d\'erreur expurgés (e-mail, uuid, valeurs entre quotes)', !/a@b\.ma|1111-1111|secret|user_id|"x"/.test(red), red);
   const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'restore-test.yml'), 'utf8');
   ok('workflow : manuel seulement, branche principale, délai, nettoyage, pas de jeton persistant', /workflow_dispatch/.test(wf) && !/\n\s+(push|pull_request|schedule):/.test(wf) && /github\.ref == 'refs\/heads\/main'/.test(wf) && /timeout-minutes/.test(wf) && /if: always\(\)/.test(wf) && /persist-credentials: false/.test(wf));
+  ok('workflow : la sauvegarde téléchargée vient d\'une exécution de la branche main', /gh run list --workflow backup\.yml --branch main/.test(wf));
   ok('workflow : aucune URL ni identifiant de projet Supabase', !/supabase\.co|pooler|mdozjptoecygmpkjlohr|njjaomichdlnoscrnxlz/.test(wf));
   const bad = makeBackup(10);
   r = go(bad); ok('compteur de numérotation inférieur au plus grand numéro : détecté (échec)', r.status === 1 && /numérotation/.test(r.stdout + r.stderr), '');
