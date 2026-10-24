@@ -15,10 +15,10 @@ try {
   ps(DB, ['-c', "GRANT ALL ON public.user_data, public.licenses TO authenticated; GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated; CREATE TABLE public._fp_env(id int PRIMARY KEY, env text, project_ref text); INSERT INTO public._fp_env VALUES (1,'preprod','njjaomichdlnoscrnxlz')"]);
   const L = { LOCAL_REHEARSAL: '1', REHEARSAL_DB: DB };
   const ph = (p, a = []) => { const r = run([p, ...a], L); return { ok: r.status === 0, text: r.stdout + r.stderr }; };
-  let r = ph('precheck'); ck('précontrôle (lecture seule) : tout réussi', r.ok && /7\/7/.test(r.text), r.text.slice(-300));
-  r = ph('install'); ck('installation de sql/25 : droits conservés, définition précédente sauvegardée', r.ok && /4\/4/.test(r.text), r.text.slice(-300));
-  r = ph('test'); ck('essais sur comptes jetables : tous les contrôles du plafond réussis', r.ok && /14\/14/.test(r.text), r.text.slice(-400));
-  r = ph('cleanup', ['--rollback']); ck('nettoyage + retour arrière de record_payment (empreinte sql/15 retrouvée)', r.ok && /record_payment restauré/.test(r.text) && /4\/4/.test(r.text), r.text.slice(-300));
+  let r = ph('precheck'); ck('précontrôle (lecture seule) : tout réussi', r.ok && /8\/8/.test(r.text), r.text.slice(-300));
+  r = ph('install'); ck('installation de sql/25 + sql/26 : droits conservés, définition précédente sauvegardée', r.ok && /5\/5/.test(r.text), r.text.slice(-300));
+  r = ph('test'); ck('essais sur comptes jetables : tous les contrôles du plafond (documents + legacy) réussis', r.ok && !/FAIL|ÉCHEC/.test(r.text) && /plafond legacy \(sql\/26\)/.test(r.text) && /\d+\/\d+ contrôles réussis/.test(r.text), r.text.slice(-400));
+  r = ph('cleanup', ['--rollback']); ck('nettoyage + retour arrière de record_payment (empreinte sql/15 retrouvée) + retrait sql/26', r.ok && /record_payment restauré/.test(r.text) && /sql\/26 retiré/.test(r.text) && /5\/5/.test(r.text), r.text.slice(-300));
   const left = execFileSync('psql', ['-At', '-d', DB, '-c', "SELECT count(*) FROM auth.users WHERE email LIKE 'pay-%'"]).toString().trim();
   ck('aucun compte de test restant', left === '0', left);
   let x = run(['install'], {}); ck('REFUS sans autorisation (ops/preprod-paiements.json non autorisé), code 2', x.status === 2 && /REFUS/.test(x.stderr), x.stderr);
