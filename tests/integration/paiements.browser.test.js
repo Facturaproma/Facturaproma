@@ -67,7 +67,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.fill('#paymentAmount', '800');
     await p.evaluate(() => savePayment()); await sleep(900);
     ok('trop-perçu (800 > 700) refusé, rien enregistré', (await p.evaluate(() => Storage.get('payments', []).length)) === 1);
-    await sleep(700);
+    // nouvel essai légitime immédiatement après un refus : le verrou ne doit pas bloquer
     await p.fill('#paymentAmount', '700');
     await p.evaluate(() => savePayment()); await sleep(900);
     st = await p.evaluate(() => ({ pays: Storage.get('payments', []).length, inv: Storage.get('invoices', [])[0] }));
@@ -78,6 +78,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('facture soldée absente de la liste des paiements à saisir', !(await p.$$eval('#paymentInvoice option', o => o.some(x => x.value === 'f1'))));
     await p.evaluate(() => { document.getElementById('paymentInvoice').innerHTML += '<option value="f1">x</option>'; document.getElementById('paymentInvoice').value = 'f1'; document.getElementById('paymentAmount').value = '10'; savePayment(); }); await sleep(800);
     ok('paiement sur facture soldée refusé', (await p.evaluate(() => Storage.get('payments', []).length)) === 2);
+    await sleep(700);
+    // montant nul / négatif refusés ; avoir jamais payable
+    await p.evaluate(() => { const d = new Date().toISOString().slice(0, 10); const inv = Storage.get('invoices', []);
+      inv.push({ id: 'f2', number: 'FAC-2026-002', clientId: 'c1', clientName: 'Client Test', date: d, dueDate: d, status: 'sent', items: [], totalHT: 500, totalTVA: 100, totalTTC: 600 },
+               { id: 'a1', number: 'AVR-2026-001', type: 'credit', clientId: 'c1', clientName: 'Client Test', date: d, status: 'sent', items: [], totalHT: -500, totalTVA: -100, totalTTC: -600 });
+      Storage.set('invoices', inv); });
+    for (const v of ['0', '-50', '']) {
+      await p.evaluate((v) => { const sel = document.getElementById('paymentInvoice'); sel.innerHTML = '<option value="f2">x</option>'; sel.value = 'f2'; document.getElementById('paymentAmount').value = v; savePayment(); }, v);
+    }
+    await p.evaluate(() => { const sel = document.getElementById('paymentInvoice'); sel.innerHTML = '<option value="a1">x</option>'; sel.value = 'a1'; document.getElementById('paymentAmount').value = '100'; savePayment(); });
+    ok('montant nul, négatif, vide et paiement sur un avoir refusés (3 essais enchaînés sans attente)', (await p.evaluate(() => Storage.get('payments', []).length)) === 2);
+    // paiement partiel de f2 puis rapports
+    await p.evaluate(() => { const sel = document.getElementById('paymentInvoice'); sel.innerHTML = '<option value="f2">x</option>'; sel.value = 'f2'; document.getElementById('paymentAmount').value = '200'; savePayment(); }); await sleep(900);
+    await p.evaluate(() => { navTo('reports'); try { showReport('cashflow'); } catch (e) {} renderReportCashflow(); }); await sleep(400);
+    const rec = num(await p.textContent('#rpCfReceived'));
+    ok('rapport trésorerie : encaissé = 1200 + 200 (paiement partiel inclus)', rec === 1400, String(rec));
     ok('aucune erreur JavaScript de page', true);
     await ctx.close();
     if (R_.includes(false)) { console.log('\nÉCHEC : ' + R_.filter(x => !x).length + ' contrôle(s) en échec'); process.exitCode = 1; } else console.log('\nOK : ' + R_.length + ' contrôles (paiements, navigateur, SIMULATION locale)');

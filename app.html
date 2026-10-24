@@ -8504,7 +8504,8 @@ function renderClients() {
             <tbody>
                 ${filtered.map(c => {
                     const clientInvoices = invoices.filter(i => i.clientId === c.id);
-                    const totalCA = clientInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.totalTTC || 0), 0);
+                    const _allPay = Storage.get('payments', []) || [];
+                    const totalCA = clientInvoices.filter(i => i.type !== 'credit').reduce((s, i) => s + invoicePaidAmount(i, _allPay), 0);
                     return `
                         <tr>
                             <td><strong>${escapeHtml(c.name)}</strong></td>
@@ -9344,7 +9345,8 @@ function renderReportCashflow() {
     
     const billed = filtered.reduce((s, i) => s + (i.totalTTC || 0), 0);
     const paid = filtered.filter(i => i.status === 'paid');
-    const received = paid.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const _cfPay = Storage.get('payments', []) || [];
+    const received = filtered.reduce((s, i) => s + invoicePaidAmount(i, _cfPay), 0);   // paiements partiels inclus
     
     document.getElementById('rpCfReceived').textContent = formatCurrency(received);
     document.getElementById('rpCfBilled').textContent = formatCurrency(billed);
@@ -11974,7 +11976,12 @@ let _lastPaymentKey = null, _lastPaymentAt = 0;
 function savePayment() {
     if (_savingPayment) return;            // double clic / double appui : un seul enregistrement
     _savingPayment = true;
-    try { return savePaymentOnce(); } finally { setTimeout(() => { _savingPayment = false; }, 600); }
+    let saved = false;
+    try { saved = savePaymentOnce() === true; }
+    finally {
+        // Enregistré : on garde le verrou 600 ms (double clic). Refusé ou erreur : libéré tout de suite pour un nouvel essai légitime.
+        if (saved) setTimeout(() => { _savingPayment = false; }, 600); else _savingPayment = false;
+    }
 }
 function savePaymentOnce() {
     const invoiceId = document.getElementById('paymentInvoice').value;
@@ -12009,7 +12016,9 @@ function savePaymentOnce() {
     }
     _lastPaymentKey = key; _lastPaymentAt = Date.now();
     
-    // Save payment
+    // Save payment (si l'écriture échoue, la clé anti-doublon est annulée pour permettre un nouvel essai)
+    let invoices = [], idx = -1;
+    try {
     payments.push({
         id: uuid(),
         invoiceId: invoiceId,
@@ -12023,8 +12032,8 @@ function savePaymentOnce() {
     Storage.set('payments', payments);
     
     // Mark invoice as paid
-    const invoices = Storage.get('invoices', []) || [];
-    const idx = invoices.findIndex(i => i.id === invoiceId);
+    invoices = Storage.get('invoices', []) || [];
+    idx = invoices.findIndex(i => i.id === invoiceId);
     if (idx >= 0) {
         const totalPaid = payments.filter(p => p.invoiceId === invoiceId).reduce((t, p) => t + (p.amount || 0), 0);
         invoices[idx].paidAmount = totalPaid;
@@ -12037,11 +12046,13 @@ function savePaymentOnce() {
         Storage.set('invoices', invoices);
         logDoc('paiement', invoices[idx], `${amount} DH (${method})`);
     }
+    } catch (e) { _lastPaymentKey = null; showToast('Paiement non enregistré, réessayez', 'error'); return false; }
     
     closeModal('paymentModal');
     showToast(invoices[idx] && invoices[idx].status !== 'paid' ? 'Paiement partiel enregistré ✓ — reste ' + formatCurrency(invoiceRemaining(invoices[idx], payments)) : 'Paiement enregistré ✓', 'success');
     renderPayments();
     renderDashboard();
+    return true;
 }
 
 // ============================================
