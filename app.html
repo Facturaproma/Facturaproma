@@ -358,6 +358,10 @@
             white-space: normal; min-width: 150px;
         }
         table.tbl-act thead th:last-child { background: var(--surface-soft); }
+        /* Liste clients : défilement horizontal dans la carte au lieu de couper les colonnes (ex. « EMAI ») sur téléphone */
+        #clientsList { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        #clientsList th, #clientsList td { white-space: nowrap; }
+        #clientsList td:last-child { white-space: normal; }
         table.tbl-act td:last-child { display: table-cell; }
         /* Boutons d'action des tableaux : bien visibles et faciles à toucher */
         td .btn-ghost.btn-sm {

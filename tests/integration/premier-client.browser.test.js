@@ -66,6 +66,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const inv1 = await p.evaluate(() => (Storage.get('invoices', []) || []));
     ok('brouillon enregistré : 1 facture, total 1 200 DH TTC (TVA 20 %)', inv0 === 0 && inv1.length === 1 && inv1[0].totalTTC === 1200, JSON.stringify(inv1.map(i => [i.status, i.totalTTC])));
     await p.evaluate(() => { navTo('clients'); renderClients(); }); await sleep(300);
+    const geo = await p.evaluate(() => { const l = document.getElementById('clientsList'); const th = [...l.querySelectorAll('th')].find((x) => /email/i.test(x.textContent)); const cs = getComputedStyle(l); return { ov: cs.overflowX, scroll: l.scrollWidth > l.clientWidth, txt: th.textContent.trim(), wrap: getComputedStyle(th).whiteSpace, noPageScroll: document.documentElement.scrollWidth <= window.innerWidth + 1 }; });
+    ok('mobile : en-tête « Email » entier, tableau défilant dans sa carte, pas de défilement de page', geo.txt === 'Email' && geo.wrap === 'nowrap' && geo.ov === 'auto' && geo.noPageScroll, JSON.stringify(geo));
     ok('une facture existe : le bandeau disparaît', !(await p.$('#clientsNextStep')));
     await p.evaluate(() => { navTo('dashboard'); renderDashboard(); }); await sleep(500);
     ok('tableau de bord : 2 étapes sur 3 cochées', /Premiers pas\s*2\/3/.test(await p.textContent('#actionCenter')), (await p.textContent('#actionCenter')).replace(/\s+/g, ' ').slice(0, 120));
