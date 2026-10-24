@@ -12218,7 +12218,7 @@ function renderPayments() {
                                 <td>${formatDate(p.date)}</td>
                                 <td>${inv ? `<a href="#" onclick="editInvoice('${inv.id}'); return false;" style="color: inherit; font-weight: 700; text-decoration: underline dotted;" title="Ouvrir la facture">${escapeHtml(dn(inv.number))}</a>` : '<strong>—</strong>'}</td>
                                 <td>${escapeHtml(inv?.clientName || '—')}</td>
-                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
+                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong><br><button class="btn btn-secondary btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="generatePaymentReceiptPDF('${p.id}')" title="Télécharger le reçu de paiement (PDF)">🧾 Reçu</button>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
                                 <td>${methodLabels[p.method] || p.method}</td>
                                 <td>${escapeHtml(p.reference || '—')}</td>
                             </tr>
@@ -12982,6 +12982,146 @@ async function generatePDF(id, type, opts) {
     } else {
         showToast('PDF téléchargé ✓', 'success');
     }
+}
+
+// ============================================
+// REÇU DE PAIEMENT (justificatif d'encaissement, NON fiscal) : en-tête, logo et cachet de l'entreprise comme sur les factures
+// Numéro dérivé (aucun compteur à gérer) : « REÇU <n° de facture>-<rang du paiement sur cette facture> ». Le rang suit l'ordre des dates.
+// ============================================
+function paymentReceiptRank(p, payments) {
+    const same = (payments || []).filter(x => x.invoiceId === p.invoiceId).slice().sort((a, b) =>
+        String(a.date || '').localeCompare(String(b.date || '')) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id).localeCompare(String(b.id)));
+    const idx = same.findIndex(x => x.id === p.id);
+    return { rank: idx + 1, paidThrough: money2(same.slice(0, idx + 1).reduce((t, x) => t + (Number(x.amount) || 0), 0)) };
+}
+function paymentReceiptNumber(p, invoice, payments) {
+    return 'REÇU ' + ((invoice && invoice.number) || 'SANS-FACTURE') + '-' + paymentReceiptRank(p, payments).rank;
+}
+
+async function generatePaymentReceiptPDF(paymentId, opts) {
+    const payments = Storage.get('payments', []) || [];
+    const p = payments.find(x => x.id === paymentId);
+    if (!p) { showToast('Paiement introuvable', 'error'); return; }
+    const invoice = (Storage.get('invoices', []) || []).find(i => i.id === p.invoiceId);
+    if (!invoice) { showToast('Facture du paiement introuvable', 'error'); return; }
+    const company = Storage.get('company', {});
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    if (ARABIC_RE.test(JSON.stringify([p, invoice, company]))) {
+        try { await enableArabicPdf(pdf); }
+        catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée). Le PDF sera généré sans lui.', 'warning'); }
+    }
+    const dStyle = getDocStyle(company);
+    const primaryColor = dStyle.primary, accentColor = dStyle.accent;
+    const sober = dStyle.template === 'sobre';
+    const hdrText = sober ? primaryColor : [255, 255, 255];
+    const hdrSub = sober ? [90, 98, 115] : [220, 220, 220];
+    const grayDark = [74, 84, 104], grayLight = [240, 237, 230];
+    const number = paymentReceiptNumber(p, invoice, payments);
+    const { paidThrough } = paymentReceiptRank(p, payments);
+    const total = money2(invoice.totalTTC || 0);
+    const remaining = Math.max(0, money2(total - paidThrough));
+
+    // === EN-TÊTE (même présentation que les factures) ===
+    if (!sober) { pdf.setFillColor(...primaryColor); pdf.rect(0, 0, 210, 38, 'F'); }
+    pdf.setFillColor(...accentColor); pdf.rect(0, 38, 210, 1.5, 'F');
+    let textX = 15;
+    if (company.logo && isUserLicensed()) {
+        try { pdf.addImage(company.logo, 'PNG', 12, 7, 24, 24); textX = 42; } catch (err) { console.warn('Could not add logo to PDF:', err); }
+    }
+    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
+    pdf.text(company.name || 'Mon Entreprise', textX, 18);
+    const statusLabels = { ae: 'Auto-Entrepreneur', freelance: 'Profession libérale', sarl: 'SARL', autre: 'Société' };
+    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
+    pdf.text(statusLabels[company.status] || '', textX, 25);
+    pdf.setTextColor(...hdrSub); pdf.setFontSize(8);
+    let addr = ''; if (company.address) addr += company.address;
+    if (company.city && !addr.includes(company.city)) addr += (addr ? ', ' : '') + company.city;
+    if (addr) pdf.text(addr, 15, 31);
+    if (dStyle.headerNote) { pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.text(String(dStyle.headerNote).slice(0, 90), 15, 35.5); pdf.setFont('helvetica', 'normal'); }
+    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
+    pdf.text('REÇU DE PAIEMENT', 195, 22, { align: 'right' });
+    pdf.setFontSize(10); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
+    pdf.text(number, 195, 30, { align: 'right' });
+
+    // === IDENTITÉ DE L'ENTREPRISE ===
+    let y = 48;
+    pdf.setTextColor(...grayDark); pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+    const info = [];
+    if (company.ice) info.push(`ICE : ${company.ice}`);
+    if (company.if) info.push(`IF : ${company.if}`);
+    if (company.rc) info.push(`RC : ${company.rc}`);
+    if (company.phone) info.push(`Tél : ${company.phone}`);
+    if (company.email) info.push(company.email);
+    if (info.length) { pdf.text(info.join('   ·   '), 15, y); y += 10; } else { y += 4; }
+
+    // === REÇU DE ===
+    const client = (Storage.get('clients', []) || []).find(c => c.id === invoice.clientId);
+    pdf.setTextColor(...primaryColor); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
+    pdf.text('REÇU DE', 15, y); y += 6;
+    pdf.setTextColor(...grayDark); pdf.setFontSize(12);
+    pdf.text(String(invoice.clientName || (client && client.name) || 'Client'), 15, y); y += 5;
+    pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal');
+    if (client && client.ice) { pdf.text(`ICE : ${client.ice}`, 15, y); y += 4.5; }
+    y += 6;
+
+    // === MONTANT REÇU (bandeau) ===
+    pdf.setFillColor(...primaryColor); pdf.roundedRect(15, y, 180, 20, 2, 2, 'F');
+    pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11);
+    pdf.text('Montant reçu', 21, y + 8);
+    pdf.setTextColor(...accentColor); pdf.setFontSize(18);
+    pdf.text(formatCurrencyForPDF(p.amount), 189, y + 13, { align: 'right' });
+    y += 30;
+
+    // === DÉTAIL ===
+    const methodLabels = { virement: 'Virement bancaire', cheque: 'Chèque', especes: 'Espèces', cmi: 'Carte bancaire (CMI)', effet: 'Effet', autre: 'Autre' };
+    const rows = [
+        ['Date du paiement', formatDate(p.date)],
+        ['Mode de paiement', methodLabels[p.method] || String(p.method || '—')],
+        ['Référence', String(p.reference || '—')],
+        ['Facture concernée', `${isDraftNumber(invoice.number) ? 'BROUILLON' : invoice.number} du ${formatDate(invoice.date)}`],
+        ['Total de la facture (TTC)', formatCurrencyForPDF(total)],
+        ['Total payé à ce jour (ce versement inclus)', formatCurrencyForPDF(paidThrough)],
+        [remaining > 0 ? 'Reste dû' : 'Situation', remaining > 0 ? formatCurrencyForPDF(remaining) : 'Facture soldée']
+    ];
+    pdf.setFontSize(10);
+    rows.forEach((r, i) => {
+        if (i % 2 === 0) { pdf.setFillColor(...grayLight); pdf.rect(15, y - 5, 180, 8, 'F'); }
+        pdf.setTextColor(...grayDark); pdf.setFont('helvetica', 'normal'); pdf.text(r[0], 18, y);
+        pdf.setFont('helvetica', 'bold'); pdf.text(r[1], 192, y, { align: 'right' });
+        y += 8;
+    });
+    if (p.notes) {
+        y += 4; pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...primaryColor); pdf.text('Notes', 15, y); y += 5;
+        pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...grayDark);
+        const nl = pdf.splitTextToSize(String(p.notes), 180).slice(0, 4); pdf.text(nl, 15, y); y += nl.length * 4 + 4;
+    }
+    y += 6;
+    pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(120, 128, 145);
+    const mention = pdf.splitTextToSize('Justificatif d\'encaissement, non fiscal. Il ne remplace pas la facture ci-dessus. Établi le ' + formatDate(todayISO()) + '.', 180);
+    pdf.text(mention, 15, y); y += mention.length * 4 + 8;
+
+    // === CACHET ET SIGNATURE (abonnés) ===
+    if (company.stamp && isUserLicensed()) {
+        const need = 38;
+        if (y + need > 285) { pdf.addPage(); y = 20; }
+        drawStampOnPdf(pdf, company, 195, y, 55, 30);
+    }
+    if (dStyle.footerNote) {
+        pdf.setFontSize(7.5); pdf.setTextColor(120, 128, 145); pdf.setFont('helvetica', 'normal');
+        const fl = pdf.splitTextToSize(String(dStyle.footerNote), 180).slice(0, 2);
+        pdf.text(fl, 105, fl.length > 1 ? 291 : 293, { align: 'center' });
+    }
+    if (!isUserLicensed()) {
+        pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity: 0.06 })); pdf.setTextColor(27, 58, 107); pdf.setFontSize(70); pdf.setFont('helvetica', 'bold');
+        pdf.text('FACTURAPRO', 105, 160, { align: 'center', angle: -30 }); pdf.restoreGraphicsState();
+        pdf.setFontSize(8); pdf.setTextColor(180, 180, 180); pdf.setFont('helvetica', 'italic');
+        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 290, { align: 'center' });
+    }
+    const fileName = number.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') + '.pdf';
+    if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: fileName };
+    pdf.save(fileName);
+    showToast('Reçu téléchargé ✓', 'success');
 }
 
 // ============================================

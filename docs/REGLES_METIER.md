@@ -34,3 +34,10 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 - **Mentions usuelles** (ICE, IF, RC, CNSS, Patente) : voir README et `docs/PLAN_VALIDATION_FONCTIONNELLE.md`. Pas de re-vérification des textes dans ce lot : à faire avant tout nouveau développement fiscal.
 - **Délais de paiement** : loi 69-21 (60 jours par défaut, 120 jours maximum conventionnel pour les entreprises concernées), déjà affichée dans l'éditeur avec la mention « confirmez auprès de la DGI ou de votre comptable ».
 - **À valider par un expert-comptable** : TVA, cotisations et seuils affichés comme « indicatifs ».
+
+
+## Cachet, signature et reçu de paiement (24/10/2026)
+- **Cachet et signature** : image (PNG, JPG ou WebP, 300 Ko maximum) envoyée dans « Mon Entreprise », réservée aux comptes avec licence active (comme le logo) ; stockée avec les données de l'entreprise (donc synchronisée). Imprimée en bas à droite des PDF de factures, de devis et de reçus, au-dessus du pied de page ; une nouvelle page est ajoutée si la place manque. Sans licence : jamais imprimée, même si une image est présente dans les données.
+- **Reçu de paiement** : PDF par paiement, depuis le bouton « 🧾 Reçu » de l'historique des paiements. Même en-tête, logo et cachet que les factures. Contenu : montant reçu, date, mode, référence, facture concernée, total de la facture, total payé à ce jour (ce versement inclus), reste dû ou « Facture soldée ». Numéro dérivé sans compteur : `REÇU <n° de facture>-<rang du paiement>` (rang = ordre des dates, puis de création).
+- Le reçu est un **justificatif d'encaissement, non fiscal** : il ne remplace pas la facture. Je n'ai pas vérifié si la loi marocaine impose des mentions ou une numérotation particulières ; à faire valider par un comptable avant de le présenter comme conforme.
+- Le cachet du client n'est pas géré (circuit de signature hors périmètre) : une ligne « Bon pour accord » peut être envisagée sur les devis.
