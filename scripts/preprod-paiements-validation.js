@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// VALIDATION de sql/25_plafond_paiements.sql sur la PRÉPRODUCTION Supabase (njjaomichdlnoscrnxlz) — jamais la production.
+// VALIDATION de sql/25_plafond_paiements.sql (comptes « documents ») ET de sql/26_plafond_paiements_legacy.sql (comptes legacy) sur la PRÉPRODUCTION Supabase (njjaomichdlnoscrnxlz) — jamais la production.
 // *** PRÉPARÉ, NON EXÉCUTÉ sur Supabase. Aucune phase ne doit être lancée sans l'autorisation écrite explicite de l'utilisateur. ***
 //   precheck : LECTURE SEULE. Cible, marqueur « préproduction », empreinte de record_payment, droits, comptes et données existants.
 //   install  : (écriture) sauvegarde de la définition actuelle dans public._fp_backup_record_payment, puis applique sql/25 (une transaction).
@@ -12,7 +12,7 @@ const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const T = require('./preprod-target.json');
 const EXPECTED_SQL15_MD5 = '437d99973de84c9b3ad9f7bcc456635c';   // md5(pg_get_functiondef) de record_payment installé par sql/15 (relevé en préproduction le 24/10/2026, identique à la base locale)
-const EMAILS = ['pay-a@facturapro-test.invalid', 'pay-b@facturapro-test.invalid'];
+const EMAILS = ['pay-a@facturapro-test.invalid', 'pay-b@facturapro-test.invalid', 'pay-c@facturapro-test.invalid', 'pay-d@facturapro-test.invalid'];   // a, b : mode « documents » (sql/25) ; c, d : mode legacy (sql/26)
 const LOCAL = process.env.LOCAL_REHEARSAL === '1';
 const lines = [], res = [];
 const out = (s = '') => { lines.push(s); console.log(s); };
@@ -57,6 +57,8 @@ async function precheck() {
   const n = (await c.query("SELECT (SELECT count(*) FROM public.documents)::int d, (SELECT count(*) FROM public.doc_payments)::int p, (SELECT count(*) FROM public.doc_store_mode WHERE mode='documents')::int m, (SELECT count(*) FROM auth.users WHERE email = ANY($1))::int t, (SELECT count(*) FROM auth.users)::int u", [EMAILS])).rows[0];
   out(`- Données existantes (information) : ${n.u} comptes, ${n.d} documents, ${n.p} paiements, ${n.m} compte(s) en mode documents.`);
   ck('aucun compte pay-a / pay-b déjà présent (pas de reste d\'un essai précédent)', n.t === 0, String(n.t));
+  const t26 = (await c.query("SELECT (SELECT count(*) FROM pg_trigger WHERE tgname='trg_10_payments_cap')::int t, to_regprocedure('public.guard_payments_cap_legacy()') f")).rows[0];
+  ck('sql/26 pas encore installé (ni déclencheur ni fonction)', t26.t === 0 && !t26.f, JSON.stringify(t26));
   const bk = (await c.query("SELECT to_regclass('public._fp_backup_record_payment') t")).rows[0].t;
   ck('table de sauvegarde de la définition absente (install pas encore fait)', !bk);
   await c.query('ROLLBACK'); await c.end();
@@ -72,8 +74,11 @@ async function install() {
   await c.query("ALTER TABLE public._fp_backup_record_payment ENABLE ROW LEVEL SECURITY");
   await c.query("INSERT INTO public._fp_backup_record_payment(id, definition, grants) SELECT 1, pg_get_functiondef('public.record_payment(text,jsonb,text)'::regprocedure), (SELECT proacl::text FROM pg_proc WHERE oid='public.record_payment(text,jsonb,text)'::regprocedure) ON CONFLICT (id) DO NOTHING");
   await c.query(fs.readFileSync(path.join(ROOT, 'sql', '25_plafond_paiements.sql'), 'utf8'));
+  await c.query(fs.readFileSync(path.join(ROOT, 'sql', '26_plafond_paiements_legacy.sql'), 'utf8'));
   await c.query('COMMIT');
-  ck('sql/25 appliqué (une transaction), définition précédente sauvegardée', true);
+  ck('sql/25 et sql/26 appliqués (une seule transaction), définition précédente de record_payment sauvegardée', true);
+  const t26 = (await c.query("SELECT (SELECT count(*) FROM pg_trigger WHERE tgname='trg_10_payments_cap' AND tgenabled='O')::int t")).rows[0].t;
+  ck('déclencheur trg_10_payments_cap installé et actif sur user_data', t26 === 1);
   const g = (await c.query("SELECT has_function_privilege('anon','public.record_payment(text,jsonb,text)','EXECUTE') a, has_function_privilege('authenticated','public.record_payment(text,jsonb,text)','EXECUTE') b, (SELECT prosecdef FROM pg_proc WHERE oid='public.record_payment(text,jsonb,text)'::regprocedure) sd")).rows[0];
   ck('droits après installation : anon non, authenticated oui, SECURITY DEFINER conservé', g.a === false && g.b === true && g.sd === true, JSON.stringify(g));
   ck('empreinte modifiée (la fonction a bien changé)', (await functionMd5(c)) !== EXPECTED_SQL15_MD5);
@@ -85,7 +90,7 @@ async function test() {
   const { Pool } = require('pg');
   const c = await connect(); await target(c);
   const ids = [];
-  for (const e of EMAILS) {
+  for (const e of EMAILS.slice(0, 2)) {
     const ex = await c.query('SELECT id FROM auth.users WHERE email=$1', [e]);
     if (ex.rows[0]) { ids.push(ex.rows[0].id); continue; }
     const id = crypto.randomUUID(); ids.push(id);
@@ -108,7 +113,29 @@ async function test() {
     const r = (await c.query('SELECT public.fp_doc_mode_set($1::uuid,$2,$3,0) r', [u, 'documents', null])).rows[0].r;
     if (r && r.ok === false) throw new Error('bascule de mode refusée : ' + JSON.stringify(r));
   }
-  out('## Essais du plafond (comptes jetables pay-a / pay-b)');
+  // Comptes legacy pay-c / pay-d : aucune bascule de mode, factures dans user_data (clé 'invoices'), compteurs serveur cohérents
+  const lids = [];
+  for (const e of EMAILS.slice(2)) {
+    const ex = await c.query('SELECT id FROM auth.users WHERE email=$1', [e]);
+    if (ex.rows[0]) { lids.push(ex.rows[0].id); continue; }
+    const id = crypto.randomUUID(); lids.push(id);
+    if (LOCAL) await c.query('INSERT INTO auth.users(id,email) VALUES ($1,$2)', [id, e]);
+    else {
+      const pw = crypto.randomBytes(18).toString('hex') + 'Aa1!';
+      await c.query(`INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token, email_change_token_new, email_change)
+        VALUES ('00000000-0000-0000-0000-000000000000', $1::uuid, 'authenticated', 'authenticated', $2, crypt($3, gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', '')`, [id, e, pw]);
+      await c.query(`INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+        VALUES (gen_random_uuid(), $1::uuid, $1::text, jsonb_build_object('sub', $1::text, 'email', $2::text, 'email_verified', true), 'email', now(), now(), now())`, [id, e]);
+    }
+  }
+  for (const u of lids) {
+    await c.query("INSERT INTO public.licenses(user_id,type,status,expires_at) VALUES ($1,'annual','active',now()+interval '30 days') ON CONFLICT DO NOTHING", [u]).catch(() => {});
+    await c.query("INSERT INTO public.doc_counters(user_id,doc_type,last_value) VALUES ($1,'invoice',9) ON CONFLICT (user_id, doc_type) DO NOTHING", [u]);
+    await c.query("INSERT INTO public.user_data(user_id,key,value) VALUES ($1,'invoices',$2) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value", [u, JSON.stringify(require('../tests/lib/paiements-sql-checks').seedInvoices())]);
+    const md = (await c.query('SELECT public.fp_doc_mode($1::uuid) m', [u])).rows[0].m;
+    if (md !== 'legacy') throw new Error('compte legacy attendu pour ' + u);
+  }
+  out('## Essais du plafond (comptes jetables pay-a / pay-b en mode documents ; pay-c / pay-d en mode legacy)');
   const pool = new (require('pg').Pool)(LOCAL ? { database: process.env.REHEARSAL_DB, max: 20 } : (() => { const p = require('./preprod-db').parseDbUrl(process.env.PREPROD_DB_URL); return { host: p.host, port: Number(p.port), database: p.database, user: p.user, password: p.password, ssl: { rejectUnauthorized: false }, max: 12 }; })());
   async function as(uid, fn) {
     const k = await pool.connect();
@@ -117,6 +144,8 @@ async function test() {
       const r = await fn(k); await k.query('COMMIT'); return r; } catch (e) { await k.query('ROLLBACK').catch(() => {}); throw e; } finally { k.release(); }
   }
   await require('../tests/lib/paiements-sql-checks').capChecks({ pool, as, ck, U, V });
+  out('\n## Essais du plafond legacy (sql/26)');
+  await require('../tests/lib/paiements-legacy-checks').legacyChecks({ pool, as, ck, U: lids[0], V: lids[1] });
   await pool.end(); await c.end();
 }
 
@@ -128,6 +157,8 @@ async function cleanup() {
   const strange = (await c.query('SELECT (SELECT count(*) FROM public.doc_payments WHERE NOT (user_id::text = ANY($1)))::int p, (SELECT count(*) FROM public.documents WHERE NOT (user_id::text = ANY($1)))::int d', [uids])).rows[0];
   out(`- Lignes de paiements/documents étrangères aux comptes de test (information, non touchées) : ${strange.p} / ${strange.d}`);
   if (process.argv.includes('--rollback')) {
+    await c.query('DROP TRIGGER IF EXISTS trg_10_payments_cap ON public.user_data'); await c.query('DROP FUNCTION IF EXISTS public.guard_payments_cap_legacy()');
+    ck('sql/26 retiré (déclencheur et fonction supprimés)', (await c.query("SELECT count(*)::int n FROM pg_trigger WHERE tgname='trg_10_payments_cap'")).rows[0].n === 0);
     const b = await c.query('SELECT definition FROM public._fp_backup_record_payment WHERE id=1');
     if (!b.rows[0]) ck('définition sauvegardée trouvée pour le retour arrière', false);
     else { await c.query('BEGIN'); await c.query(b.rows[0].definition); await c.query('REVOKE ALL ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) FROM PUBLIC, anon'); await c.query('GRANT EXECUTE ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) TO authenticated'); await c.query('COMMIT'); ck('record_payment restauré à la définition de sql/15', (await functionMd5(c)) === EXPECTED_SQL15_MD5); }
@@ -138,7 +169,8 @@ async function cleanup() {
   await c.query('COMMIT');
   ck(`${del.rowCount} compte(s) de test supprimé(s) (e-mails exacts pay-a / pay-b uniquement)`, del.rowCount === us.length);
   const left = (await c.query('SELECT (SELECT count(*) FROM auth.users WHERE email = ANY($1))::int u, (SELECT count(*) FROM public.documents WHERE user_id::text = ANY($2))::int d, (SELECT count(*) FROM public.doc_payments WHERE user_id::text = ANY($2))::int p', [EMAILS, uids])).rows[0];
-  ck('plus aucun compte, document ni paiement de test', left.u === 0 && left.d === 0 && left.p === 0, JSON.stringify(left));
+  const ud = (await c.query("SELECT count(*)::int n FROM public.user_data WHERE user_id::text = ANY($1)", [uids])).rows[0].n;
+  ck('plus aucun compte, document, paiement ni donnée legacy de test', left.u === 0 && left.d === 0 && left.p === 0 && ud === 0, JSON.stringify({ ...left, user_data: ud }));
   await c.end();
 }
 
