@@ -33,3 +33,23 @@ Relevé du 24/10/2026. **Seules des requêtes de lecture** ont été exécutées
 - Le message d'erreur affiché à l'utilisateur quand le serveur refuse (à vérifier avec un navigateur sur la préproduction déployée, après installation).
 - Les comptes « legacy » (hors nouveau stockage) : `record_payment` ne les concerne pas.
 - `tests/integration/mode.test.js` enregistre 15 DH sur une facture de 12 : à adapter si sql/25 devient définitif.
+
+## Quels comptes sont réellement protégés ? (vérification du 24/10/2026)
+| Catégorie de compte | Protection contre le trop-perçu | Où |
+|---|---|---|
+| Mode « documents » (liste `doc_store_testers`, sql/17) | Navigateur **+ serveur** si `sql/25` est installé (`record_payment`) | sql/25 |
+| Mode « legacy » (tous les autres, y compris tous les clients réels à ce jour) | Navigateur seulement ; **serveur seulement si `sql/26` est installé** (déclencheur sur `user_data`, clé `payments`) | sql/26 |
+| Ancien navigateur / application non mise à jour / appel direct à l'API | Aucune sans `sql/25` ou `sql/26` | — |
+
+Requête **en lecture seule** pour compter les comptes par mode (à exécuter par le propriétaire sur le projet voulu ; elle n'écrit rien) :
+```sql
+SELECT COALESCE(m.mode, 'legacy') AS mode, count(*) FROM auth.users u LEFT JOIN public.doc_store_mode m ON m.user_id = u.id GROUP BY 1;
+```
+Préproduction (lecture seule, vérifiée) : 3 comptes, tous en legacy, 0 en mode documents. Production : **non vérifiée** (interdit sans votre accord).
+
+### Solution pour couvrir les comptes legacy : `sql/26_plafond_paiements_legacy.sql` (brouillon non appliqué)
+- Déclencheur `BEFORE INSERT OR UPDATE` sur `user_data` pour la clé `payments` ; seuls les **nouveaux** paiements sont contrôlés (cumul par facture ≤ TTC + 0,01 ; TTC ≤ 0 refusé) ; un ancien trop-perçu ne bloque rien rétroactivement.
+- L'application écrit par *upsert* : le test a révélé que l'ancienne valeur doit être relue dans la table (OLD n'existe pas dans le déclencheur INSERT), corrigé.
+- Test local `tests/integration/paiements.legacy-plafond.test.js` : **13 contrôles OK** (dont la preuve que, sans sql/26, un paiement de 1500 sur 1000 passe), PostgreSQL 16 local jetable, données fictives.
+- **Limites** : facture absente de `user_data` → paiement accepté ; cumul des lignes seulement (pas `paidAmount`) ; en mode legacy le dernier écrivain gagne (deux onglets simultanés écrasent, ce n'est pas nouveau) ; en cas de refus, **comportement de l'application à valider en préproduction** (message affiché, pas de réessai en boucle) avant toute production.
+- Ordre d'application proposé, après vos autorisations distinctes : préproduction sql/25 puis sql/26 → test navigateur avec comptes jetables → décision pour la production.
