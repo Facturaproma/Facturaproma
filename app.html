@@ -4655,6 +4655,28 @@
                         </div>
                     </div>
 
+                    <div class="aside-card" id="stampCard">
+                        <h3>🖋️ Cachet et signature</h3>
+                        <div id="stampLockedSection" style="display: none;">
+                            <div style="font-size: 12px; color: var(--ink-mute);">🔒 Cachet et signature sur vos factures, devis et reçus : disponibles avec une licence active.</div>
+                        </div>
+                        <div id="stampActiveSection" style="display: none;">
+                            <div id="stampPreview" style="text-align: center; padding: 16px; background: var(--surface-soft); border-radius: 10px; margin-bottom: 12px; min-height: 100px; display: flex; align-items: center; justify-content: center;">
+                                <span style="color: var(--ink-mute); font-size: 12px;">Aucun cachet</span>
+                            </div>
+                            <input type="file" id="stampUploadInput" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;" onchange="handleStampUpload(event)">
+                            <button class="btn btn-secondary" onclick="document.getElementById('stampUploadInput').click()" style="width: 100%; margin-bottom: 8px; font-size: 13px;">
+                                📤 Envoyer mon cachet / ma signature
+                            </button>
+                            <button class="btn btn-secondary" onclick="removeStamp()" style="width: 100%; font-size: 12px; color: var(--danger);" id="removeStampBtn">
+                                🗑️ Supprimer le cachet
+                            </button>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">
+                                💡 Photo ou scan de votre cachet (idéalement sur fond blanc ou transparent, PNG de préférence). PNG, JPG ou WebP, 300 Ko maximum. Imprimé en bas à droite de vos factures, devis et reçus de paiement.
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="aside-card" id="docStyleCard">
                         <h3>🖌️ Style des documents</h3>
                         <div id="docStyleLocked" style="display: none; font-size: 12px; color: var(--ink-mute);">
@@ -10502,6 +10524,8 @@ function updateLogoSection() {
         activeSection.style.display = 'none';
     }
     
+    updateStampSection();
+
     // Update accounting export note based on tier
     const noteEl = document.getElementById('accountingExportNote');
     if (noteEl) {
@@ -10566,6 +10590,53 @@ function removeLogo() {
     if (input) input.value = '';
     
     showToast('Logo supprimé', 'success');
+}
+
+// Cachet et signature de l'entreprise : abonnés seulement (comme le logo), image stockée dans « company » (donc synchronisée avec le compte)
+const STAMP_MAX_BYTES = 300 * 1024;
+function updateStampSection() {
+    const locked = document.getElementById('stampLockedSection'), active = document.getElementById('stampActiveSection');
+    if (!locked || !active) return;
+    if (!isUserLicensed()) { locked.style.display = 'block'; active.style.display = 'none'; return; }
+    locked.style.display = 'none'; active.style.display = 'block';
+    const company = Storage.get('company', {});
+    const preview = document.getElementById('stampPreview'), btn = document.getElementById('removeStampBtn');
+    if (company.stamp) {
+        preview.innerHTML = '<img src="' + company.stamp + '" style="max-width: 100%; max-height: 90px; object-fit: contain;" alt="Cachet">';
+        if (btn) btn.style.display = 'block';
+    } else {
+        preview.innerHTML = '<span style="color: var(--ink-mute); font-size: 12px;">Aucun cachet</span>';
+        if (btn) btn.style.display = 'none';
+    }
+}
+
+function handleStampUpload(event) {
+    if (!isUserLicensed()) { showToast('🔒 Activez votre licence pour ajouter un cachet', 'error'); return; }
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > STAMP_MAX_BYTES) { showToast('Image trop volumineuse. Max 300 Ko.', 'error'); event.target.value = ''; return; }
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) { showToast('Format non supporté. Utilisez PNG, JPG ou WebP.', 'error'); event.target.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const company = Storage.get('company', {});
+        company.stamp = e.target.result; // base64
+        Storage.set('company', company);
+        updateStampSection();
+        showToast('Cachet enregistré ✓', 'success');
+    };
+    reader.onerror = () => showToast('Erreur lors de la lecture du fichier', 'error');
+    reader.readAsDataURL(file);
+}
+
+function removeStamp() {
+    if (!confirm('Supprimer le cachet et la signature ?')) return;
+    const company = Storage.get('company', {});
+    delete company.stamp;
+    Storage.set('company', company);
+    updateStampSection();
+    const input = document.getElementById('stampUploadInput');
+    if (input) input.value = '';
+    showToast('Cachet supprimé', 'success');
 }
 
 function loadCompanyForm() {
@@ -12532,6 +12603,21 @@ async function enableArabicPdf(pdf) {
     };
 }
 
+// Cachet de l'entreprise sur un PDF (abonnés). Dessine l'image dans une boîte w × h mm, alignée à droite de x, sans la déformer.
+// Retourne la hauteur occupée (0 si pas de cachet / non abonné / image illisible).
+function drawStampOnPdf(pdf, company, xRight, y, boxW, boxH) {
+    if (!company || !company.stamp || !isUserLicensed()) return 0;
+    try {
+        const props = pdf.getImageProperties(company.stamp);
+        const k = Math.min(boxW / props.width, boxH / props.height);
+        const w = props.width * k, h = props.height * k;
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(120, 128, 145);
+        pdf.text('Cachet et signature', xRight - boxW / 2, y, { align: 'center' });
+        pdf.addImage(company.stamp, props.fileType, xRight - boxW / 2 - w / 2, y + 2, w, h);
+        return 2 + h + 2;
+    } catch (err) { console.warn('Could not add stamp to PDF:', err); return 0; }
+}
+
 async function generatePDF(id, type, opts) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
     const doc_data = collection.find(d => d.id === id);
@@ -12821,6 +12907,13 @@ async function generatePDF(id, type, opts) {
         yPos += noteLines.length * 4 + 5;
     }
     
+    // === CACHET ET SIGNATURE (abonnés) : bas de page, à droite, au-dessus du pied de page (270 mm) ===
+    if (company.stamp && isUserLicensed()) {
+        const STAMP_W = 55, STAMP_H = 30, need = STAMP_H + 8;
+        if (yPos + need > 266) { pdf.addPage(); yPos = 20; }
+        drawStampOnPdf(pdf, company, 195, Math.min(yPos, 266 - need), STAMP_W, STAMP_H);
+    }
+
     // === BANK INFO (Footer) ===
     if (company.rib || company.bank) {
         const footerY = 270;
@@ -12933,7 +13026,7 @@ function blockedByLicense() {
     ['newInvoice','newQuote','newClient','newProduct','editInvoice','duplicateInvoice',
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
      'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
-     'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo',
+     'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo','handleStampUpload','removeStamp',
      'generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
         const orig = window[name];
