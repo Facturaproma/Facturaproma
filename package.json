@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Tests reproductibles de FacturaPro (aucun secret requis)",
   "scripts": {
-    "test": "node tests/app.test.js && node tests/regression.test.js && node tests/docstore.unit.test.js && node tests/fiscal.unit.test.js && node tests/admin-comptes.unit.test.js && node tests/admin-rapports.unit.test.js && node tests/admin-journal.unit.test.js && node tests/formules.unit.test.js && node tests/admin-demandes.unit.test.js && node tests/admin-codes.unit.test.js && node tests/anti-double.unit.test.js && node tests/admin-licence-compte.unit.test.js && node tests/integration/inscription-confirmation.test.js && node scripts/check-release.js --guards",
+    "test": "node tests/app.test.js && node tests/regression.test.js && node tests/docstore.unit.test.js && node tests/fiscal.unit.test.js && node tests/admin-comptes.unit.test.js && node tests/admin-rapports.unit.test.js && node tests/admin-journal.unit.test.js && node tests/formules.unit.test.js && node tests/admin-demandes.unit.test.js && node tests/admin-codes.unit.test.js && node tests/anti-double.unit.test.js && node tests/admin-licence-compte.unit.test.js && node tests/integration/inscription-confirmation.test.js && node tests/check-release.unit.test.js && node scripts/check-release.js --guards",
     "check:release": "node scripts/check-release.js",
     "test:sql": "bash tests/sql/run.sh",
     "test:integration": "node tests/integration/cloud.test.js && node tests/integration/concurrence.test.js && node tests/integration/migration.test.js && node tests/integration/mode.test.js && node tests/integration/docstore.browser.test.js && node tests/integration/login-captcha.test.js",
