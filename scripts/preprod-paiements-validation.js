@@ -161,7 +161,8 @@ async function cleanup() {
     ck('sql/26 retiré (déclencheur et fonction supprimés)', (await c.query("SELECT count(*)::int n FROM pg_trigger WHERE tgname='trg_10_payments_cap'")).rows[0].n === 0);
     const b = await c.query('SELECT definition FROM public._fp_backup_record_payment WHERE id=1');
     if (!b.rows[0]) ck('définition sauvegardée trouvée pour le retour arrière', false);
-    else { await c.query('BEGIN'); await c.query(b.rows[0].definition); await c.query('REVOKE ALL ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) FROM PUBLIC, anon'); await c.query('GRANT EXECUTE ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) TO authenticated'); await c.query('COMMIT'); ck('record_payment restauré à la définition de sql/15', (await functionMd5(c)) === EXPECTED_SQL15_MD5); }
+    else { await c.query('BEGIN'); await c.query(b.rows[0].definition); await c.query('REVOKE ALL ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) FROM PUBLIC, anon'); await c.query('GRANT EXECUTE ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) TO authenticated'); await c.query('COMMIT'); ck('record_payment restauré à la définition de sql/15', (await functionMd5(c)) === EXPECTED_SQL15_MD5);
+      if ((await functionMd5(c)) === EXPECTED_SQL15_MD5) { await c.query('DROP TABLE IF EXISTS public._fp_backup_record_payment'); ck('table de sauvegarde retirée (définition restaurée et vérifiée)', (await c.query("SELECT to_regclass('public._fp_backup_record_payment') t")).rows[0].t === null); } }
   }
   await c.query('BEGIN');
   // le journal des paiements est verrouillé : le trigger autorise la suppression en cascade d'un compte (voir guard_doc_payments)

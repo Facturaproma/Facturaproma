@@ -18,7 +18,7 @@ try {
   let r = ph('precheck'); ck('précontrôle (lecture seule) : tout réussi', r.ok && /8\/8/.test(r.text), r.text.slice(-300));
   r = ph('install'); ck('installation de sql/25 + sql/26 : droits conservés, définition précédente sauvegardée', r.ok && /5\/5/.test(r.text), r.text.slice(-300));
   r = ph('test'); ck('essais sur comptes jetables : tous les contrôles du plafond (documents + legacy) réussis', r.ok && !/FAIL|ÉCHEC/.test(r.text) && /plafond legacy \(sql\/26\)/.test(r.text) && /\d+\/\d+ contrôles réussis/.test(r.text), r.text.slice(-400));
-  r = ph('cleanup', ['--rollback']); ck('nettoyage + retour arrière de record_payment (empreinte sql/15 retrouvée) + retrait sql/26', r.ok && /record_payment restauré/.test(r.text) && /sql\/26 retiré/.test(r.text) && /5\/5/.test(r.text), r.text.slice(-300));
+  r = ph('cleanup', ['--rollback']); ck('nettoyage + retour arrière de record_payment (empreinte sql/15 retrouvée) + retrait sql/26', r.ok && /record_payment restauré/.test(r.text) && /sql\/26 retiré/.test(r.text) && /table de sauvegarde retirée/.test(r.text) && /6\/6/.test(r.text), r.text.slice(-300));
   const left = execFileSync('psql', ['-At', '-d', DB, '-c', "SELECT count(*) FROM auth.users WHERE email LIKE 'pay-%'"]).toString().trim();
   ck('aucun compte de test restant', left === '0', left);
   let x = run(['install'], {}); ck('REFUS sans autorisation (ops/preprod-paiements.json non autorisé), code 2', x.status === 2 && /REFUS/.test(x.stderr), x.stderr);
