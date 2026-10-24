@@ -226,7 +226,7 @@ function classifyErrors(stderr) {
 
     // 6) tests fonctionnels sur la copie restaurée
     out('\n### 5. Tests fonctionnels sur la copie restaurée (sans toucher à la source)');
-    const uids = (await rc.query(`SELECT id::text id, left(id::text,8) u, email FROM auth.users WHERE email LIKE '%@facturapro-test.invalid' ORDER BY email LIMIT 2`)).rows;
+    const uids = (await rc.query(`SELECT id::text id, left(id::text,8) u, email FROM auth.users WHERE email LIKE '%@facturapro-test.invalid' AND lower(email) NOT IN (SELECT lower(email) FROM public.admins) ORDER BY email LIMIT 2`)).rows;   // comptes NON administrateurs : un administrateur voit légitimement les licences/lignes des autres
     if (ALLOW_EMPTY && uids.length === 0) out('- (aucun compte de test dans cette sauvegarde de référence : tests fonctionnels sur comptes non applicables ; ils sont faits sur la sauvegarde suivante)');
     else ck('les 2 comptes de test sont présents dans la copie restaurée', uids.length === 2);
     if (uids.length === 2) {
@@ -243,7 +243,7 @@ function classifyErrors(stderr) {
         ck('licence (A → B) : NULL, aucune information sur le compte de B', ab.v === null, `valeur=${JSON.stringify(ab.v)} ; A administrateur=${JSON.stringify(ab.adm)}`);
         ck('RLS : A ne voit aucune ligne user_data de B', (await rc.query('SELECT count(*)::int n FROM public.user_data WHERE user_id = $1::uuid', [B.id])).rows[0].n === 0);
         const own = (await rc.query(`SELECT value FROM public.user_data WHERE key='invoices'`)).rows[0];
-        ck('RLS : A retrouve ses propres factures', !!own && Array.isArray(own.value) && own.value.length === (S1.invoices[A.u] || { numbers: [] }).numbers.length, `ligne invoices pour A : ${own ? 'présente (' + (Array.isArray(own.value) ? own.value.length : 'non-tableau') + ' factures)' : 'absente'} ; attendu ${(S1.invoices[A.u] || { numbers: [] }).numbers.length}`);
+        ck('RLS : A retrouve ses propres factures', ((S1.invoices[A.u] || { numbers: [] }).numbers.length === 0 && !own) || (!!own && Array.isArray(own.value) && own.value.length === (S1.invoices[A.u] || { numbers: [] }).numbers.length), `ligne invoices pour A : ${own ? 'présente (' + (Array.isArray(own.value) ? own.value.length : 'non-tableau') + ' factures)' : 'absente'} ; attendu ${(S1.invoices[A.u] || { numbers: [] }).numbers.length}`);
         const last = (await rc.query(`SELECT coalesce(max(last_value),0)::int v FROM public.doc_counters WHERE doc_type='invoice'`)).rows[0].v;
         const n1 = (await rc.query(`SELECT public.next_doc_number('invoice', 0) v`)).rows[0].v, n2 = (await rc.query(`SELECT public.next_doc_number('invoice', 0) v`)).rows[0].v;
         ck(`numérotation après restauration : dernier ${last} → prochains numéros ${n1} puis ${n2} (continuité, aucun doublon)`, n1 === last + 1 && n2 === last + 2);
