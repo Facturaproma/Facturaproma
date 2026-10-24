@@ -27,3 +27,11 @@ Tout texte coupé, bouton hors écran, ancienne version affichée après actuali
 
 ## Non testable automatiquement (donc seulement par vous)
 Rejeu hors ligne d'un paiement refusé par le serveur ; comportement réel du clavier Android ; lenteur sur réseau mobile.
+
+## Ajouts : numérotation de départ, exemples, sauvegarde technique (à faire sur un vrai téléphone)
+
+- [ ] Mon Entreprise : saisir « 42 » dans Factures, enregistrer, ouvrir une nouvelle facture : l'aperçu annonce `…-043`.
+- [ ] Une valeur invalide (1000001, négatif) est refusée avec un message.
+- [ ] Après la première facture émise, le champ Factures est grisé.
+- [ ] « Facture d'exemple » et « Reçu d'exemple » : PDF téléchargé, filigrane EXEMPLE, aucune facture ni paiement créé.
+- [ ] « Sauvegarde technique » : l'export télécharge `facturapro-sauvegarde-technique-<date>.json` ; l'import d'un fichier refuse un JSON invalide et demande confirmation avant d'ajouter.
