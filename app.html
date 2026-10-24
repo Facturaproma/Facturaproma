@@ -4525,6 +4525,12 @@
                 <aside class="editor-aside">
                     <div class="aside-card">
                         <h3>📊 Statistiques</h3>
+                        <select id="cmpStatPeriod" onchange="renderCompanyStats()" aria-label="Période des statistiques" style="width:100%;margin-bottom:10px;">
+                            <option value="all">Tout</option>
+                            <option value="month">Ce mois</option>
+                            <option value="quarter">Ce trimestre</option>
+                            <option value="year">Cette année</option>
+                        </select>
                         <div class="calc-line">
                             <span>Factures émises</span>
                             <strong id="cmpStatInvoices">0</strong>
@@ -4538,7 +4544,7 @@
                             <strong id="cmpStatClients">0</strong>
                         </div>
                         <div class="calc-line">
-                            <span>CA total</span>
+                            <span>CA encaissé (factures payées)</span>
                             <strong id="cmpStatCA">0,00 DH</strong>
                         </div>
                     </div>
@@ -10463,12 +10469,31 @@ function loadCompanyForm() {
     // Logo handling - only for licensed users
     updateLogoSection();
     
-    // Stats
-    const invoices = Storage.get('invoices', []);
-    const quotes = Storage.get('quotes', []);
-    const clients = Storage.get('clients', []);
+    // Stats (filtrables par période)
+    try { const sel = document.getElementById('cmpStatPeriod'); const v = localStorage.getItem('fp_stat_period'); if (sel && v) sel.value = v; } catch {}
+    renderCompanyStats();
+}
+
+// Début de la période choisie (date ISO AAAA-MM-JJ), null = tout
+function statPeriodStart(period, now = new Date()) {
+    const y = now.getFullYear(), m = now.getMonth();
+    const pad = (n) => String(n).padStart(2, '0');
+    if (period === 'month') return `${y}-${pad(m + 1)}-01`;
+    if (period === 'quarter') return `${y}-${pad(Math.floor(m / 3) * 3 + 1)}-01`;
+    if (period === 'year') return `${y}-01-01`;
+    return null;
+}
+
+function renderCompanyStats() {
+    const sel = document.getElementById('cmpStatPeriod');
+    const period = sel ? sel.value : 'all';
+    try { localStorage.setItem('fp_stat_period', period); } catch {}
+    const start = statPeriodStart(period);
+    const inPeriod = (d) => !start || (d && String(d).slice(0, 10) >= start);
+    const invoices = Storage.get('invoices', []).filter(i => inPeriod(i.date));
+    const quotes = Storage.get('quotes', []).filter(q => inPeriod(q.date));
+    const clients = Storage.get('clients', []).filter(c => inPeriod(c.createdAt));
     const totalCA = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.totalTTC || 0), 0);
-    
     document.getElementById('cmpStatInvoices').textContent = invoices.length;
     document.getElementById('cmpStatQuotes').textContent = quotes.length;
     document.getElementById('cmpStatClients').textContent = clients.length;
