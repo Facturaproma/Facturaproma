@@ -47,6 +47,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const today = new Date().toISOString().slice(0, 10);
   const invRow = JSON.stringify([{ id: 'f1', number: 'FAC-2026-001', clientId: 'c1', clientName: 'Client Test', date: today, dueDate: today, status: 'sent', items: [], totalHT: 1000, totalTVA: 200, totalTTC: 1200 }]);
   require('child_process').execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-c', `SET session_replication_role=replica; INSERT INTO public.user_data(user_id,key,value) VALUES ('${uid}','invoices','${invRow}'::jsonb) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value`]);
+  require('child_process').execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-c', `SET session_replication_role=replica; INSERT INTO public.doc_counters(user_id,doc_type,last_value) VALUES ('${uid}','invoice',1) ON CONFLICT (user_id,doc_type) DO UPDATE SET last_value=1`]);   // compteur serveur cohérent avec la facture posée
   await p.evaluate(async () => { await Storage.loadFromCloud(); Storage.set('clients', [{ id: 'c1', name: 'Client Test', createdAt: new Date().toISOString() }]); }); await sleep(1200);
   const d = today;
   const mk = (id, amt) => ({ id, invoiceId: 'f1', amount: amt, method: 'cash', date: d, paidAt: d });
@@ -71,25 +72,38 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 3; i++) await p.evaluate(() => Storage.set('payments', Storage.get('payments', []).concat([{ id: 'r' + Math.random(), invoiceId: 'f1', amount: 900, method: 'cash', date: '2026-10-24' }])));
   await sleep(1800);
   ok('3 tentatives répétées de trop-perçu : serveur inchangé (1 paiement), file vide', (await srvPays(p)).length === 1 && (await p.evaluate(() => (SyncManager.pendingChanges || []).filter((c) => c.key === 'payments').length)) === 0);
-  // 4) modification et suppression d'un paiement existant
+  // 4) modification et suppression d'un paiement existant : les paiements sont IMMUABLES côté serveur (l'interface ne fait qu'en ajouter)
   await setPays(p, [mk('p1', 5000)]);
-  ok('modification à la hausse (500 → 5000) refusée', Number((await srvPays(p))[0].amount) === 500, String((await srvPays(p))[0].amount));
+  ok('modification à la hausse (500 → 5000) : sans effet, le paiement reste à 500', Number((await srvPays(p))[0].amount) === 500, String((await srvPays(p))[0].amount));
   await setPays(p, [mk('p1', 300)]);
-  ok('modification à la baisse (500 → 300) acceptée', Number((await srvPays(p))[0].amount) === 300);
+  ok('modification à la baisse (500 → 300) : sans effet, le paiement reste à 500 (immuable)', Number((await srvPays(p))[0].amount) === 500);
   await setPays(p, []);
-  ok('suppression du paiement acceptée (serveur : 0 paiement)', (await srvPays(p)).length === 0);
-  // 5) deux onglets, même facture
-  await setPays(p, [mk('p1', 500)]);
+  ok('écriture d\'un tableau vide : aucun paiement n\'est effacé (1 paiement conservé)', (await srvPays(p)).length === 1);
+  // 5) deux appareils, même facture : aucun paiement perdu, jamais de dépassement
   const B = await dev({ width: 1366, height: 800 }); const q = B.p;
   await q.goto(`http://localhost:${PORT}/app.html?mode=login`); await sleep(800);
   await q.fill('#loginEmail', email); await q.fill('#loginPassword', 'Test#12345'); await q.click('#loginBtn'); await sleep(2500);
   const qSees = await q.evaluate(() => Storage.get('payments', []).length);
-  ok('2e onglet : voit le paiement déjà enregistré', qSees === 1, String(qSees));
-  await Promise.all([setPays(p, [mk('p1', 500), mk('a', 700)]), setPays(q, [mk('p1', 500), mk('b', 700)])]);
+  ok('2e appareil : voit le paiement déjà enregistré', qSees === 1, String(qSees));
+  await Promise.all([setPays(p, [mk('p1', 500), mk('a', 300)]), setPays(q, [mk('p1', 500), mk('b', 300)])]);
   const fin = await srvPays(p); const tot = fin.reduce((s, x) => s + Number(x.amount), 0);
-  ok('deux onglets ajoutent 700 chacun : le cumul serveur ne dépasse jamais 1200', tot <= 1200.01, 'total=' + tot + ' lignes=' + fin.length + ' (un des deux ajouts est perdu : limite connue du mode legacy, « dernier écrivain gagne »)');
-  ok('aucune erreur JavaScript de page', true);
+  ok('deux appareils ajoutent 300 chacun : AUCUN paiement perdu (3 lignes, 1100) et pas de dépassement', fin.length === 3 && tot === 1100, 'lignes=' + fin.length + ' total=' + tot);
+  // 6) RÉGRESSION « paiement refusé alors que la facture a été mise à jour » : l'appareil B, périmé, croit qu'il reste 700 à payer
+  //    (il ignore 'a' et 'b' ; le serveur en sait 1100 : le reste réel est 100). B paie 700 : le serveur refuse le paiement ; la facture
+  //    NE DOIT PAS rester « payée » ni avec un avancement supérieur aux paiements réellement enregistrés.
+  await q.evaluate(async () => { Storage._cache['payments'] = [{ id: 'p1', invoiceId: 'f1', amount: 500, method: 'cash', date: '2026-10-24', paidAt: '2026-10-24' }]; const inv = Storage.get('invoices', []).find((x) => x.id === 'f1'); inv.paidAmount = 500; inv.status = 'sent'; });
+  await q.evaluate(() => { recordPaymentForInvoice('f1'); }); await sleep(500);
+  await q.fill('#paymentAmount', '700');
+  await q.evaluate(() => savePayment()); await sleep(3500);
+  const sp = await srvPays(p), si = await p.evaluate(async () => { const r = await supaClient.from('user_data').select('key, value').eq('user_id', Storage._currentUserId); return ((r.data || []).find((x) => x.key === 'invoices').value || []).find((i) => i.id === 'f1'); });
+  if (process.env.DEBUG_T) console.log('DEBUG', JSON.stringify({ toastB: await q.evaluate(() => (document.querySelector('.toast') || {}).textContent), arch: await q.evaluate(() => Object.keys(localStorage).filter((k) => /refused/.test(k)).map((k) => k.slice(-9) + ':' + JSON.parse(localStorage.getItem(k)).reason)), si, lastB: await q.evaluate(() => Storage.get('invoices', []).find((x) => x.id === 'f1')) }));
+  const sumLines = sp.reduce((t, x) => t + Number(x.amount), 0);
+  const lq = await q.evaluate(() => { const i = Storage.get('invoices', []).find((x) => x.id === 'f1'); return { status: i.status, paid: i.paidAmount || 0, lines: Storage.get('payments', []).length }; });
+  ok('régression : le serveur a refusé le paiement de B (toujours 3 lignes, 1100)', sp.length === 3 && sumLines === 1100, JSON.stringify({ n: sp.length, sumLines }));
+  ok('régression : facture côté SERVEUR cohérente avec les paiements (statut ' + si.status + ', payé ' + si.paidAmount + ' pour ' + sumLines + ' enregistré)', si.status !== 'paid' && Number(si.paidAmount || 0) <= sumLines + 0.01);
+  ok('régression : facture côté appareil B revenue à l\'état du serveur et 3 lignes de paiement', lq.status !== 'paid' && lq.paid <= sumLines + 0.01 && lq.lines === 3, JSON.stringify(lq));
   await A.ctx.close(); await B.ctx.close();
+  ok('aucune erreur JavaScript de page', true);
   if (R_.includes(false)) { console.log('\nÉCHEC : ' + R_.filter((x) => !x).length + ' contrôle(s) en échec'); process.exitCode = 1; } else console.log('\nOK : ' + R_.length + ' contrôles (refus serveur sql/26, navigateur, SIMULATION locale)');
   await browser.close(); srv.close(); try { be.close(); } catch {} dropDb(db);
 })().catch((e) => { console.error(e); process.exit(1); });

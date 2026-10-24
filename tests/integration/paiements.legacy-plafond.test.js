@@ -41,17 +41,19 @@ try {
   // Concurrence : deux écritures simultanées de 600 sur 1000 (deux onglets) → pas de dépassement dans la base
   const a = spawnSync('bash', ['-c', `psql -X -q -d ${db} -c "INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','[{\\"id\\":\\"a\\",\\"invoiceId\\":\\"i1\\",\\"amount\\":600}]') ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value" & psql -X -q -d ${db} -c "INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','[{\\"id\\":\\"b\\",\\"invoiceId\\":\\"i1\\",\\"amount\\":600}]') ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value" ; wait`], { env, encoding: 'utf8' });
   const tot = must(db, `SELECT COALESCE(sum((e->>'amount')::numeric),0) FROM public.user_data u, jsonb_array_elements(u.value) e WHERE u.key='payments'`); ok('deux écritures simultanées (blobs distincts) : le total stocké reste <= 1000', Number(tot) <= 1000, 'total=' + tot + ' (dernier écrivain gagne : limite connue du mode legacy)');
-  // Modification, suppression, rattachement à une autre facture
+  // Les paiements sont IMMUABLES et jamais perdus : modification, suppression et rattachement ailleurs n'ont aucun effet
   must(db, `DELETE FROM public.user_data WHERE key='payments'`);
+  const stored = () => JSON.parse(must(db, `SELECT value FROM public.user_data WHERE key='payments'`));
   put([pay('m1', 'i1', 400)]);
-  r = put([pay('m1', 'i1', 5000)]); ok('modification à la hausse d\'un paiement existant (400 → 5000) : refusée', r.status !== 0 && /PAIEMENT_SUPERIEUR_AU_RESTE/.test(r.stderr));
-  r = put([pay('m1', 'i1', 300)]); ok('modification à la baisse (400 → 300) : acceptée', r.status === 0);
-  put([pay('m1', 'i1', 300), pay('m2', 'i1', 700)]);
-  r = put([pay('m1', 'i1', 300), pay('m2', 'i0', 700)]); ok('paiement rattaché à une facture à 0 : refusé', r.status !== 0 && /PAIEMENT_FACTURE_NULLE/.test(r.stderr));
-  r = put([pay('m1', 'i1', 300)]); ok('suppression d\'un paiement : acceptée', r.status === 0);
-  r = put([]); ok('suppression de tous les paiements : acceptée', r.status === 0);
+  r = put([pay('m1', 'i1', 5000)]); ok('modification d\'un paiement existant (400 → 5000) : sans effet, la valeur enregistrée reste 400', r.status === 0 && stored()[0].amount === 400);
+  r = put([pay('m1', 'i1', 300)]); ok('modification à la baisse (400 → 300) : sans effet, reste 400 (immuable)', r.status === 0 && stored()[0].amount === 400);
+  r = put([pay('m1', 'i0', 400)]); ok('rattachement d\'un paiement existant à une autre facture : sans effet', r.status === 0 && stored()[0].invoiceId === 'i1');
+  r = put([pay('m2', 'i0', 10)]); ok('NOUVEAU paiement sur une facture à 0 : refusé (PAIEMENT_FACTURE_NULLE)', r.status !== 0 && /PAIEMENT_FACTURE_NULLE/.test(r.stderr));
+  r = put([]); ok('tableau vide : aucun paiement effacé (fusion)', r.status === 0 && stored().length === 1);
+  r = put([pay('m9', 'i1', 100)]); ok('appareil périmé qui ignore m1 : m1 est CONSERVÉ et m9 ajouté (2 lignes, 500)', r.status === 0 && stored().length === 2 && stored().reduce((t, x) => t + x.amount, 0) === 500);
+  r = put([pay('m10', 'i1', 600)]); ok('même appareil périmé : 500 + 600 > 1000 refusé, rien n\'est perdu ni ajouté', r.status !== 0 && /PAIEMENT_SUPERIEUR_AU_RESTE/.test(r.stderr) && stored().length === 2);
   // Écritures SIMULTANÉES réellement chevauchantes : B doit attendre A (verrou FOR UPDATE), puis être jugée sur la valeur validée par A
-  put([]);
+  must(db, `DELETE FROM public.user_data WHERE key='payments'`);
   const t0 = Date.now();
   const { spawn } = require('child_process');
   const A = spawn('psql', ['-X', '-q', '-d', db, '-c', `BEGIN; INSERT INTO public.user_data(user_id,key,value) VALUES ('${U}','payments','${JSON.stringify([pay('a', 'i1', 600)])}'::jsonb) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value; SELECT pg_sleep(2); COMMIT;`], { env });
