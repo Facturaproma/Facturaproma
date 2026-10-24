@@ -5023,7 +5023,8 @@
             </div>
             <div>
                 <label>Montant reçu (DH) *</label>
-                <input type="number" id="paymentAmount" step="0.01" required>
+                <input type="number" id="paymentAmount" step="0.01" min="0.01" required>
+                <div id="paymentRemainingHint" style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;"></div>
             </div>
         </div>
 
@@ -7391,7 +7392,8 @@ function renderActionCenter(invoices) {
     }
 
     if (overdue.length > 0) {
-        const total = overdue.reduce((s, i) => s + (i.totalTTC || 0), 0);
+        const pays = Storage.get('payments', []) || [];
+        const total = overdue.reduce((s, i) => s + invoiceRemaining(i, pays), 0);
         html += `
         <div class="table-card" style="margin-bottom: 16px; padding: 16px 18px; border-left: 4px solid var(--danger);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -7404,7 +7406,7 @@ function renderActionCenter(invoices) {
                         <strong>${escapeHtml(i.clientName || '—')}</strong>
                         <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(dn(i.number))} · ${i.overdueDays || 0} j de retard</div>
                     </div>
-                    <strong>${formatCurrency(i.totalTTC)}</strong>
+                    <strong>${formatCurrency(invoiceRemaining(i, pays))}</strong>
                     <button class="btn btn-secondary btn-sm" onclick="quickRelance('${i.id}')" title="Relancer par WhatsApp" style="color:#25D366;">💬 Relancer</button>
                 </div>`).join('')}
             ${overdue.length > 5 ? `<div style="padding-top:8px;"><button class="btn btn-ghost btn-sm" onclick="navTo('reminders')">Voir les ${overdue.length} relances →</button></div>` : ''}
@@ -7429,8 +7431,10 @@ function renderDashboard() {
     
     const paid = yearInvoices.filter(i => i.status === 'paid');
     const pending = yearInvoices.filter(i => ['sent', 'overdue'].includes(i.status));
-    const totalPaid = paid.reduce((s, i) => s + (i.totalTTC || 0), 0);
-    const totalPending = pending.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const allPayments = Storage.get('payments', []) || [];
+    // Encaissé = tout ce qui a réellement été reçu (paiements partiels compris) ; en attente = restes à payer
+    const totalPaid = yearInvoices.reduce((s, i) => s + invoicePaidAmount(i, allPayments), 0);
+    const totalPending = pending.reduce((s, i) => s + invoiceRemaining(i, allPayments), 0);
     
     // Update payments badge in sidebar
     const overdue = invoices.filter(i => i.status === 'overdue');
@@ -9317,6 +9321,7 @@ function quickRelance(invoiceId) {
         `📋 Détail :\n` +
         `• N° : ${invoice.number}\n` +
         `• Montant : ${formatCurrency(invoice.totalTTC)}\n` +
+        `${invoiceRemaining(invoice, Storage.get('payments', []) || []) < (invoice.totalTTC || 0) ? `• Reste à régler : ${formatCurrency(invoiceRemaining(invoice, Storage.get('payments', []) || []))}\n` : ''}` +
         `• Date : ${formatDate(invoice.date)}\n\n` +
         `Pourriez-vous svp me faire un retour sur le statut du règlement ?\n\n` +
         `${company.rib ? `RIB : ${company.rib}\n` : ''}` +
@@ -10493,7 +10498,8 @@ function renderCompanyStats() {
     const invoices = Storage.get('invoices', []).filter(i => inPeriod(i.date));
     const quotes = Storage.get('quotes', []).filter(q => inPeriod(q.date));
     const clients = Storage.get('clients', []).filter(c => inPeriod(c.createdAt));
-    const totalCA = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const statPays = Storage.get('payments', []) || [];
+    const totalCA = invoices.reduce((s, i) => s + invoicePaidAmount(i, statPays), 0);
     document.getElementById('cmpStatInvoices').textContent = invoices.length;
     document.getElementById('cmpStatQuotes').textContent = quotes.length;
     document.getElementById('cmpStatClients').textContent = clients.length;
@@ -11722,6 +11728,37 @@ function getOverdueDays(invoice) {
     return diff > 0 ? diff : 0;
 }
 
+// <PAIEMENTS-CALC>
+// Montants encaissés / restants : règle unique pour tout l'écran (tableau de bord, paiements, relances).
+// Fonctions pures : aucune lecture de stockage ni de DOM, testées dans tests/paiements.unit.test.js.
+function money2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+// Montant déjà encaissé sur une facture (jamais négatif, jamais au-delà du TTC). Facture « payée » = soldée.
+function invoicePaidAmount(inv, payments) {
+    const ttc = money2(inv && inv.totalTTC);
+    if (!inv || ttc <= 0 || inv.status === 'draft') return 0;
+    if (inv.status === 'paid') return ttc;
+    const sum = (Array.isArray(payments) ? payments : []).filter(p => p && p.invoiceId === inv.id)
+        .reduce((t, p) => t + money2(p.amount), 0);
+    return Math.min(ttc, Math.max(0, money2(Math.max(sum, Number(inv.paidAmount) || 0))));
+}
+// Reste à payer (0 pour un brouillon, un avoir ou une facture soldée).
+function invoiceRemaining(inv, payments) {
+    const ttc = money2(inv && inv.totalTTC);
+    if (!inv || ttc <= 0 || inv.status === 'draft') return 0;
+    return money2(Math.max(0, ttc - invoicePaidAmount(inv, payments)));
+}
+// Un paiement est-il acceptable ? { ok, reason }
+function checkPaymentAmount(inv, amount, payments) {
+    const a = money2(amount);
+    if (!inv) return { ok: false, reason: 'Sélectionnez une facture' };
+    if (!(a > 0)) return { ok: false, reason: 'Date et montant requis' };
+    const rest = invoiceRemaining(inv, payments);
+    if (rest <= 0) return { ok: false, reason: 'Cette facture est déjà soldée' };
+    if (a > rest + 0.005) return { ok: false, reason: 'Montant supérieur au reste à payer' };
+    return { ok: true, remaining: rest };
+}
+// </PAIEMENTS-CALC>
+
 function getInvoiceWithStatus(invoice) {
     // Auto-detect overdue status
     if (invoice.status !== 'paid' && invoice.status !== 'draft') {
@@ -11740,17 +11777,17 @@ function renderPayments() {
     
     // Stats
     const today = new Date();
-    const thisMonthInvoices = invoices.filter(i => {
-        const d = new Date(i.date);
-        return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear() && i.status === 'paid';
-    });
-    const thisMonthTotal = thisMonthInvoices.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    // Encaissé ce mois = paiements reçus ce mois (date du paiement), partiels compris
+    const thisMonthTotal = payments.filter(p => {
+        const d = new Date(p.date);
+        return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    }).reduce((s, p) => s + money2(p.amount), 0);
     
     const pending = invoices.filter(i => i.status === 'sent');
-    const pendingTotal = pending.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const pendingTotal = pending.reduce((s, i) => s + invoiceRemaining(i, payments), 0);
     
     const overdue = invoices.filter(i => i.status === 'overdue');
-    const overdueTotal = overdue.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const overdueTotal = overdue.reduce((s, i) => s + invoiceRemaining(i, payments), 0);
     
     // Average payment delay
     const paidInvoices = invoices.filter(i => i.status === 'paid');
@@ -11826,10 +11863,10 @@ function renderPayments() {
                                     ${formatDate(inv.dueDate)}
                                     ${overdueDays > 0 ? `<br><span style="color: var(--danger); font-size: 11px; font-weight: 700;">+${overdueDays} jours</span>` : ''}
                                 </td>
-                                <td><strong>${formatCurrency(inv.totalTTC)}</strong></td>
+                                <td><strong>${formatCurrency(inv.totalTTC)}</strong>${invoicePaidAmount(inv, payments) > 0 && inv.status !== 'paid' ? `<br><span style="font-size: 11px; color: var(--ink-mute);">reste ${formatCurrency(invoiceRemaining(inv, payments))}</span>` : ''}</td>
                                 <td><span class="status-pill status-${inv.status}">${statusLabel(inv.status)}</span></td>
                                 <td>
-                                    ${inv.status !== 'paid' ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">✓ Marquer payée</button>` : ''}
+                                    ${inv.status !== 'paid' ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">${invoicePaidAmount(inv, payments) > 0 ? '✓ Solde / paiement' : '✓ Marquer payée'}</button>` : ''}
                                     <button class="btn btn-ghost btn-sm" onclick="editInvoice('${inv.id}')" title="Voir">👁</button>
                                 </td>
                             </tr>
@@ -11899,10 +11936,11 @@ function recordPayment() {
     
     const select = document.getElementById('paymentInvoice');
     select.innerHTML = '<option value="">— Sélectionner une facture —</option>' +
-        unpaid.map(i => `<option value="${i.id}">${escapeHtml(i.number)} — ${escapeHtml(i.clientName || '—')} — ${formatCurrency(i.totalTTC)}</option>`).join('');
+        unpaid.filter(i => invoiceRemaining(i, Storage.get('payments', []) || []) > 0).map(i => { const r = invoiceRemaining(i, Storage.get('payments', []) || []); return `<option value="${i.id}">${escapeHtml(i.number)} — ${escapeHtml(i.clientName || '—')} — reste ${formatCurrency(r)}${r < (i.totalTTC || 0) ? ' sur ' + formatCurrency(i.totalTTC) : ''}</option>`; }).join('');
     
     document.getElementById('paymentDate').value = todayISO();
     document.getElementById('paymentAmount').value = '';
+    const hintEl = document.getElementById('paymentRemainingHint'); if (hintEl) hintEl.textContent = '';
     document.getElementById('paymentMethod').value = 'virement';
     document.getElementById('paymentReference').value = '';
     document.getElementById('paymentNotes').value = '';
@@ -11924,11 +11962,21 @@ function updatePaymentAmount() {
     const invoices = Storage.get('invoices', []) || [];
     const invoice = invoices.find(i => i.id === invoiceId);
     if (invoice) {
-        document.getElementById('paymentAmount').value = invoice.totalTTC || 0;
+        const rest = invoiceRemaining(invoice, Storage.get('payments', []) || []);
+        document.getElementById('paymentAmount').value = rest;
+        const hintEl = document.getElementById('paymentRemainingHint');
+        if (hintEl) hintEl.textContent = rest < (invoice.totalTTC || 0) ? `Reste à payer : ${formatCurrency(rest)} (déjà reçu : ${formatCurrency(invoicePaidAmount(invoice, Storage.get('payments', []) || []))})` : `Montant de la facture : ${formatCurrency(rest)}`;
     }
 }
 
+let _savingPayment = false;
+let _lastPaymentKey = null, _lastPaymentAt = 0;
 function savePayment() {
+    if (_savingPayment) return;            // double clic / double appui : un seul enregistrement
+    _savingPayment = true;
+    try { return savePaymentOnce(); } finally { setTimeout(() => { _savingPayment = false; }, 600); }
+}
+function savePaymentOnce() {
     const invoiceId = document.getElementById('paymentInvoice').value;
     const date = document.getElementById('paymentDate').value;
     const amount = parseFloat(document.getElementById('paymentAmount').value);
@@ -11945,8 +11993,23 @@ function savePayment() {
         return;
     }
     
-    // Save payment
+    // Contrôles : facture existante, pas déjà soldée, pas de trop-perçu
     const payments = Storage.get('payments', []) || [];
+    const target = (Storage.get('invoices', []) || []).find(i => i.id === invoiceId);
+    const verdict = checkPaymentAmount(target, amount, payments);
+    if (!verdict.ok) {
+        showToast(verdict.reason + (verdict.reason === 'Montant supérieur au reste à payer' && target ? ' (' + formatCurrency(invoiceRemaining(target, payments)) + ')' : ''), 'error');
+        return;
+    }
+    // Même paiement rejoué dans les 10 secondes (réseau lent, double appui) : ignoré
+    const key = [invoiceId, date, money2(amount), method, reference].join('|');
+    if (key === _lastPaymentKey && Date.now() - _lastPaymentAt < 10000) {
+        showToast('Ce paiement vient déjà d\'être enregistré', 'warning');
+        return;
+    }
+    _lastPaymentKey = key; _lastPaymentAt = Date.now();
+    
+    // Save payment
     payments.push({
         id: uuid(),
         invoiceId: invoiceId,
@@ -11976,7 +12039,7 @@ function savePayment() {
     }
     
     closeModal('paymentModal');
-    showToast(invoices[idx] && invoices[idx].status !== 'paid' ? 'Paiement partiel enregistré ✓ — reste ' + formatCurrency((invoices[idx].totalTTC||0) - (invoices[idx].paidAmount||0)) : 'Paiement enregistré ✓', 'success');
+    showToast(invoices[idx] && invoices[idx].status !== 'paid' ? 'Paiement partiel enregistré ✓ — reste ' + formatCurrency(invoiceRemaining(invoices[idx], payments)) : 'Paiement enregistré ✓', 'success');
     renderPayments();
     renderDashboard();
 }
@@ -12024,7 +12087,8 @@ function renderReminders() {
     const level2 = overdue.filter(i => i.overdueDays >= 15 && i.overdueDays < 30);
     const level3 = overdue.filter(i => i.overdueDays >= 30);
     
-    const totalAmount = overdue.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const payList = Storage.get('payments', []) || [];
+    const totalAmount = overdue.reduce((s, i) => s + invoiceRemaining(i, payList), 0);
     
     document.getElementById('reminderLevel1').textContent = `${level1.length} facture(s)`;
     document.getElementById('reminderLevel2').textContent = `${level2.length} facture(s)`;
@@ -12076,7 +12140,7 @@ function renderReminders() {
                             <td>${formatDate(inv.dueDate)}</td>
                             <td><strong style="color: var(--danger);">+${inv.overdueDays} jours</strong></td>
                             <td><span style="color: ${levelColor}; font-weight: 600; font-size: 12px;">${levelLabel}</span></td>
-                            <td><strong>${formatCurrency(inv.totalTTC)}</strong></td>
+                            <td><strong>${formatCurrency(invoiceRemaining(inv, payList))}</strong></td>
                             <td>
                                 <button class="btn btn-primary btn-sm" onclick="generateReminderEmail('${inv.id}', ${level})">📧 Générer email</button>
                             </td>
@@ -12113,7 +12177,7 @@ function generateReminderEmail(invoiceId, level) {
     const message = template
         .replace(/{CLIENT}/g, client?.name || invoice.clientName || 'Cher client')
         .replace(/{NUMERO}/g, invoice.number)
-        .replace(/{MONTANT}/g, formatCurrency(invoice.totalTTC, false))
+        .replace(/{MONTANT}/g, formatCurrency(invoiceRemaining(invoice, Storage.get('payments', []) || []) || invoice.totalTTC, false))
         .replace(/{ECHEANCE}/g, formatDate(invoice.dueDate))
         .replace(/{ENTREPRISE}/g, company.name || 'Mon entreprise');
     
