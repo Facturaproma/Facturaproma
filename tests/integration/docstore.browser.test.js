@@ -128,6 +128,7 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
     await quiet(A);
     let row = (await docsOf(T)).find(d => d.id === dn.id);
     check('S3 paiement partiel : doc_payments 1 ligne, facture paidAmount 20 (calculé par le serveur)', Number(row.body.paidAmount) === 20 && (await be.sql("SELECT count(*)::int n FROM public.doc_payments p JOIN auth.users u ON u.id=p.user_id WHERE u.email=$1", [T]))[0].n === 1);
+    await new Promise(r => setTimeout(r, 800)); // verrou anti double-clic de savePayment
     await A.E((id) => { recordPayment(); document.getElementById('paymentInvoice').value = id; document.getElementById('paymentAmount').value = String((Storage.get('invoices', []).find(i => i.id === id).totalTTC || 0) - 20); savePayment(); }, dn.id);
     await quiet(A);
     row = (await docsOf(T)).find(d => d.id === dn.id);

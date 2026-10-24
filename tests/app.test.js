@@ -145,6 +145,7 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   await payFor(i2.id, 100);
   let inv2 = await E((id) => Storage.get('invoices', []).find(i => i.id === id), i2.id);
   check('paiement partiel : facture non soldée, reste 116', inv2.status === 'sent' && inv2.paidAmount === 100 && inv2.totalTTC - inv2.paidAmount === 116, JSON.stringify([inv2.status, inv2.paidAmount]));
+  await p.waitForTimeout(800); // le verrou anti double-clic (600 ms) ignore un 2e enregistrement immédiat
   await payFor(i2.id, 116);
   inv2 = await E((id) => Storage.get('invoices', []).find(i => i.id === id), i2.id);
   check('solde payé : facture « payée »', inv2.status === 'paid' && inv2.paidAmount === 216);
