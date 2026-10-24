@@ -42,7 +42,7 @@ const sqlContact = fs.existsSync(path.join(ROOT, 'sql/18_contact_public.sql'));
 guard('sql/18_contact_public.sql présent (fonction get_contact_info utilisée par app.html)', sqlContact && /get_contact_info/.test(app));
 const todos = (legal.match(/class="todo"/g) || []).length;
 blocker('legal.html : champs « [À compléter] » renseignés (société, ICE, TTC, paiement, remboursement, tribunal, CNDP)', todos === 0, todos + ' champ(s) restant(s)');
-blocker('legal.html : adresse e-mail légale réelle (pas hello@facturapro.ma tant que le domaine n\'est pas acheté)', !/hello@facturapro\.ma/.test(legal));
+blocker('legal.html : adresse e-mail légale réelle (pas hello@facturapro.ma tant que le domaine n\'est pas acheté)', !/hello@facturapro\.ma|e-mail de contact à créer/.test(legal));
 blocker('README : contact réel (pas « +212 6XX… »)', !/\+212 6XX/.test(readme));
 
 const show = (title, list) => { console.log('\n' + title); for (const [ok, name, extra] of list) console.log((ok ? '  OK   ' : '  FAIL ') + name + (ok || !extra ? '' : ' -> ' + extra)); };
