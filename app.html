@@ -11920,9 +11920,11 @@ function paymentsCsv(invoices, payments) {
 // Source unique du « reste à payer » : invoiceRemaining (tient compte des avoirs), jamais un second calcul.
 function paymentSituation(inv, payments, invoices) {
     const total = money2(inv && inv.totalTTC);
-    if (!inv || inv.status === 'draft' || inv.status === 'cancelled' || inv.type === 'credit' || total <= 0) return { state: 'closed', total, paid: 0, remaining: 0 };
+    if (!inv || inv.status === 'draft' || inv.type === 'credit' || total <= 0) return { state: 'closed', total, paid: 0, remaining: 0 };
+    // Une facture annulée par un avoir est passée au statut « cancelled » par getInvoiceWithStatus : on la reconnaît AVANT le statut.
+    if (isCancelledByCredit(inv, invoices)) return { state: 'credited', total, paid: invoicePaidAmount(inv, payments), remaining: 0 };
+    if (inv.status === 'cancelled') return { state: 'closed', total, paid: 0, remaining: 0 };
     const paid = invoicePaidAmount(inv, payments), remaining = invoiceRemaining(inv, payments, invoices);
-    if (isCancelledByCredit(inv, invoices)) return { state: 'credited', total, paid, remaining: 0 };
     if (remaining <= 0 || inv.status === 'paid') return { state: 'paid', total, paid, remaining: 0 };
     return { state: paid > 0 ? 'partial' : 'none', total, paid, remaining };
 }

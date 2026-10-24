@@ -91,6 +91,7 @@ ok('CSV paiements : somme des montants = encaissements', lines.slice(1).reduce((
   ok('situation : soldée par les paiements -> paid, reste 0', r.state === 'paid' && r.remaining === 0);
   ok('situation : statut payée sans ligne de paiement -> paid', ps(inv({ status: 'paid' }), [], []).state === 'paid');
   ok('situation : brouillon, avoir et facture à 0 -> closed (ni à encaisser ni encaissable)', ['draft'].every(x => ps(inv({ status: x }), [], []).state === 'closed') && ps(inv({ type: 'credit', totalTTC: -100 }), [], []).state === 'closed' && ps(inv({ totalTTC: 0 }), [], []).state === 'closed');
+  ok('situation : facture déjà au statut « cancelled » (annulée par avoir, vue par l\'écran) -> credited ; annulée à la main sans avoir -> closed', ps(inv({ status: 'cancelled' }), [], [inv({ status: 'cancelled' }), { id: 'a1', type: 'credit', status: 'sent', totalTTC: -1200, relatedInvoiceId: 'f1' }]).state === 'credited' && ps(inv({ status: 'cancelled' }), [], []).state === 'closed');
   const cr2 = { id: 'a1', type: 'credit', status: 'sent', totalTTC: -1200, relatedInvoiceId: 'f1' };
   r = ps(f, [], [f, cr2]);
   ok('situation : annulée par un avoir -> credited, reste 0 (pas de bouton Encaisser)', r.state === 'credited' && r.remaining === 0);
