@@ -976,6 +976,16 @@
             .topbar-actions .btn { padding: 10px 12px; font-size: 13px; }
             .main > .trial-banner { padding: 8px 12px; font-size: 12px; gap: 8px; margin: -16px -16px 12px; border-radius: 0; }
             .trial-banner button { padding: 5px 10px; font-size: 12px; }
+            /* Tableaux du tableau de bord : lisibles sans coupure de chiffres */
+            #recentInvoices { overflow-x: auto; }
+            #recentInvoices table { min-width: 0; width: 100%; }
+            #recentInvoices th, #recentInvoices td { padding: 10px 5px; font-size: 12px; white-space: nowrap; letter-spacing: 0; }
+            #recentInvoices .status-pill { font-size: 10px; padding: 3px 7px; }
+            #recentInvoices th:nth-child(3), #recentInvoices td:nth-child(3) { display: none; }
+            #recentInvoices td:nth-child(2) { white-space: normal; max-width: 84px; }
+            .chart-bars { gap: 4px; padding: 0 2px; }
+            .chart-bar-label { font-size: 9px; }
+            .chart-bar:nth-child(odd) .chart-bar-label { display: none; }
             /* Les barres d'actions (éditeur : PDF, WhatsApp, Brouillon, Enregistrer…) passent à la ligne au lieu de déborder de l'écran */
             .topbar-actions { flex-wrap: wrap; width: 100%; max-width: 100%; }
             .topbar-actions .btn { flex: 1 1 auto; justify-content: center; }
@@ -988,6 +998,10 @@
         /* Barre de navigation mobile (bas d'écran) */
         .bottom-nav { display: none; }
         .create-sheet-backdrop { display: none !important; }
+        /* Bannière collante : fond opaque (sinon le contenu défile visiblement derrière elle) */
+        .main > .trial-banner { isolation: isolate; }
+        .main > .trial-banner::before { content: ''; position: absolute; inset: 0; background: var(--bg); border-radius: inherit; z-index: -2; }
+        .main > .trial-banner::after { content: ''; position: absolute; inset: 0; background: inherit; border-radius: inherit; z-index: -1; }
         .main > .trial-banner { margin-bottom: 16px; border-radius: 10px; }
         @media (max-width: 900px) {
             .bottom-nav {
@@ -1030,7 +1044,7 @@
         @media (max-width: 900px) {
             .sync-indicator { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); left: 12px; right: auto; padding: 5px 10px; font-size: 11px; z-index: 140; }
             /* Tout va bien : simple pastille, le texte n'apparaît qu'en cas d'attente ou de hors-ligne */
-            .sync-indicator:not(.offline):not(.syncing) { padding: 6px; opacity: .85; }
+            .sync-indicator:not(.offline):not(.syncing) { padding: 6px; opacity: .85; right: auto; width: auto; }
             .sync-indicator:not(.offline):not(.syncing) #syncIndicatorText { display: none; }
             .toast { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; left: 12px; right: 12px; text-align: center; }
             .pwa-install-banner { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); z-index: 140; }
@@ -4582,6 +4596,31 @@
                             <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">
                                 💡 PNG, JPG ou WebP. Max 500 KB. Apparaîtra sur vos factures et devis.
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="aside-card" id="docStyleCard">
+                        <h3>🖌️ Style des documents</h3>
+                        <div id="docStyleLocked" style="display: none; font-size: 12px; color: var(--ink-mute);">
+                            🔒 Couleurs, modèle, texte d'en-tête et pied de page : disponibles avec une licence active.
+                        </div>
+                        <div id="docStyleActive">
+                            <div class="form-group"><label>Modèle</label>
+                                <select id="dsTemplate">
+                                    <option value="classique">Classique (bandeau coloré)</option>
+                                    <option value="sobre">Sobre (fond blanc, filet coloré)</option>
+                                </select></div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Couleur principale</label><input type="color" id="dsPrimary" value="#1b3a6b" style="width:100%;height:42px;padding:2px;"></div>
+                                <div class="form-group"><label>Couleur d'accent</label><input type="color" id="dsAccent" value="#c9a95b" style="width:100%;height:42px;padding:2px;"></div>
+                            </div>
+                            <div class="form-group"><label>Texte d'en-tête (optionnel)</label>
+                                <input type="text" id="dsHeaderNote" maxlength="90" placeholder="Ex : Menuiserie & agencement — Casablanca"></div>
+                            <div class="form-group"><label>Pied de page (optionnel)</label>
+                                <textarea id="dsFooterNote" maxlength="240" rows="2" placeholder="Ex : SARL au capital de … — RC … — Merci de votre confiance"></textarea></div>
+                            <button class="btn btn-primary" onclick="saveDocStyle()" style="width:100%;font-size:13px;margin-bottom:8px;">💾 Enregistrer le style</button>
+                            <button class="btn btn-secondary" onclick="resetDocStyle()" style="width:100%;font-size:12px;">↺ Style par défaut</button>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">💡 S'applique aux nouveaux PDF de factures et devis. Le logo se règle juste au-dessus.</div>
                         </div>
                     </div>
 
@@ -10254,11 +10293,62 @@ function isUserLicensed() {
     return false;
 }
 
+// Style des documents : personnalisation réservée aux abonnés (comme le logo) ; sinon style par défaut
+const DOC_STYLE_DEFAULT = { template: 'classique', primary: '#1b3a6b', accent: '#c9a95b', headerNote: '', footerNote: '' };
+function hexToRgb(h, fb) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim());
+    if (!m) return fb;
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function getDocStyle(company) {
+    const raw = (company && company.docStyle) || {};
+    const custom = (typeof isUserLicensed === 'function' && isUserLicensed()) ? raw : {};
+    const d = Object.assign({}, DOC_STYLE_DEFAULT, custom);
+    return {
+        template: d.template === 'sobre' ? 'sobre' : 'classique',
+        primary: hexToRgb(d.primary, [27, 58, 107]),
+        accent: hexToRgb(d.accent, [201, 169, 91]),
+        headerNote: String(d.headerNote || '').trim(),
+        footerNote: String(d.footerNote || '').trim()
+    };
+}
+function loadDocStyleForm() {
+    const company = Storage.get('company', {});
+    const d = Object.assign({}, DOC_STYLE_DEFAULT, company.docStyle || {});
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('dsTemplate', d.template); set('dsPrimary', d.primary); set('dsAccent', d.accent);
+    set('dsHeaderNote', d.headerNote); set('dsFooterNote', d.footerNote);
+}
+function saveDocStyle() {
+    if (!isUserLicensed()) { showToast('🔒 Activez votre licence pour personnaliser vos documents', 'error'); return; }
+    const company = Storage.get('company', {});
+    const g = (id) => (document.getElementById(id) || {}).value || '';
+    company.docStyle = {
+        template: g('dsTemplate') === 'sobre' ? 'sobre' : 'classique',
+        primary: /^#[0-9a-f]{6}$/i.test(g('dsPrimary')) ? g('dsPrimary') : DOC_STYLE_DEFAULT.primary,
+        accent: /^#[0-9a-f]{6}$/i.test(g('dsAccent')) ? g('dsAccent') : DOC_STYLE_DEFAULT.accent,
+        headerNote: g('dsHeaderNote').trim().slice(0, 90),
+        footerNote: g('dsFooterNote').trim().slice(0, 240)
+    };
+    Storage.set('company', company);
+    showToast('Style des documents enregistré ✓ (visible sur vos prochains PDF)', 'success');
+}
+function resetDocStyle() {
+    const company = Storage.get('company', {});
+    delete company.docStyle;
+    Storage.set('company', company);
+    loadDocStyleForm();
+    showToast('Style par défaut rétabli', 'success');
+}
+
 function updateLogoSection() {
     const lockedSection = document.getElementById('logoLockedSection');
     const activeSection = document.getElementById('logoActiveSection');
     if (!lockedSection || !activeSection) return;
     
+    const dsL = document.getElementById('docStyleLocked'), dsA = document.getElementById('docStyleActive');
+    if (dsL && dsA) { const lic = isUserLicensed(); dsL.style.display = lic ? 'none' : 'block'; dsA.style.display = lic ? 'block' : 'none'; if (lic) loadDocStyleForm(); }
     if (isUserLicensed()) {
         lockedSection.style.display = 'none';
         activeSection.style.display = 'block';
@@ -12131,14 +12221,20 @@ async function generatePDF(id, type, opts) {
     else docTitle = 'DEVIS';
     
     // Colors
-    const primaryColor = [27, 58, 107];
-    const accentColor = [201, 169, 91];
+    const dStyle = getDocStyle(company);
+    const primaryColor = dStyle.primary;
+    const accentColor = dStyle.accent;
+    const sober = dStyle.template === 'sobre';
+    const hdrText = sober ? primaryColor : [255, 255, 255];     // texte du bandeau
+    const hdrSub = sober ? [90, 98, 115] : [220, 220, 220];
     const grayLight = [240, 237, 230];
     const grayDark = [74, 84, 104];
     
     // === HEADER ===
-    pdf.setFillColor(...primaryColor);
-    pdf.rect(0, 0, 210, 38, 'F');
+    if (!sober) {
+        pdf.setFillColor(...primaryColor);
+        pdf.rect(0, 0, 210, 38, 'F');
+    }
     
     // Accent line
     pdf.setFillColor(...accentColor);
@@ -12159,7 +12255,7 @@ async function generatePDF(id, type, opts) {
     }
     
     // Company name
-    pdf.setTextColor(255, 255, 255);
+    pdf.setTextColor(...hdrText);
     pdf.setFontSize(22);
     pdf.setFont('helvetica', 'bold');
     pdf.text(company.name || 'Mon Entreprise', companyTextX, 18);
@@ -12177,15 +12273,17 @@ async function generatePDF(id, type, opts) {
     pdf.text(statusLabels[company.status] || '', companyTextX, 25);
     
     // Address line
-    pdf.setTextColor(220, 220, 220);
+    pdf.setTextColor(...hdrSub);
     pdf.setFontSize(8);
     let addressLine = '';
     if (company.address) addressLine += company.address;
     if (company.city && !addressLine.includes(company.city)) addressLine += (addressLine ? ', ' : '') + company.city;
     if (addressLine) pdf.text(addressLine, 15, 31);
+    // Texte d'en-tête personnalisé (slogan, activité…)
+    if (dStyle.headerNote) { pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.text(String(dStyle.headerNote).slice(0, 90), 15, 35.5); pdf.setFont('helvetica', 'normal'); }
     
     // Doc title (right)
-    pdf.setTextColor(255, 255, 255);
+    pdf.setTextColor(...hdrText);
     pdf.setFontSize(28);
     pdf.setFont('helvetica', 'bold');
     pdf.text(docTitle, 195, 22, { align: 'right' });
@@ -12414,6 +12512,15 @@ async function generatePDF(id, type, opts) {
         // Mention « généré par FacturaPro » : voir le pied de page filigrane (essai uniquement)
     }
     
+    // Pied de page personnalisé (mentions libres), abonnés uniquement
+    if (dStyle.footerNote) {
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(120, 128, 145);
+        pdf.setFont('helvetica', 'normal');
+        const fl = pdf.splitTextToSize(String(dStyle.footerNote), 180).slice(0, 2);
+        pdf.text(fl, 105, fl.length > 1 ? 291 : 293, { align: 'center' });
+    }
+
     // Add watermark for non-licensed users (trial, expired, etc.)
     const isLicensed = isUserLicensed();
     
