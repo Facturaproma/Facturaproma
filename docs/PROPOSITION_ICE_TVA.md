@@ -7,6 +7,7 @@ Les PDF officiels de la DGI (CGI 2026 sur tax.gov.ma, note circulaire 737 sur la
 - Code général des impôts 2026 (officiel, à ouvrir par le comptable) : https://www.tax.gov.ma/wps/wcm/connect/08712531-1e81-4e28-a38b-2bd9edf8e09e/CGI+2026+FR.pdf
 - Note circulaire n° 737 (loi de finances 2026, officielle) : https://www.tax.gov.ma/wps/wcm/connect/e48c5c9d-ae80-4b30-a1b3-80af7ec09be1/NC+737+LF+2026.pdf
 - Upsilon Consulting, « Fait générateur et exigibilité de la TVA au Maroc » (cabinet privé, revu le 08/09/2026) : https://upsilon-consulting.com/fait-generateur-exigibilite-tva-maroc/
+- Facturio (blog commercial, modifié le 24/10/2026, **sans renvoi à un texte officiel**) : https://facturio.ma/blog/mentions-obligatoires-facture-maroc-article-145-cgi
 - Médias24, 23/03/2018, note de la DGI sur l'ICE (presse, ancienne) : https://www.medias24.com/MAROC/Quoi-de-neuf/181508-La-DGI-appelle-les-entreprises-a-mentionner-leur-ICE-sur-toutes-les-declarations-fiscales.html
 
 ## 2. ICE
@@ -42,6 +43,16 @@ L'assistant d'inscription rend l'ICE **obligatoire (15 chiffres)** avant d'utili
 1. Ne rien changer au calcul tant que le comptable n'a pas confirmé le régime (encaissements ou débits) de vos utilisateurs types.
 2. Si l'encaissement est confirmé comme cas général : ajouter un **état « TVA encaissée par période »** (somme des lignes de paiement × part de TVA de la facture), en lecture seule, avec la mention « aide de calcul, à valider par votre comptable ». Prérequis : paiements partiels fiables (#58) et rapports (#62).
 3. Rendre le régime (encaissement/débits) **configurable** dans le profil, sans valeur par défaut présentée comme certaine.
+
+### Recherche complémentaire du 24/10/2026 (mention « TVA non applicable » des auto-entrepreneurs)
+Trois affirmations **incompatibles ou invérifiées** circulent ; aucune n'est confirmée par un texte officiel lu :
+| Source | Mention proposée | Statut |
+|---|---|---|
+| Notre PDF actuel | « TVA non applicable - Article 6 du CGI » | Référence **non confirmée**. |
+| Facturio (blog) | « TVA non applicable, article 293 du CGI » | Ce numéro évoque le CGI **français** (art. 293 B) ; **à ne pas reprendre**. Le blog ne cite aucune source officielle. |
+| Upsilon | Ne traite pas du sujet | — |
+La même page Facturio ne cite ni l'art. 198 ter ni aucun montant d'amende, ce qui laisse la sanction de 100 MAD sans confirmation par une seconde source. Les sites juridiques consultés (fiscamaroc.com, DGI) interdisent la lecture automatisée.
+**Conséquence** : aucune modification du PDF ; la référence exacte (loi sur l'auto-entrepreneur, article du CGI) doit venir du comptable ou de la lecture du CGI officiel par vous. En attendant, la mention actuelle reste un point **à valider avant la commercialisation**.
 
 ## 4. Questions pour le comptable
 1. Art. 145 du CGI 2026 : quel est le numéro exact du paragraphe qui impose l'ICE sur les factures, et la liste complète des mentions obligatoires pour une facture d'AE, de société et de coopérative ?
