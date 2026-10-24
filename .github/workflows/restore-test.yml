@@ -54,6 +54,12 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$RESTORE_PASSPHRASE" || { echo "::error::Secret BACKUP_PASSPHRASE absent."; exit 1; }
+          # Diagnostic SANS révéler la valeur : longueur et présence d'espaces / sauts de ligne aux extrémités (cause fréquente d'un échec de déchiffrement).
+          L=${#RESTORE_PASSPHRASE}
+          echo "Diagnostic phrase secrète : longueur = $L caractère(s)."
+          case "$RESTORE_PASSPHRASE" in *$'\n'*) echo "Diagnostic : contient un saut de ligne.";; esac
+          case "$RESTORE_PASSPHRASE" in ' '*|*' ') echo "Diagnostic : espace au début ou à la fin.";; esac
+          case "$RESTORE_PASSPHRASE" in *$'\r'*) echo "Diagnostic : contient un retour chariot (\\r).";; esac
           F=$(ls sauvegarde/*.gpg | head -1)
           node scripts/restore-test-isolated.js "$F"
       - name: Nettoyage (toujours exécuté)
