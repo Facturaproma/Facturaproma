@@ -12032,7 +12032,7 @@ function renderPayments() {
                         const st = sit(inv), overdueDays = inv.overdueDays || 0;
                         const money = (n) => formatCurrency(n);
                         const line = st.state === 'paid' ? `<span class="pay-ok">✓ Soldée · ${money(st.total)}</span>`
-                            : st.state === 'credited' ? `<span class="pay-mute">Annulée par un avoir</span>`
+                            : st.state === 'credited' ? `<span class="pay-mute">Annulée (avoir)</span>`
                             : st.state === 'partial' ? `<span class="pay-paid">Payé ${money(st.paid)}</span> <span class="pay-sep">·</span> <strong class="pay-rest">Reste ${money(st.remaining)}</strong><span class="pay-of">sur ${money(st.total)}</span>`
                             : `<span class="pay-none">Aucun paiement</span> <span class="pay-sep">·</span> <strong class="pay-rest">Reste ${money(st.remaining)}</strong>`;
                         return `
