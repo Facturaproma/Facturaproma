@@ -1,6 +1,28 @@
--- PROPOSITION (NON APPLIQUÉE EN PRODUCTION) : record_payment avec contrôle du cumul. Chargée uniquement par
--- tests/integration/paiements.sql-concurrence.test.js, dans une base PostgreSQL locale jetable.
--- Différences avec sql/15 : (1) montant > reste refusé, (2) facture de total <= 0 refusée. Le reste est inchangé.
+-- ============================================================================================================
+-- 25 — Plafond des paiements côté serveur (record_payment)                         *** BROUILLON : NON APPLIQUÉ ***
+-- ============================================================================================================
+-- Ce script N'EST PAS dans sql/MANIFEST.json et ne doit être exécuté qu'après autorisation écrite explicite :
+--   1. préproduction (njjaomichdlnoscrnxlz) uniquement, via le circuit validé (docs/PLAN_VALIDATION_PREPROD_PAIEMENTS.md) ;
+--   2. production : seulement après validation complète en préproduction et nouvelle autorisation.
+-- Effet : un paiement qui ferait dépasser le TTC de la facture (tolérance 0,01) est refusé (PAIEMENT_SUPERIEUR_AU_RESTE) ;
+-- une facture de total <= 0 refuse tout paiement (PAIEMENT_FACTURE_NULLE). Le reste de la fonction est identique à sql/15
+-- (rejeu par identifiant de paiement, verrou de ligne, mise à jour atomique). Aucune table ni donnée n'est modifiée.
+-- Portée : n'agit que pour les comptes en mode « documents » (sql/17) ; les comptes « legacy » n'appellent pas record_payment.
+-- Réexécutable : CREATE OR REPLACE + droits ré-affirmés. Les lignes existantes ne sont jamais réécrites.
+--
+-- RETOUR ARRIÈRE : ré-exécuter le bloc « record_payment » de sql/15_documents.sql (CREATE OR REPLACE FUNCTION public.record_payment …
+-- jusqu'à son END; $$;) puis les REVOKE/GRANT de la fin du bloc. Aucune donnée à restaurer.
+-- ============================================================================================================
+
+DO $$
+BEGIN
+    IF to_regclass('public.documents') IS NULL OR to_regclass('public.doc_payments') IS NULL
+       OR to_regprocedure('public.record_payment(text,jsonb,text)') IS NULL
+       OR to_regprocedure('public.has_active_license(uuid)') IS NULL OR to_regprocedure('public.fp_num(text)') IS NULL THEN
+        RAISE EXCEPTION 'PREREQUIS_MANQUANT: sql/15 (documents, doc_payments, record_payment) doit être installé avant sql/25';
+    END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.record_payment(p_invoice_id TEXT, p_payment JSONB, p_op_id TEXT DEFAULT NULL)
 RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
 DECLARE
@@ -31,3 +53,6 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'version', n, 'paid_amount', v_total);
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.record_payment(TEXT, JSONB, TEXT) TO authenticated;

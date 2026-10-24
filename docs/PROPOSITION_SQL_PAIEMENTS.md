@@ -11,7 +11,7 @@ Rapport de revue, 24/10/2026. Aucune migration appliquée, aucune donnée touch�
 La clause « paiement sur avoir » était inutile : `record_payment` ne cherche que `doc_type = 'invoice'`, un avoir (`'credit'`) donne déjà `FACTURE_INTROUVABLE`. Elle est remplacée par un refus des factures de total ≤ 0.
 
 ## Fonction proposée
-Fichier complet : `tests/sql/proposition_record_payment.sql` (jamais dans `sql/`, donc jamais déployé par erreur). Différences avec sql/15 :
+Fichier complet : `sql/25_plafond_paiements.sql` (jamais dans `sql/`, donc jamais déployé par erreur). Différences avec sql/15 :
 1. Le montant est lu et validé une fois (`v_amt`).
 2. Facture de total ≤ 0 : `PAIEMENT_FACTURE_NULLE`.
 3. Après le verrou de ligne et le test de rejeu : si cumul existant + montant > TTC + 0,01 → `PAIEMENT_SUPERIEUR_AU_RESTE`.

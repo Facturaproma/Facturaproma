@@ -6329,8 +6329,36 @@ const Storage = {
         let expiredNow = false;
         try { expiredNow = License.isExpired(); } catch {}
         if (USE_SUPABASE && this._currentUserId && !expiredNow) {
-            this._syncToCloud(baseKey, val);
+            this._enqueueSync(baseKey, val);
         }
+    },
+
+    // Les écritures vers le serveur partent DANS L'ORDRE (paiements, puis facture, puis rapprochement éventuel) : sans cela, le rapprochement
+    // d'une facture après un refus de paiement pouvait être dépassé par l'écriture initiale de la facture.
+    _enqueueSync(key, val) {
+        if (key === 'payments') this._payInFlight = (this._payInFlight || 0) + 1;
+        this._syncQ = (this._syncQ || Promise.resolve()).then(async () => {
+            try {
+                const r = await this._syncToCloud(key, val);
+                // Le serveur fusionne les paiements (aucun n'est perdu) : on adopte sa version si aucune autre écriture de paiements n'est en attente
+                if (key === 'payments' && r === 'ok' && this._payInFlight <= 1) await this._adoptServerPayments();
+            } catch (e) { console.warn('Écriture en file : échec', e); }
+            finally { if (key === 'payments') this._payInFlight = Math.max(0, (this._payInFlight || 1) - 1); }
+        });
+    },
+    async _adoptServerPayments() {
+        try {
+            if (!this._currentUserId) return;
+            const r = await supaClient.from('user_data').select('key, value').eq('user_id', this._currentUserId);
+            const row = ((r && r.data) || []).find(x => x.key === 'payments');
+            if (!row || !Array.isArray(row.value)) return;
+            const local = Array.isArray(this._cache['payments']) ? this._cache['payments'] : [];
+            const ids = new Set(row.value.map(x => x && x.id));
+            if (!local.every(x => !x || !x.id || ids.has(x.id)) || row.value.length === local.length) return;   // rien à adopter, ou le serveur ne contient pas tout le local
+            this._cache['payments'] = row.value;
+            try { localStorage.setItem(this._buildLocalKey('payments', this._currentUserId), JSON.stringify(row.value)); } catch {}
+            ['renderPayments', 'renderDashboard'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch {} });
+        } catch {}
     },
     
     // Deux appareils : la liste des factures est écrite en un bloc. Quand le serveur refuse l'écriture
@@ -6399,6 +6427,26 @@ const Storage = {
                     if (typeof showToast === 'function') showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error');
                     await this.loadFromCloud();
                     try { renderInvoices(); } catch {}
+                    return 'dropped';
+                }
+                if (/PAIEMENT_SUPERIEUR_AU_RESTE|PAIEMENT_FACTURE_NULLE/.test(error.message || '') && key === 'payments') {
+                    // Refus métier du serveur (plafond sql/26) : ce n'est pas une panne réseau, on ne réessaie PAS en boucle.
+                    // Copie de sauvegarde locale, retour à la dernière valeur validée par le serveur, écrans recalculés.
+                    DocStoreGlue.archiveRefused(key, value, 'PAIEMENT_REFUSE');
+                    try { SyncManager.pendingChanges = SyncManager.pendingChanges.filter(c => c.key !== key); SyncManager.savePendingChanges(); SyncManager.updateUI(); } catch {}
+                    try {
+                        const r = await supaClient.from('user_data').select('key, value').eq('user_id', this._currentUserId);
+                        const row = ((r && r.data) || []).find(x => x.key === key);
+                        const back = (row && Array.isArray(row.value)) ? row.value : [];
+                        this._cache[key] = back;
+                        localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(back));
+                    } catch {}
+                    try {   // la facture a pu être mise à jour (« payée ») par une écriture séparée : on la rapproche des paiements réellement enregistrés
+                        const rec = reconcileInvoicesAfterPaymentRefusal(Storage.get('invoices', []), this._cache[key], value);
+                        if (rec.changed > 0) Storage.set('invoices', rec.invoices);
+                    } catch {}
+                    if (typeof showToast === 'function') showToast('🔒 Paiement refusé par le serveur : le cumul dépasserait le montant de la facture. Données rechargées.', 'error');
+                    ['renderInvoices', 'renderPayments', 'renderDashboard'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch {} });
                     return 'dropped';
                 }
                 throw error;
@@ -11758,6 +11806,27 @@ function checkPaymentAmount(inv, amount, payments) {
     if (rest <= 0) return { ok: false, reason: 'Cette facture est déjà soldée' };
     if (a > rest + 0.005) return { ok: false, reason: 'Montant supérieur au reste à payer' };
     return { ok: true, remaining: rest };
+}
+// Rapprochement des factures après le REFUS SERVEUR d'un tableau de paiements (plafond, sql/26) : l'écriture de la facture (statut « payée »,
+// paidAmount) est partie séparément et a pu être acceptée. Pour chaque facture dont le cumul refusé dépasse celui du serveur, on retire de
+// paidAmount l'excédent refusé (sans jamais descendre sous les paiements du serveur) et une facture devenue « payée » à tort repasse « envoyée ».
+// Fonction pure : retourne de NOUVEAUX objets, ne modifie pas les entrées.
+function reconcileInvoicesAfterPaymentRefusal(invoices, serverPayments, refusedPayments) {
+    const sumFor = (list, id) => (Array.isArray(list) ? list : []).filter(p => p && p.invoiceId === id).reduce((t, p) => t + money2(p.amount), 0);
+    let changed = 0;
+    const out = (Array.isArray(invoices) ? invoices : []).map(inv => {
+        if (!inv || !inv.id || inv.status === 'draft') return inv;
+        const inc = money2(sumFor(refusedPayments, inv.id) - sumFor(serverPayments, inv.id));
+        if (inc <= 0.005) return inv;                                           // ce paiement refusé ne concerne pas cette facture
+        const paidNow = money2(inv.paidAmount), srv = money2(sumFor(serverPayments, inv.id));
+        const newPaid = money2(Math.max(srv, paidNow - inc));
+        if (newPaid >= paidNow - 0.005) return inv;                             // avancement déjà cohérent
+        const fixed = { ...inv, paidAmount: newPaid };
+        if (fixed.status === 'paid' && newPaid + 0.01 < money2(inv.totalTTC)) { fixed.status = 'sent'; delete fixed.paidAt; }
+        changed++;
+        return fixed;
+    });
+    return { invoices: out, changed };
 }
 // </PAIEMENTS-CALC>
 
