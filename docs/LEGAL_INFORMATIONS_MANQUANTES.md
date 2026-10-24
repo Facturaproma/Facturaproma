@@ -28,14 +28,13 @@ Relevé du 24/10/2026 sur `legal.html`. Chaque ligne est un champ surligné « [
 | 13 | CNDP (92) | Numéro de déclaration ou d'autorisation après dépôt du dossier (dépôt non fait à ce jour) |
 
 ## D. Affirmations de la page à confirmer avant publication
-- **Adresse hello@facturapro.ma** (3 occurrences) : confirmer qu'elle existe, qu'elle est lue et que le domaine facturapro.ma est bien à la société (ce n'est pas le cas à ma connaissance : le site est sur github.io).
-- **« Une sauvegarde chiffrée est conservée sur la plateforme GitHub »** et **« écrasées au plus tard 90 jours après »** : `docs/SAUVEGARDE_RESTAURATION.md` indique que le chiffrement et le stockage hors dépôt d'une sauvegarde réelle restent à faire. À reformuler ou à mettre en œuvre avant publication.
-- **Hébergement Supabase « Europe (Stockholm) »** : à confirmer dans la configuration du projet de production.
+- **Adresse hello@facturapro.ma** : non vérifiée (domaine non acquis). Retirée de `legal.html` par la PR #61 et remplacée par un champ à confirmer ; à créer et tester avant publication.
+- **Sauvegarde chiffrée sur GitHub, effacement sous 90 jours, hébergement à Stockholm** : vérifiés dans le code et l'historique des exécutions (voir `docs/VERIFICATION_AFFIRMATIONS.md`, PR #61). Reste à faire : tester une restauration réelle d'une sauvegarde de production.
 - **Délai de réponse de 30 jours** aux demandes de droits : à confirmer comme engagement de la société.
 - **Section « Cookies et stockage local »** : relecture avec la liste réelle des clés de stockage utilisées.
 
 ## E. Hors legal.html mais lié
-- `admin.html` ligne 1397 : « Conformité légale obligatoire au Maroc » (texte d'aide, formulation à adoucir en « vérifiez les obligations qui vous concernent »).
+- `admin.html` ligne 1397 : formulation adoucie par la PR #61.
 - Réglages Admin : WhatsApp, e-mail, RIB réel, bénéficiaire, banque (voir `docs/RAPPORT_MIGRATIONS_PRODUCTION.md`).
 
 Ce document ne contient aucun conseil juridique. Les textes finaux doivent être relus par un juriste ou l'expert-comptable de la société.
