@@ -15,3 +15,12 @@ Chaque affirmation de `legal.html` / `admin.html` est classée **Vérifié** (pr
 | `manifest.json` : « Conformité ICE, IF, CNSS » | **Remplacé** (PR #57) | Description factuelle des fonctions. |
 
 Reste à faire par la société : adresse e-mail réelle, confirmation de l'engagement de 30 jours, test de restauration d'une sauvegarde de production, documents d'immatriculation (voir `docs/LEGAL_INFORMATIONS_MANQUANTES.md`).
+
+## Registre des références fiscales et mécanisme de validation (24/10/2026)
+`docs/validations-fiscales.json` liste chaque affirmation fiscale ou légale présente dans le produit (mention TVA des auto-entrepreneurs, conservation 10 ans, délais loi 69-21, ICE obligatoire). Toutes sont **« non_verifie »** : aucune source officielle n'a pu être lue (les PDF de la DGI interdisent la lecture automatisée).
+- `npm run check:release` **échoue** tant qu'une de ces affirmations est présente dans `app.html`, `index.html`, `legal.html` ou `admin.html` sans validation complète.
+- Pour valider : un comptable ou un juriste confirme ; on renseigne `status:"valide"`, `validated_by`, `validated_on` (AAAA-MM-JJ), `reference` (texte officiel) et `evidence` (pièce conservée). Une validation incomplète reste bloquante. **Ne jamais remplir ces champs sans source réelle.**
+- Alternative à la validation : retirer l'affirmation du produit (le blocage disparaît).
+- Garde-fou : toute **nouvelle** référence à un article du CGI ou à une loi dans le produit doit être ajoutée au registre, sinon `npm test` échoue.
+- Le contrôle n'est pas câblé dans un workflow de déploiement automatique : il faut le lancer avant toute ouverture aux paiements réels (`npm run check:release`).
+- Testé par `tests/check-release.unit.test.js` (7 contrôles, copie du dépôt).

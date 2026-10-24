@@ -4,7 +4,7 @@
 //   node scripts/check-release.js --guards   -> GARDE-FOUS seulement (utilisé par « npm test ») : défauts déjà corrigés qui ne doivent pas revenir
 // Ne vérifie PAS ce qu'un fichier ne peut pas prouver (domaine possédé, boîte e-mail réelle, statut juridique, validation fiscale) : voir « À CONFIRMER ».
 const fs = require('fs'), path = require('path');
-const ROOT = path.join(__dirname, '..');
+const ROOT = process.env.FP_RELEASE_ROOT || path.join(__dirname, '..');   // FP_RELEASE_ROOT : uniquement pour les tests du contrôle lui-même
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const guardsOnly = process.argv.includes('--guards');
 const guards = [], blockers = [];
@@ -45,6 +45,24 @@ blocker('legal.html : champs « [À compléter] » renseignés (société, ICE, 
 blocker('legal.html : adresse e-mail légale réelle (pas hello@facturapro.ma tant que le domaine n\'est pas acheté)', !/hello@facturapro\.ma|e-mail de contact à créer/.test(legal));
 blocker('README : contact réel (pas « +212 6XX… »)', !/\+212 6XX/.test(readme));
 
+// ---- RÉFÉRENCES FISCALES : toute affirmation du registre docs/validations-fiscales.json encore présente dans le produit doit être VALIDÉE
+// (validated_by + validated_on + reference + evidence). Aucune validation n'est inventée : tant qu'elle manque, le contrôle de publication échoue.
+let reg = { claims: [] };
+try { reg = JSON.parse(read('docs/validations-fiscales.json')); } catch (e) { blocker('registre docs/validations-fiscales.json lisible', false, e.message); }
+const productFiles = { 'app.html': app, 'index.html': idx, 'legal.html': legal, 'admin.html': admin };
+for (const c of reg.claims) {
+  const present = Object.keys(c.found_in || {}).filter((f) => productFiles[f] && productFiles[f].includes(c.found_in[f]));
+  if (!present.length) { guard('référence fiscale « ' + c.id + ' » : plus présente dans le produit (rien à valider)', true); continue; }
+  const complete = c.status === 'valide' && ['validated_by', 'validated_on', 'reference', 'evidence'].every((k) => typeof c[k] === 'string' && c[k].trim().length > 5) && /^\d{4}-\d{2}-\d{2}$/.test(c.validated_on || '');
+  blocker('référence fiscale « ' + c.id + ' » validée par une personne qualifiée avec source officielle (' + present.join(', ') + ')', complete, c.status === 'valide' ? 'validation incomplète (validated_by, validated_on AAAA-MM-JJ, reference, evidence)' : 'NON VÉRIFIÉE : ' + c.claim);
+}
+// Garde-fou : toute NOUVELLE référence d'article de loi/CGI dans le produit doit être enregistrée (sinon elle échapperait à la validation)
+const known = reg.claims.map((c) => c.pattern);
+const refRe = /(?:article|art\.)\s*\d+[^<'"\n]{0,25}\bCGI\b|\b(?:loi|dahir)\s+(?:n°\s*)?\d{1,3}[-.]\d{2}\b/gi;
+const unreg = [];
+for (const [f, t] of Object.entries(productFiles)) for (const m of (t.match(refRe) || [])) if (!known.some((k) => m.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(m.toLowerCase()))) unreg.push(f + ' : ' + m.trim().slice(0, 50));
+guard('toute référence à un article du CGI ou à une loi est enregistrée dans docs/validations-fiscales.json', unreg.length === 0, [...new Set(unreg)].slice(0, 4).join(' | '));
+
 const show = (title, list) => { console.log('\n' + title); for (const [ok, name, extra] of list) console.log((ok ? '  OK   ' : '  FAIL ') + name + (ok || !extra ? '' : ' -> ' + extra)); };
 show('GARDE-FOUS (défauts corrigés)', guards);
 let bad = guards.filter((g) => !g[0]).length;
@@ -55,7 +73,7 @@ if (!guardsOnly) {
   console.log('  - Admin → Réglages renseigné en base (WhatsApp, e-mail, RIB) APRÈS application du SQL 18 en préproduction puis en production (sur autorisation)');
   console.log('  - sql/18_contact_public.sql ajouté à sql/MANIFEST.json au moment du déploiement (non fait ici)');
   console.log('  - le statut juridique pour encaisser (conditions de vente et mentions légales)');
-  console.log('  - la mention TVA des auto-entrepreneurs imprimée sur le PDF (référence d\'article du CGI) : validation par un comptable');
+  console.log('  - les références fiscales du registre docs/validations-fiscales.json : validation documentée (validated_by, validated_on, reference, evidence) par un comptable ou un juriste');
   console.log('  - la déclaration CNDP et la qualification de l\'hébergement hors du Maroc');
 }
 console.log(`\n${bad === 0 ? 'OK' : 'ÉCHEC'} : ${guards.filter((g) => g[0]).length}/${guards.length} garde-fous${guardsOnly ? '' : ', ' + blockers.filter((b) => b[0]).length + '/' + blockers.length + ' blocages levés'}`);
