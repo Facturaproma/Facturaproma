@@ -6538,7 +6538,7 @@ async function openAdminThread(uid, keepScroll) {
     for (const r of rows) {
         const b = document.createElement('div'); b.className = 'am-b ' + (r.sender === 'client' ? 'am-client' : 'am-admin');
         b.appendChild(document.createTextNode(String(r.body == null ? '' : r.body)));
-        const sm = document.createElement('small'); sm.textContent = (r.sender === 'client' ? (r.sender_email || 'Client') : 'Vous (' + (r.sender_email || 'admin') + ')') + ' · ' + amMsgDate(r.created_at);
+        const sm = document.createElement('small'); sm.textContent = (r.sender === 'client' ? (r.sender_email || 'Client') : 'Support FacturaPro') + ' · ' + amMsgDate(r.created_at);
         b.appendChild(sm); box.appendChild(b);
     }
     if (!keepScroll) box.scrollTop = box.scrollHeight;

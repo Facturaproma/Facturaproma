@@ -80,6 +80,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await a.fill('#amInput', 'Bonjour, voici la marche à suivre : Mon Entreprise > Informations bancaires.'); await a.click('#amSend'); await sleep(900);
     const R = await a.evaluate(() => ({ adm: document.querySelectorAll('#amMsgs .am-admin').length, empty: document.getElementById('amInput').value === '' }));
     ok('admin : réponse envoyée et affichée', R.adm === 1 && R.empty);
+    const lab = await a.evaluate(() => document.querySelector('#amMsgs .am-admin small')?.textContent || '');
+    ok('admin : la réponse affiche « Support FacturaPro », jamais l\'e-mail de l\'administrateur', /^Support FacturaPro/.test(lab) && !/@/.test(lab), lab);
     await a.fill('#amInput', ''); await a.click('#amSend'); await sleep(300);
     ok('admin : réponse vide refusée', (await a.evaluate(() => document.querySelectorAll('#amMsgs .am-admin').length)) === 1);
     const ov = await a.evaluate(() => document.documentElement.scrollWidth - innerWidth);
