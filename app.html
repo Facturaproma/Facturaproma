@@ -13035,10 +13035,8 @@ function pdfHeader(pdf, T, o) {
     y = Math.max(y, 40) + 3;
     pdf.setDrawColor(...(T.sober ? PDF_LINE : T.accent)); pdf.setLineWidth(T.sober ? 0.3 : 0.7); pdf.line(15, y, 195, y);
     y += 5;
-    const legal = pdfLegalLine(c), contact = [c.phone ? `Tél ${c.phone}` : '', c.email || '', c.website || ''].filter(Boolean).join('  ·  ');
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(...PDF_MUTE);
-    for (const t of [legal, contact]) { if (t) { const ls = pdf.splitTextToSize(t, 180).slice(0, 2); pdf.text(ls, 15, y); y += ls.length * 3.6 + 0.8; } }
-    return y + 4;
+    // Identifiants légaux (ICE, IF, RC…) et coordonnées (tél., e-mail) : uniquement en pied de page (pdfFinish), jamais en double ici.
+    return y + 2;
 }
 // Bloc « parties » : à gauche le client / payeur, à droite une liste étiquette–valeur. Retourne le y suivant.
 function pdfParties(pdf, T, y, o) {
@@ -13062,7 +13060,7 @@ function pdfParties(pdf, T, y, o) {
 // Passe finale : en-tête courant (pages 2+), pied de page, numéros, filigranes. Appelée une seule fois, après tout le contenu.
 function pdfFinish(pdf, T, o) {
     const c = T.company, n = pdf.getNumberOfPages(), licensed = isUserLicensed();
-    const legal = [c.name, pdfLegalLine(c)].filter(Boolean).join('  ·  ');
+    const legal = pdfLegalLine(c), contact = [c.phone ? `Tél ${c.phone}` : '', c.email || '', c.website || ''].filter(Boolean).join('  ·  ');
     for (let i = 1; i <= n; i++) {
         pdf.setPage(i);
         if (i > 1) {
@@ -13071,13 +13069,14 @@ function pdfFinish(pdf, T, o) {
             pdf.setTextColor(...T.primary); pdf.text(`${o.title}  ${o.number || ''}`, 195, 13, { align: 'right' });
             pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.3); pdf.line(15, 16.5, 195, 16.5);
         }
-        pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.3); pdf.line(15, 283, 195, 283);
+        pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.3); pdf.line(15, 281, 195, 281);
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(...PDF_MUTE);
-        pdf.text(pdf.splitTextToSize(legal, 150)[0] || '', 15, 287);
-        pdf.text(`Page ${i} / ${n}`, 195, 287, { align: 'right' });
+        pdf.text(pdf.splitTextToSize(legal, 150)[0] || '', 15, 285);
+        pdf.text(pdf.splitTextToSize(contact, 150)[0] || '', 15, 288.5);
+        pdf.text(`Page ${i} / ${n}`, 195, 285, { align: 'right' });
         if (T.st.footerNote) {
-            pdf.setFontSize(7.5); pdf.setFont('helvetica', 'italic');
-            const fl = pdf.splitTextToSize(String(T.st.footerNote), 180).slice(0, 2); pdf.text(fl, 105, fl.length > 1 ? 291 : 292.5, { align: 'center' });
+            pdf.setFontSize(7); pdf.setFont('helvetica', 'italic');
+            const fl = pdf.splitTextToSize(String(T.st.footerNote), 180).slice(0, 1); pdf.text(fl, 105, 292, { align: 'center' });
         }
         if (!licensed) {
             pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity: 0.06 })); pdf.setTextColor(27, 58, 107);

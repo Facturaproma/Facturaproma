@@ -76,6 +76,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await seed({ company, clients, invoices: [inv1], payments: pays });
     const f1 = await gen('01-facture-simple', 'invoice', 'i1');
     ok('facture simple : 1 page, titre FACTURE, numéro, client', f1.pages === 1 && /FACTURE/.test(f1.text) && has(f1, 'FAC-2026-001') && has(f1, 'Karim Bennani'), 'pages=' + f1.pages);
+    const cnt = (re) => (f1.text.match(re) || []).length;
+    ok('identifiants légaux et coordonnées : une seule fois, en pied de page (pas de doublon en en-tête)', cnt(/ICE 001234567000089/g) === 1 && cnt(/contact@atlas\.test/g) === 1 && cnt(/Tél \+212 600 000 000/g) === 1, JSON.stringify([cnt(/ICE 001234567000089/g), cnt(/contact@atlas\.test/g)]));
     ok('facture : montants exacts (HT 5 100,00 · TVA 1 020,00 · TTC 6 120,00)', has(f1, await money(5100)) && has(f1, await money(1020)) && has(f1, await money(6120)));
     ok('facture : paiement partiel — déjà réglé 2 000,00 et reste à payer 4 120,00', has(f1, await money(2000)) && has(f1, await money(4120)) && /Reste . payer/.test(f1.text) && /PAIEMENT PARTIEL/.test(f1.text));
     ok('facture : logo et cachet imprimés (2 images)', (f1.text.match(/\/Subtype\s*\/Image/g) || []).length === 2);
