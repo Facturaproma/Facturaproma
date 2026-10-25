@@ -1,0 +1,70 @@
+name: Test de restauration isolé (sauvegarde chiffrée)
+
+# Restaure la DERNIÈRE sauvegarde chiffrée (artifact « sauvegarde-supabase » du workflow backup.yml)
+# dans une base PostgreSQL JETABLE, créée sur le serveur d'exécution GitHub et détruite à la fin.
+# - Aucune connexion à Supabase, ni production ni préproduction.
+# - Lancement manuel uniquement. Secret requis : BACKUP_PASSPHRASE (déjà utilisé par backup.yml).
+# - Le journal ne contient que des comptages et des résultats de contrôles, jamais de contenu de factures.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  restore:
+    # Les secrets ne doivent servir qu'au code de la branche principale : une branche modifiée ne peut pas lancer ce test
+    if: github.ref == 'refs/heads/main'
+    # Environnement protégé (« Required reviewers ») : le job attend l'approbation du propriétaire avant de démarrer et d'accéder au secret.
+    environment: restauration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      pg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: jetable
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Télécharger la dernière sauvegarde chiffrée
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN=$(gh run list --workflow backup.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          test -n "$RUN" || { echo "::error::Aucune exécution réussie de backup.yml."; exit 1; }
+          gh run download "$RUN" -n sauvegarde-supabase -D sauvegarde
+          ls -l sauvegarde
+      - name: Restaurer dans la base jetable et contrôler
+        env:
+          RESTORE_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: jetable
+        run: |
+          set -euo pipefail
+          test -n "$RESTORE_PASSPHRASE" || { echo "::error::Secret BACKUP_PASSPHRASE absent."; exit 1; }
+          # Diagnostic SANS révéler la valeur : longueur et présence d'espaces / sauts de ligne aux extrémités (cause fréquente d'un échec de déchiffrement).
+          L=${#RESTORE_PASSPHRASE}
+          echo "Diagnostic phrase secrète : longueur = $L caractère(s)."
+          case "$RESTORE_PASSPHRASE" in *$'\n'*) echo "Diagnostic : contient un saut de ligne.";; esac
+          case "$RESTORE_PASSPHRASE" in ' '*|*' ') echo "Diagnostic : espace au début ou à la fin.";; esac
+          case "$RESTORE_PASSPHRASE" in *$'\r'*) echo "Diagnostic : contient un retour chariot (\\r).";; esac
+          F=$(ls sauvegarde/*.gpg | head -1)
+          node scripts/restore-test-isolated.js "$F"
+      - name: Nettoyage (toujours exécuté)
+        if: always()
+        run: |
+          # Supprime la sauvegarde chiffrée téléchargée et toute copie déchiffrée résiduelle ; le serveur d'exécution est de toute façon détruit
+          rm -rf sauvegarde /tmp/restore-* 2>/dev/null || true
+          echo "Nettoyage terminé : base jetable (conteneur du job) et fichiers temporaires supprimés."

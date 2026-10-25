@@ -1,0 +1,117 @@
+// Règles de montants encaissés / restants (bloc PAIEMENTS-CALC de app.html), sans navigateur.
+const fs = require('fs'), path = require('path'), assert = require('assert');
+const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
+const a = html.indexOf('// <PAIEMENTS-CALC>'), b = html.indexOf('// </PAIEMENTS-CALC>');
+assert(a > 0 && b > a, 'bloc PAIEMENTS-CALC introuvable');
+const fa = html.indexOf('// <FISCAL-CALC>'), fb = html.indexOf('// </FISCAL-CALC>');
+assert(fa > 0 && fb > fa, 'bloc FISCAL-CALC introuvable');
+const api = new Function(html.slice(fa, fb) + html.slice(a, b) + '\nreturn { paymentEvents, invoiceLastPaymentDate, invoicePaymentMethods, paymentsCsv, money2, invoicePaidAmount, invoiceRemaining, checkPaymentAmount, reconcileInvoicesAfterPaymentRefusal, invoiceCreditedAmount, isCancelledByCredit, paymentSituation, invoiceListKind, invoiceMatchesFilter };')();
+let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
+const inv = (o) => Object.assign({ id: 'f1', status: 'sent', totalTTC: 1200 }, o);
+const pay = (amount, id = 'f1') => ({ id: 'p' + Math.random(), invoiceId: id, amount });
+
+ok('arrondi à 2 décimales', api.money2(0.1 + 0.2) === 0.3 && api.money2('12.345') === 12.35 && api.money2(null) === 0);
+ok('facture sans paiement : rien encaissé, tout à payer', api.invoicePaidAmount(inv(), []) === 0 && api.invoiceRemaining(inv(), []) === 1200);
+ok('paiement partiel : encaissé et reste cohérents', api.invoicePaidAmount(inv(), [pay(500)]) === 500 && api.invoiceRemaining(inv(), [pay(500)]) === 700);
+ok('deux paiements partiels additionnés', api.invoiceRemaining(inv(), [pay(500), pay(200)]) === 500);
+ok('paiements d\'une autre facture ignorés', api.invoiceRemaining(inv(), [pay(500, 'autre')]) === 1200);
+ok('facture « payée » : soldée même sans ligne de paiement (anciennes données)', api.invoiceRemaining(inv({ status: 'paid' }), []) === 0 && api.invoicePaidAmount(inv({ status: 'paid' }), []) === 1200);
+ok('paidAmount stocké pris en compte si les paiements manquent', api.invoiceRemaining(inv({ paidAmount: 300 }), []) === 900);
+ok('trop-perçu hérité des anciennes données : encaissé plafonné au TTC', api.invoicePaidAmount(inv(), [pay(1500)]) === 1200 && api.invoiceRemaining(inv(), [pay(1500)]) === 0);
+ok('brouillon : jamais de reste ni d\'encaissé', api.invoiceRemaining(inv({ status: 'draft' }), []) === 0 && api.invoicePaidAmount(inv({ status: 'draft' }), [pay(100)]) === 0);
+ok('avoir (TTC négatif) : pas de reste à payer', api.invoiceRemaining(inv({ totalTTC: -300 }), []) === 0);
+ok('flottants : 3 × 0,10 sur 0,30 = soldé', api.invoiceRemaining(inv({ totalTTC: 0.3 }), [pay(0.1), pay(0.1), pay(0.1)]) === 0);
+
+ok('paiement du reste exact accepté', api.checkPaymentAmount(inv(), 700, [pay(500)]).ok === true);
+ok('paiement partiel accepté', api.checkPaymentAmount(inv(), 100, []).ok === true);
+const over = api.checkPaymentAmount(inv(), 700.01, [pay(500)]);
+ok('trop-perçu refusé avec message', over.ok === false && /supérieur/.test(over.reason));
+ok('facture soldée : nouveau paiement refusé', api.checkPaymentAmount(inv({ status: 'paid' }), 10, []).ok === false);
+ok('montant nul, négatif ou vide refusé', [0, -5, '', NaN, null].every(v => api.checkPaymentAmount(inv(), v, []).ok === false));
+ok('facture inconnue refusée', api.checkPaymentAmount(undefined, 10, []).ok === false);
+// Rapprochement après refus serveur d'un paiement (cause racine : facture et paiements écrits séparément)
+{
+  const rec = api.reconcileInvoicesAfterPaymentRefusal;
+  const mkp = (id, inv, amt) => ({ id, invoiceId: inv, amount: amt });
+  const srv = [mkp('p1', 'f1', 500), mkp('a', 'f1', 300)];            // ce que le serveur a réellement enregistré : 800
+  const refused = [mkp('p1', 'f1', 500), mkp('b', 'f1', 700)];        // ce que l'appareil périmé voulait écrire : 1200
+  const invs = [{ id: 'f1', status: 'paid', paidAmount: 1200, paidAt: '2026-10-24', totalTTC: 1200 }, { id: 'f2', status: 'sent', paidAmount: 50, totalTTC: 400 }];
+  const r = rec(invs, srv, refused);
+  ok('refus : la facture « payée » à tort repasse « envoyée » avec 800 payés', r.changed === 1 && r.invoices[0].status === 'sent' && r.invoices[0].paidAmount === 800 && !('paidAt' in r.invoices[0]));
+  ok('refus : une autre facture n\'est pas touchée', r.invoices[1] === invs[1]);
+  ok('refus : les entrées ne sont pas modifiées (nouveaux objets)', invs[0].status === 'paid' && invs[0].paidAmount === 1200);
+  const legacy = [{ id: 'f1', status: 'sent', paidAmount: 700, totalTTC: 1200 }];     // 600 payés avant l'existence des lignes de paiement + 100 refusés
+  const r2 = rec(legacy, [], [mkp('x', 'f1', 100)]);
+  ok('refus : un avancement ancien sans ligne de paiement est conservé (700 − 100 = 600)', r2.invoices[0].paidAmount === 600 && r2.invoices[0].status === 'sent');
+  ok('refus : jamais sous les paiements du serveur', rec([{ id: 'f1', status: 'sent', paidAmount: 100, totalTTC: 1200 }], [mkp('a', 'f1', 300)], [mkp('a', 'f1', 300), mkp('b', 'f1', 900)]).changed === 0);
+  ok('refus : facture déjà cohérente → aucun changement', rec([{ id: 'f1', status: 'sent', paidAmount: 800, totalTTC: 1200 }], srv, refused).changed === 0);
+  ok('refus : brouillons et entrées vides ignorés, aucune exception', rec([null, { id: 'd', status: 'draft' }], srv, refused).changed === 0 && rec(undefined, undefined, undefined).changed === 0);
+}
+
+// --- Facture annulée par un avoir ---
+const cr = (o) => Object.assign({ id: 'a1', type: 'credit', status: 'sent', totalTTC: -1200, relatedInvoiceId: 'f1', relatedInvoiceNumber: 'FAC-1' }, o);
+const f1 = inv({ number: 'FAC-1' });
+ok('avoir total : facture annulée, reste 0', api.isCancelledByCredit(f1, [f1, cr()]) && api.invoiceRemaining(f1, [], [f1, cr()]) === 0);
+ok('avoir total : paiement refusé avec message dédié', /annulée par un avoir/.test(api.checkPaymentAmount(f1, 100, [], [f1, cr()]).reason));
+ok('avoir partiel (500) : reste = 1200 - 500, paiement du reste accepté', api.invoiceRemaining(f1, [], [f1, cr({ totalTTC: -500 })]) === 700 && api.checkPaymentAmount(f1, 700, [], [f1, cr({ totalTTC: -500 })]).ok === true && !api.isCancelledByCredit(f1, [f1, cr({ totalTTC: -500 })]));
+ok('avoir partiel : paiement supérieur à 700 refusé', api.checkPaymentAmount(f1, 800, [], [f1, cr({ totalTTC: -500 })]).ok === false);
+ok('avoir en brouillon ignoré', api.invoiceRemaining(f1, [], [f1, cr({ status: 'draft' })]) === 1200);
+ok('avoir d\'une autre facture ignoré', api.invoiceRemaining(f1, [], [f1, cr({ relatedInvoiceId: 'f9', relatedInvoiceNumber: 'FAC-9' })]) === 1200);
+ok('ancien avoir sans identifiant : rapproché par numéro', api.isCancelledByCredit(f1, [f1, cr({ relatedInvoiceId: undefined })]));
+ok('facture déjà payée puis créditée : reste « payée » (remboursement non géré)', api.isCancelledByCredit(inv({ status: 'paid', number: 'FAC-1' }), [cr()]) === false);
+ok('sans liste de pièces, comportement inchangé', api.invoiceRemaining(f1, []) === 1200 && api.checkPaymentAmount(f1, 100, []).ok === true);
+ok('encaissement partiel puis avoir total : reste 0', api.invoiceRemaining(f1, [pay(400)], [f1, cr()]) === 0);
+// --- Encaissements datés, exports ---
+const P = (id, invoiceId, amount, date, method, reference) => ({ id, invoiceId, amount, date, method, reference });
+const evInv = [inv({ id: 'f1', number: 'F1', clientName: 'A', totalTTC: 1000 }), inv({ id: 'f2', number: 'F2', clientName: '=cmd', totalTTC: 600, status: 'paid', paidAt: '2026-09-15' }),
+  inv({ id: 'f3', number: 'F3', totalTTC: 300, status: 'draft' }), inv({ id: 'a1', type: 'credit', totalTTC: -100 })];
+const evPay = [P('p1', 'f1', 400, '2026-10-01', 'virement', 'V1'), P('p2', 'f1', 100, '2026-10-20', 'espèces', '')];
+const ev = api.paymentEvents(evInv, evPay);
+ok('encaissements : 2 paiements de f1 + solde sans ligne de f2 (daté paidAt), ni brouillon ni avoir', ev.length === 3 && ev.filter(e => e.invoiceId === 'f1').length === 2 && ev.some(e => e.invoiceId === 'f2' && e.amount === 600 && e.date === '2026-09-15'));
+ok('dernier paiement : la date du dernier encaissement (et pas la date de la facture)', api.invoiceLastPaymentDate(evInv[0], evPay) === '2026-10-20');
+ok('dernier paiement : facture payée sans ligne -> paidAt ; facture sans paiement -> vide', api.invoiceLastPaymentDate(evInv[1], []) === '2026-09-15' && api.invoiceLastPaymentDate(evInv[0], []) === '');
+ok('modes de paiement distincts', api.invoicePaymentMethods(evInv[0], evPay) === 'virement / espèces');
+ok('paiements supérieurs au TTC : somme des événements non plafonnée par erreur mais montants positifs seulement', api.paymentEvents([evInv[0]], [P('x', 'f1', -50, '2026-10-01'), P('y', 'f1', 0, '2026-10-01')]).length === 0);
+const csv = api.paymentsCsv(evInv, evPay);
+const lines = csv.split('\n');
+ok('CSV paiements : en-tête + 3 lignes triées par date', lines.length === 4 && lines[0] === 'Date;N° facture;Client;Montant;Mode;Référence' && lines[1].startsWith('2026-09-15') && lines[3].startsWith('2026-10-20'));
+ok('CSV paiements : formule dans un nom de client neutralisée', csv.includes("'=cmd") && !/;=cmd/.test(csv));
+ok('CSV paiements : somme des montants = encaissements', lines.slice(1).reduce((t, l) => t + parseFloat(l.split(';')[3]), 0) === 1100);
+
+
+// --- Situation d'encaissement pour l'affichage (écran Paiements, liste des factures) ---
+{
+  const ps = api.paymentSituation; const p = (id, inv, a) => ({ id, invoiceId: inv, amount: a });
+  const f = inv({ id: 'f1', totalTTC: 1200, status: 'sent' });
+  let r = ps(f, [], [f]);
+  ok('situation : aucun paiement -> none, reste = total', r.state === 'none' && r.remaining === 1200 && r.paid === 0);
+  r = ps(f, [p('a', 'f1', 400)], [f]);
+  ok('situation : paiement partiel -> partial, payé 400 / reste 800', r.state === 'partial' && r.paid === 400 && r.remaining === 800 && r.total === 1200);
+  r = ps(f, [p('a', 'f1', 400), p('b', 'f1', 800)], [f]);
+  ok('situation : soldée par les paiements -> paid, reste 0', r.state === 'paid' && r.remaining === 0);
+  ok('situation : statut payée sans ligne de paiement -> paid', ps(inv({ status: 'paid' }), [], []).state === 'paid');
+  ok('situation : brouillon, avoir et facture à 0 -> closed (ni à encaisser ni encaissable)', ['draft'].every(x => ps(inv({ status: x }), [], []).state === 'closed') && ps(inv({ type: 'credit', totalTTC: -100 }), [], []).state === 'closed' && ps(inv({ totalTTC: 0 }), [], []).state === 'closed');
+  ok('situation : facture déjà au statut « cancelled » (annulée par avoir, vue par l\'écran) -> credited ; annulée à la main sans avoir -> closed', ps(inv({ status: 'cancelled' }), [], [inv({ status: 'cancelled' }), { id: 'a1', type: 'credit', status: 'sent', totalTTC: -1200, relatedInvoiceId: 'f1' }]).state === 'credited' && ps(inv({ status: 'cancelled' }), [], []).state === 'closed');
+  const cr2 = { id: 'a1', type: 'credit', status: 'sent', totalTTC: -1200, relatedInvoiceId: 'f1' };
+  r = ps(f, [], [f, cr2]);
+  ok('situation : annulée par un avoir -> credited, reste 0 (pas de bouton Encaisser)', r.state === 'credited' && r.remaining === 0);
+  r = ps(f, [p('a', 'f1', 400)], [f, { ...cr2, totalTTC: -300 }]);
+  ok('situation : acompte 400 + avoir 300 -> reste 500 (même calcul que le contrôle du paiement)', r.state === 'partial' && r.remaining === 500 && r.remaining === api.invoiceRemaining(f, [p('a', 'f1', 400)], [f, { ...cr2, totalTTC: -300 }]));
+}
+
+// --- Liste des factures : brouillons distincts des factures enregistrées, filtres d'encaissement ---
+{
+  const kind = api.invoiceListKind, mf = api.invoiceMatchesFilter; const p = (id, inv, a) => ({ id, invoiceId: inv, amount: a });
+  const draft = inv({ id: 'd1', status: 'draft', number: 'BRO-AB12' }), issued = inv({ id: 'f1', number: 'FAC-1', status: 'sent', totalTTC: 1000, dueDate: '2099-01-01' });
+  const late = inv({ id: 'f2', number: 'FAC-2', status: 'sent', totalTTC: 500, dueDate: '2000-01-01' }), paid = inv({ id: 'f3', number: 'FAC-3', status: 'paid', totalTTC: 300 });
+  const cred = { id: 'a1', type: 'credit', number: 'AVR-1', status: 'sent', totalTTC: -100, relatedInvoiceId: 'f9' };
+  const all = [draft, issued, late, paid, cred], pays = [p('x', 'f1', 400)];
+  ok('liste : brouillon (BRO- ou statut draft), enregistrée, avoir bien distingués', kind(draft) === 'draft' && kind(inv({ status: 'draft', number: 'FAC-9' })) === 'draft' && kind(inv({ number: 'BRO-1', status: 'sent' })) === 'draft' && kind(issued) === 'issued' && kind(cred) === 'credit');
+  const names = (f) => all.filter((i) => mf(i, f, pays, all)).map((i) => i.id).join(',');
+  ok('filtre Toutes : tout', names('all') === 'd1,f1,f2,f3,a1');
+  ok('filtre Brouillons : d1 seulement ; Enregistrées : f1, f2, f3 (ni brouillon ni avoir)', names('draft') === 'd1' && names('issued') === 'f1,f2,f3');
+  ok('filtre Non payées : f2 ; Payées partiellement : f1 ; Soldées : f3 (jamais un brouillon ni un avoir)', names('none') === 'f2' && names('partial') === 'f1' && names('paid') === 'f3');
+  ok('filtre En retard : f2 seulement (f1 non échue, f3 soldée)', names('overdue') === 'f2');
+  ok('filtre Avoirs : a1 seulement', names('credit') === 'a1');
+}
+console.log('\nOK : ' + n + ' contrôles (paiements)');

@@ -363,6 +363,42 @@
         #clientsList th, #clientsList td { white-space: nowrap; }
         #clientsList td:last-child { white-space: normal; }
         table.tbl-act td:last-child { display: table-cell; }
+        /* Écran Paiements : une ligne = facture + situation d'encaissement (payé / reste), lisible sans défilement horizontal */
+        table.tbl-pay td { vertical-align: top; }
+        table.tbl-pay td, table.tbl-pay th { white-space: normal; padding-left: 10px; padding-right: 10px; }
+        table.tbl-pay td:nth-child(2) { min-width: 0; }
+        table.tbl-pay th:last-child, table.tbl-pay td:last-child { min-width: 0; width: 112px; position: static; box-shadow: none; }
+        table.tbl-pay td:last-child .btn { display: block; width: 100%; margin: 0 0 6px 0; text-align: center; }
+        table.tbl-pay td:last-child .btn-ghost { background: transparent; color: #1a2238 !important; border: 1px solid var(--border); }
+        .pay-client { color: var(--ink-soft); font-size: 13px; }
+        .pay-due { color: var(--ink-mute); font-size: 11px; }
+        .pay-paid { color: var(--success); font-weight: 600; font-size: 13px; }
+        .pay-none, .pay-mute { color: var(--ink-mute); font-size: 13px; }
+        .pay-ok { color: var(--success); font-weight: 700; }
+        .pay-sep { color: var(--ink-mute); }
+        .pay-rest { display: block; font-size: 15px; color: var(--ink); }
+        .pay-of { display: block; color: var(--ink-mute); font-size: 11px; }
+        /* Liste des factures : 3 colonnes lisibles sur téléphone ; brouillons nettement distincts des factures enregistrées */
+        table.tbl-inv td, table.tbl-inv th { white-space: normal; vertical-align: top; padding-left: 8px; padding-right: 8px; }
+        table.tbl-inv th:last-child, table.tbl-inv td:last-child { min-width: 0; width: 112px; position: static; box-shadow: none; }
+        table.tbl-inv td:last-child .btn { display: block; width: 100%; margin: 0 0 6px 0; text-align: center; }
+        table.tbl-inv td:last-child .btn-ghost { background: transparent; color: #1a2238 !important; border: 1px solid var(--border); height: auto; min-width: 0; font-size: 13px; padding: 7px 8px; }
+        .inv-client { color: var(--ink-soft); font-size: 13px; }
+        .inv-dates { color: var(--ink-mute); font-size: 11px; }
+        .inv-pay { font-size: 11px; color: var(--ink-soft); } .inv-pay-none { color: var(--ink-mute); }
+        .inv-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; letter-spacing: .02em; }
+        .inv-tag-draft { background: #fff4d6; color: #8a5a00; border: 1px dashed #d9a21b; }
+        .inv-tag-issued { background: #e7f3ec; color: #1f6b44; }
+        .inv-tag-credit { background: var(--warning); color: #fff; }
+        tr.inv-row-draft td { background: repeating-linear-gradient(135deg, #fffdf6, #fffdf6 8px, #fff9e8 8px, #fff9e8 16px); }
+        tr.inv-row-draft td:first-child { border-left: 4px dashed #d9a21b; }
+        tr.inv-row-issued td:first-child { border-left: 4px solid var(--success); }
+        tr.inv-row-credit td:first-child { border-left: 4px solid var(--warning); }
+        tr.inv-group td { background: var(--surface-soft); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); padding: 8px 10px; }
+        tr.inv-group td span { color: var(--ink-mute); }
+        table.tbl-inv tr.inv-group td:last-child { width: auto; }
+        details.inv-more > summary { list-style: none; cursor: pointer; margin-bottom: 6px; text-align: center; }
+        details.inv-more > summary::-webkit-details-marker { display: none; }
         /* Boutons d'action des tableaux : bien visibles et faciles à toucher */
         td .btn-ghost.btn-sm {
             min-width: 40px; height: 40px; padding: 0 10px;
@@ -634,6 +670,7 @@
         .status-pending { background: rgba(232, 163, 61, 0.12); color: #B5821F; }
         .status-overdue { background: rgba(200, 74, 74, 0.1); color: var(--danger); }
         .status-draft { background: rgba(139, 149, 168, 0.15); color: var(--ink-mute); }
+        .status-cancelled { background: rgba(139, 149, 168, 0.15); color: var(--ink-mute); text-decoration: line-through; }
         .status-sent { background: rgba(27, 58, 107, 0.1); color: var(--primary); }
         .status-accepted { background: rgba(46, 125, 91, 0.1); color: var(--success); }
         .status-refused { background: rgba(200, 74, 74, 0.1); color: var(--danger); }
@@ -3250,7 +3287,17 @@
 
             <div class="table-card">
                 <div class="table-header">
-                    <h3>Toutes les factures</h3>
+                    <h3>Factures</h3>
+                    <select id="invoiceFilter" onchange="renderInvoices()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px;">
+                        <option value="all">Toutes</option>
+                        <option value="draft">Brouillons (non enregistrés)</option>
+                        <option value="issued">Enregistrées</option>
+                        <option value="none">Non payées</option>
+                        <option value="partial">Payées partiellement</option>
+                        <option value="paid">Soldées</option>
+                        <option value="overdue">En retard</option>
+                        <option value="credit">Avoirs</option>
+                    </select>
                     <div class="search-box">
                         <span>🔍</span>
                         <input type="text" id="invoiceSearch" placeholder="Rechercher..." oninput="renderInvoices()">
@@ -4199,11 +4246,14 @@
                     <h3>Factures à suivre</h3>
                     <div style="display: flex; gap: 8px;">
                         <select id="paymentFilter" onchange="renderPayments()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px;">
-                            <option value="all">Toutes</option>
-                            <option value="pending" selected>En attente</option>
+                            <option value="open" selected>À encaisser</option>
+                            <option value="none">Sans paiement</option>
+                            <option value="partial">Partiellement payées</option>
                             <option value="overdue">En retard</option>
-                            <option value="paid">Payées</option>
+                            <option value="paid">Soldées</option>
+                            <option value="all">Toutes</option>
                         </select>
+                        <button class="btn btn-secondary btn-sm" id="exportPaymentsBtn" onclick="exportPaymentsCSV()" title="Une ligne par encaissement">⬇ Exporter les paiements</button>
                     </div>
                 </div>
                 <div id="paymentsList"></div>
@@ -4570,6 +4620,16 @@
                             <input type="text" id="cmpCreditPrefix" placeholder="AVR">
                             <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">Ex: AVR-2026-001 (notes de crédit)</div>
                         </div>
+                        <div class="form-group" id="startNumbersBox" style="border-top:1px solid var(--line, #e5e1d8); padding-top:10px;">
+                            <label>Numérotation de départ</label>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin: 2px 0 8px;">Vous vous abonnez en cours d'année ? Indiquez le <b>dernier numéro déjà utilisé</b> (0 si aucun) pour poursuivre votre suite. Ex : 42 → la prochaine facture sera FAC-<span class="yr">2026</span>-043. À régler <b>avant</b> votre première facture émise ici : ensuite le numéro est tenu par le serveur et ne peut plus être modifié.</div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                                <div><div style="font-size:11px;color:var(--ink-mute)">Factures</div><input type="number" id="cmpStartInvoice" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></div>
+                                <div><div style="font-size:11px;color:var(--ink-mute)">Devis</div><input type="number" id="cmpStartQuote" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></div>
+                                <div><div style="font-size:11px;color:var(--ink-mute)">Avoirs</div><input type="number" id="cmpStartCredit" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></div>
+                            </div>
+                            <div id="startNumbersHint" style="font-size: 11px; color: var(--ink-mute); margin-top: 6px;"></div>
+                        </div>
                         <div class="form-group">
                             <label>Devise</label>
                             <select id="cmpCurrency">
@@ -4605,6 +4665,28 @@
                             </button>
                             <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">
                                 💡 PNG, JPG ou WebP. Max 500 KB. Apparaîtra sur vos factures et devis.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="aside-card" id="stampCard">
+                        <h3>🖋️ Cachet et signature</h3>
+                        <div id="stampLockedSection" style="display: none;">
+                            <div style="font-size: 12px; color: var(--ink-mute);">🔒 Cachet et signature sur vos factures, devis et reçus : disponibles avec une licence active.</div>
+                        </div>
+                        <div id="stampActiveSection" style="display: none;">
+                            <div id="stampPreview" style="text-align: center; padding: 16px; background: var(--surface-soft); border-radius: 10px; margin-bottom: 12px; min-height: 100px; display: flex; align-items: center; justify-content: center;">
+                                <span style="color: var(--ink-mute); font-size: 12px;">Aucun cachet</span>
+                            </div>
+                            <input type="file" id="stampUploadInput" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;" onchange="handleStampUpload(event)">
+                            <button class="btn btn-secondary" onclick="document.getElementById('stampUploadInput').click()" style="width: 100%; margin-bottom: 8px; font-size: 13px;">
+                                📤 Envoyer mon cachet / ma signature
+                            </button>
+                            <button class="btn btn-secondary" onclick="removeStamp()" style="width: 100%; font-size: 12px; color: var(--danger);" id="removeStampBtn">
+                                🗑️ Supprimer le cachet
+                            </button>
+                            <div style="font-size: 11px; color: var(--ink-mute); margin-top: 8px;">
+                                💡 Photo ou scan de votre cachet (idéalement sur fond blanc ou transparent, PNG de préférence). PNG, JPG ou WebP, 300 Ko maximum. Imprimé en bas à droite de vos factures, devis et reçus de paiement.
                             </div>
                         </div>
                     </div>
@@ -4657,11 +4739,23 @@
                         </div>
                     </div>
 
+                    <div class="aside-card" id="sampleCard">
+                        <h3>🧪 Vérifier avant de commencer</h3>
+                        <div style="font-size: 11px; color: var(--ink-mute); margin-bottom: 8px;">Voyez le rendu avec vos réglages (en-tête, logo, cachet, préfixes, prochain numéro). Ce sont des <b>exemples fictifs</b> marqués « EXEMPLE » : rien n'est enregistré, aucun numéro n'est consommé, aucune donnée n'est modifiée.</div>
+                        <button class="btn btn-secondary" id="sampleInvoiceBtn" onclick="downloadSampleInvoice()" style="width: 100%; margin-bottom: 8px;">📄 Facture d'exemple (PDF)</button>
+                        <button class="btn btn-secondary" id="sampleReceiptBtn" onclick="downloadSampleReceipt()" style="width: 100%;">🧾 Reçu de paiement d'exemple (PDF)</button>
+                    </div>
+
+                    <div class="aside-card" id="techBackupCard">
+                        <h3>💾 Sauvegarde technique (JSON)</h3>
+                        <div style="font-size: 11px; color: var(--ink-mute); margin-bottom: 8px;">Fichier de secours <b>pour développeurs / dépannage</b>, pas un document comptable. Votre sauvegarde officielle reste celle du serveur. L'import ajoute uniquement les clients, produits, brouillons et devis absents ; il n'écrase rien et ne réimporte ni factures émises, ni paiements, ni numérotation (ils sont verrouillés par le serveur).</div>
+                        <button class="btn btn-secondary" id="techBackupExportBtn" onclick="exportData()" style="width: 100%; margin-bottom: 8px;">📥 Exporter la sauvegarde technique</button>
+                        <input type="file" id="techBackupFile" accept="application/json,.json" style="display:none" onchange="importTechnicalBackup(event)">
+                        <button class="btn btn-secondary" id="techBackupImportBtn" onclick="document.getElementById('techBackupFile').click()" style="width: 100%;">📤 Importer une sauvegarde technique</button>
+                    </div>
+
                     <div class="aside-card">
                         <h3>🗑️ Zone de danger</h3>
-                        <button class="btn btn-secondary" onclick="exportData()" style="width: 100%; margin-bottom: 8px;">
-                            📥 Exporter les données
-                        </button>
                         <button class="btn btn-danger" onclick="resetApp()" style="width: 100%;">
                             🔄 Tout réinitialiser
                         </button>
@@ -5027,7 +5121,8 @@
             </div>
             <div>
                 <label>Montant reçu (DH) *</label>
-                <input type="number" id="paymentAmount" step="0.01" required>
+                <input type="number" id="paymentAmount" step="0.01" min="0.01" required>
+                <div id="paymentRemainingHint" style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;"></div>
             </div>
         </div>
 
@@ -6332,8 +6427,36 @@ const Storage = {
         let expiredNow = false;
         try { expiredNow = License.isExpired(); } catch {}
         if (USE_SUPABASE && this._currentUserId && !expiredNow) {
-            this._syncToCloud(baseKey, val);
+            this._enqueueSync(baseKey, val);
         }
+    },
+
+    // Les écritures vers le serveur partent DANS L'ORDRE (paiements, puis facture, puis rapprochement éventuel) : sans cela, le rapprochement
+    // d'une facture après un refus de paiement pouvait être dépassé par l'écriture initiale de la facture.
+    _enqueueSync(key, val) {
+        if (key === 'payments') this._payInFlight = (this._payInFlight || 0) + 1;
+        this._syncQ = (this._syncQ || Promise.resolve()).then(async () => {
+            try {
+                const r = await this._syncToCloud(key, val);
+                // Le serveur fusionne les paiements (aucun n'est perdu) : on adopte sa version si aucune autre écriture de paiements n'est en attente
+                if (key === 'payments' && r === 'ok' && this._payInFlight <= 1) await this._adoptServerPayments();
+            } catch (e) { console.warn('Écriture en file : échec', e); }
+            finally { if (key === 'payments') this._payInFlight = Math.max(0, (this._payInFlight || 1) - 1); }
+        });
+    },
+    async _adoptServerPayments() {
+        try {
+            if (!this._currentUserId) return;
+            const r = await supaClient.from('user_data').select('key, value').eq('user_id', this._currentUserId);
+            const row = ((r && r.data) || []).find(x => x.key === 'payments');
+            if (!row || !Array.isArray(row.value)) return;
+            const local = Array.isArray(this._cache['payments']) ? this._cache['payments'] : [];
+            const ids = new Set(row.value.map(x => x && x.id));
+            if (!local.every(x => !x || !x.id || ids.has(x.id)) || row.value.length === local.length) return;   // rien à adopter, ou le serveur ne contient pas tout le local
+            this._cache['payments'] = row.value;
+            try { localStorage.setItem(this._buildLocalKey('payments', this._currentUserId), JSON.stringify(row.value)); } catch {}
+            ['renderPayments', 'renderDashboard'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch {} });
+        } catch {}
     },
     
     // Deux appareils : la liste des factures est écrite en un bloc. Quand le serveur refuse l'écriture
@@ -6402,6 +6525,26 @@ const Storage = {
                     if (typeof showToast === 'function') showToast('🔒 Modification refusée : une facture émise ne peut ni être modifiée ni supprimée. Données rechargées.', 'error');
                     await this.loadFromCloud();
                     try { renderInvoices(); } catch {}
+                    return 'dropped';
+                }
+                if (/PAIEMENT_SUPERIEUR_AU_RESTE|PAIEMENT_FACTURE_NULLE/.test(error.message || '') && key === 'payments') {
+                    // Refus métier du serveur (plafond sql/26) : ce n'est pas une panne réseau, on ne réessaie PAS en boucle.
+                    // Copie de sauvegarde locale, retour à la dernière valeur validée par le serveur, écrans recalculés.
+                    DocStoreGlue.archiveRefused(key, value, 'PAIEMENT_REFUSE');
+                    try { SyncManager.pendingChanges = SyncManager.pendingChanges.filter(c => c.key !== key); SyncManager.savePendingChanges(); SyncManager.updateUI(); } catch {}
+                    try {
+                        const r = await supaClient.from('user_data').select('key, value').eq('user_id', this._currentUserId);
+                        const row = ((r && r.data) || []).find(x => x.key === key);
+                        const back = (row && Array.isArray(row.value)) ? row.value : [];
+                        this._cache[key] = back;
+                        localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(back));
+                    } catch {}
+                    try {   // la facture a pu être mise à jour (« payée ») par une écriture séparée : on la rapproche des paiements réellement enregistrés
+                        const rec = reconcileInvoicesAfterPaymentRefusal(Storage.get('invoices', []), this._cache[key], value);
+                        if (rec.changed > 0) Storage.set('invoices', rec.invoices);
+                    } catch {}
+                    if (typeof showToast === 'function') showToast('🔒 Paiement refusé par le serveur : le cumul dépasserait le montant de la facture. Données rechargées.', 'error');
+                    ['renderInvoices', 'renderPayments', 'renderDashboard'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch {} });
                     return 'dropped';
                 }
                 throw error;
@@ -6665,6 +6808,7 @@ function statusLabel(status) {
         sent: 'Envoyée',
         paid: 'Payée',
         overdue: 'En retard',
+        cancelled: 'Annulée (avoir)',
         accepted: 'Acceptée',
         refused: 'Refusée',
         pending: 'En attente'
@@ -7395,7 +7539,8 @@ function renderActionCenter(invoices) {
     }
 
     if (overdue.length > 0) {
-        const total = overdue.reduce((s, i) => s + (i.totalTTC || 0), 0);
+        const pays = Storage.get('payments', []) || [];
+        const total = overdue.reduce((s, i) => s + invoiceRemaining(i, pays), 0);
         html += `
         <div class="table-card" style="margin-bottom: 16px; padding: 16px 18px; border-left: 4px solid var(--danger);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -7408,7 +7553,7 @@ function renderActionCenter(invoices) {
                         <strong>${escapeHtml(i.clientName || '—')}</strong>
                         <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(dn(i.number))} · ${i.overdueDays || 0} j de retard</div>
                     </div>
-                    <strong>${formatCurrency(i.totalTTC)}</strong>
+                    <strong>${formatCurrency(invoiceRemaining(i, pays))}</strong>
                     <button class="btn btn-secondary btn-sm" onclick="quickRelance('${i.id}')" title="Relancer par WhatsApp" style="color:#25D366;">💬 Relancer</button>
                 </div>`).join('')}
             ${overdue.length > 5 ? `<div style="padding-top:8px;"><button class="btn btn-ghost btn-sm" onclick="navTo('reminders')">Voir les ${overdue.length} relances →</button></div>` : ''}
@@ -7433,8 +7578,10 @@ function renderDashboard() {
     
     const paid = yearInvoices.filter(i => i.status === 'paid');
     const pending = yearInvoices.filter(i => ['sent', 'overdue'].includes(i.status));
-    const totalPaid = paid.reduce((s, i) => s + (i.totalTTC || 0), 0);
-    const totalPending = pending.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const allPayments = Storage.get('payments', []) || [];
+    // Encaissé = tout ce qui a réellement été reçu (paiements partiels compris) ; en attente = restes à payer
+    const totalPaid = yearInvoices.reduce((s, i) => s + invoicePaidAmount(i, allPayments), 0);
+    const totalPending = pending.reduce((s, i) => s + invoiceRemaining(i, allPayments), 0);
     
     // Update payments badge in sidebar
     const overdue = invoices.filter(i => i.status === 'overdue');
@@ -7555,69 +7702,75 @@ function renderCAChart() {
 function renderInvoices() {
     const invoices = Storage.get('invoices', []);
     const search = document.getElementById('invoiceSearch')?.value.toLowerCase() || '';
+    const filter = document.getElementById('invoiceFilter')?.value || 'all';
+    const allPayments = Storage.get('payments', []) || [];
     
     const filtered = invoices.filter(i => {
-        if (!search) return true;
-        return i.number.toLowerCase().includes(search) ||
-               (i.clientName || '').toLowerCase().includes(search);
+        if (search && !((i.number || '').toLowerCase().includes(search) || (i.clientName || '').toLowerCase().includes(search))) return false;
+        return invoiceMatchesFilter(i, filter, allPayments, invoices);
     });
     
-    const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const byDate = (a, b) => new Date(b.date) - new Date(a.date);
+    const drafts = filtered.filter(i => invoiceListKind(i) === 'draft').sort(byDate);
+    const registered = filtered.filter(i => invoiceListKind(i) !== 'draft').sort(byDate);
     
     const el = document.getElementById('invoicesList');
-    if (sorted.length === 0) {
+    if (filtered.length === 0) {
         el.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📄</div>
                 <h3>Aucune facture</h3>
-                <p>${search ? 'Aucun résultat' : 'Créez votre première facture'}</p>
-                ${!search ? '<button class="btn btn-primary" onclick="newInvoice()">+ Nouvelle facture</button>' : ''}
+                <p>${search || filter !== 'all' ? 'Aucun résultat pour ce filtre' : 'Créez votre première facture'}</p>
+                ${!search && filter === 'all' ? '<button class="btn btn-primary" onclick="newInvoice()">+ Nouvelle facture</button>' : ''}
             </div>`;
         return;
     }
     
+    const row = (i) => {
+        const kind = invoiceListKind(i), isCredit = kind === 'credit', isDraft = kind === 'draft';
+        const ps = kind === 'issued' ? paymentSituation(i, allPayments, invoices) : { state: 'closed', remaining: 0, paid: 0 };
+        const hasCredit = invoices.some(c => c && c.type === 'credit' && (c.relatedInvoiceId === i.id || (!c.relatedInvoiceId && c.relatedInvoiceNumber === i.number)));
+        const title = isDraft ? `<span class="inv-tag inv-tag-draft">Brouillon · non enregistré</span>`
+            : isCredit ? `<strong style="color: var(--warning);">${escapeHtml(dn(i.number))}</strong> <span class="inv-tag inv-tag-credit">AVOIR</span>`
+            : `<strong>${escapeHtml(dn(i.number))}</strong> <span class="inv-tag inv-tag-issued">🔒 Enregistrée</span>`;
+        const amount = `<strong style="${isCredit ? 'color: var(--danger);' : ''}">${formatCurrency(i.totalTTC)}</strong>`;
+        const statusPill = isDraft ? '' : (ps.state === 'paid' ? '<span class="status-pill status-paid">Soldée</span>' : `<span class="status-pill status-${i.status}">${statusLabel(i.status)}</span>`);
+        const payLine = ps.state === 'partial' ? `<span class="inv-pay">Payé ${formatCurrency(ps.paid)} · <strong>reste ${formatCurrency(ps.remaining)}</strong></span>`
+            : ps.state === 'none' ? `<span class="inv-pay inv-pay-none">Aucun paiement · reste ${formatCurrency(ps.remaining)}</span>` : '';
+        const actions = isDraft
+            ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')">✏️ Modifier</button>
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer ce brouillon" style="color: var(--danger);">🗑 Supprimer</button>`
+            : `${ps.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); recordPaymentForInvoice('${i.id}')" title="Enregistrer un paiement">${ps.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Voir la facture">👁 Voir</button>
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥 PDF</button>
+               <details class="inv-more" onclick="event.stopPropagation()"><summary class="btn btn-ghost btn-sm" title="Autres actions">⋯ Plus</summary>
+                   <button class="btn btn-ghost btn-sm" onclick="sendDocWhatsApp('${i.id}', 'invoice')" style="color: #25D366;">💬 WhatsApp</button>
+                   <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice('${i.id}')">📋 Dupliquer</button>
+                   ${!isCredit && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice('${i.id}')" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
+               </details>`;
+        return `
+            <tr class="inv-row inv-row-${kind}">
+                <td onclick="editInvoice('${i.id}')">${title}<br><span class="inv-client">${escapeHtml(i.clientName || '—')}</span><br><span class="inv-dates">Émise ${formatDate(i.date)}${i.dueDate && !isCredit ? ` · échéance ${formatDate(i.dueDate)}` : ''}${i.relatedInvoiceNumber ? `<br>↩️ relatif à ${escapeHtml(i.relatedInvoiceNumber)}` : ''}</span></td>
+                <td onclick="editInvoice('${i.id}')">${amount}${statusPill ? `<br>${statusPill}` : ''}${payLine ? `<br>${payLine}` : ''}</td>
+                <td>${actions}</td>
+            </tr>`;
+    };
+    const group = (label, n) => `<tr class="inv-group"><td colspan="3">${label} <span>(${n})</span></td></tr>`;
+    const body = (drafts.length && registered.length ? group('Brouillons — non enregistrés, modifiables', drafts.length) : '')
+        + drafts.map(row).join('')
+        + (drafts.length && registered.length ? group('Factures enregistrées — verrouillées', registered.length) : '')
+        + registered.map(row).join('');
+    
     el.innerHTML = `
-        <table class="tbl-act">
+        <table class="tbl-act tbl-inv">
             <thead>
                 <tr>
-                    <th>Numéro</th>
-                    <th>Client</th>
-                    <th>Date émission</th>
-                    <th>Échéance</th>
-                    <th>Montant TTC</th>
-                    <th>Statut</th>
+                    <th>Facture</th>
+                    <th>Montant</th>
                     <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                ${sorted.map(i => {
-                    const isCredit = i.type === 'credit' || (i.totalTTC || 0) < 0;
-                    const rowStyle = isCredit ? 'background: rgba(232, 177, 74, 0.04);' : '';
-                    const numberDisplay = isCredit ? `<strong style="color: var(--warning);">${escapeHtml(dn(i.number))}</strong> <span style="font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 100px; font-weight: 700;">AVOIR</span>` : `<strong>${escapeHtml(dn(i.number))}</strong>`;
-                    const amountDisplay = isCredit 
-                        ? `<strong style="color: var(--danger);">${formatCurrency(i.totalTTC)}</strong>`
-                        : `<strong>${formatCurrency(i.totalTTC)}</strong>`;
-                    
-                    return `
-                        <tr style="${rowStyle}">
-                            <td onclick="editInvoice('${i.id}')">${numberDisplay}${i.relatedInvoiceNumber ? `<br><small style="color: var(--ink-mute); font-size: 10px;">↩️ relatif à ${i.relatedInvoiceNumber}</small>` : ''}</td>
-                            <td onclick="editInvoice('${i.id}')">${escapeHtml(i.clientName || '—')}</td>
-                            <td onclick="editInvoice('${i.id}')">${formatDate(i.date)}</td>
-                            <td onclick="editInvoice('${i.id}')">${formatDate(i.dueDate)}</td>
-                            <td onclick="editInvoice('${i.id}')">${amountDisplay}</td>
-                            <td onclick="editInvoice('${i.id}')"><span class="status-pill status-${i.status}">${statusLabel(i.status)}</span></td>
-                            <td>
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Modifier / imprimer">✏️</button>
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥</button>
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${i.id}', 'invoice')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); duplicateInvoice('${i.id}')" title="Dupliquer">📋</button>
-                                ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); createCreditFromInvoice('${i.id}')" title="Créer un avoir (remboursement)" style="color: var(--warning);">↩️</button>` : ''}
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
+            <tbody>${body}</tbody>
         </table>`;
 }
 
@@ -8517,7 +8670,8 @@ function renderClients() {
             <tbody>
                 ${filtered.map(c => {
                     const clientInvoices = invoices.filter(i => i.clientId === c.id);
-                    const totalCA = clientInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.totalTTC || 0), 0);
+                    const _allPay = Storage.get('payments', []) || [];
+                    const totalCA = clientInvoices.filter(i => i.type !== 'credit').reduce((s, i) => s + invoicePaidAmount(i, _allPay), 0);
                     return `
                         <tr>
                             <td><strong>${escapeHtml(c.name)}</strong></td>
@@ -9184,7 +9338,7 @@ function isInReportRange(dateStr, range) {
 function renderReportInvoices() {
     const range = getReportDateRange();
     const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
-        i.type !== 'credit' && (i.totalTTC || 0) >= 0
+        i.type !== 'credit' && (i.totalTTC || 0) >= 0 && getInvoiceWithStatus(i).status !== 'cancelled'   // annulées par avoir : ni en attente ni en retard
     );
     const filtered = allInvoices.filter(i => isInReportRange(i.date, range));
     
@@ -9334,6 +9488,7 @@ function quickRelance(invoiceId) {
         `📋 Détail :\n` +
         `• N° : ${invoice.number}\n` +
         `• Montant : ${formatCurrency(invoice.totalTTC)}\n` +
+        `${invoiceRemaining(invoice, Storage.get('payments', []) || []) < (invoice.totalTTC || 0) ? `• Reste à régler : ${formatCurrency(invoiceRemaining(invoice, Storage.get('payments', []) || []))}\n` : ''}` +
         `• Date : ${formatDate(invoice.date)}\n\n` +
         `Pourriez-vous svp me faire un retour sur le statut du règlement ?\n\n` +
         `${company.rib ? `RIB : ${company.rib}\n` : ''}` +
@@ -9356,7 +9511,8 @@ function renderReportCashflow() {
     
     const billed = filtered.reduce((s, i) => s + (i.totalTTC || 0), 0);
     const paid = filtered.filter(i => i.status === 'paid');
-    const received = paid.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const _cfPay = Storage.get('payments', []) || [];
+    const received = filtered.reduce((s, i) => s + invoicePaidAmount(i, _cfPay), 0);   // paiements partiels inclus
     
     document.getElementById('rpCfReceived').textContent = formatCurrency(received);
     document.getElementById('rpCfBilled').textContent = formatCurrency(billed);
@@ -9365,21 +9521,17 @@ function renderReportCashflow() {
     document.getElementById('rpCfRate').textContent = `${rate}%`;
     
     // Délai moyen
-    const delays = paid.filter(i => i.paymentDate && i.date).map(i => {
+    const delays = paid.filter(i => invoiceLastPaymentDate(i, _cfPay) && i.date).map(i => {
         const d1 = new Date(i.date);
-        const d2 = new Date(i.paymentDate);
+        const d2 = new Date(invoiceLastPaymentDate(i, _cfPay));
         return Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
     });
     const avgDelay = delays.length > 0 ? Math.round(delays.reduce((a,b) => a+b, 0) / delays.length) : null;
     document.getElementById('rpCfAvgDelay').textContent = avgDelay !== null ? `${avgDelay} jours` : '— jours';
     
     // Trend
-    const todayReceived = paid.filter(i => {
-        if (!i.paymentDate) return false;
-        const d = new Date(i.paymentDate);
-        const t = new Date();
-        return d.toDateString() === t.toDateString();
-    }).reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const todayISO_ = todayISO();
+    const todayReceived = paymentEvents(filtered, _cfPay).filter(e => e.date === todayISO_).reduce((s, e) => s + e.amount, 0);
     document.getElementById('rpCfReceivedTrend').textContent = todayReceived > 0 
         ? `+${formatCurrency(todayReceived)} aujourd'hui`
         : 'Période sélectionnée';
@@ -9415,11 +9567,13 @@ function renderCashFlowChart() {
         const m = months.find(x => x.year === d.getFullYear() && x.month === d.getMonth());
         if (m) m.billed += inv.totalTTC || 0;
         
-        if (inv.status === 'paid' && inv.paymentDate) {
-            const dp = new Date(inv.paymentDate);
-            const mp = months.find(x => x.year === dp.getFullYear() && x.month === dp.getMonth());
-            if (mp) mp.received += inv.totalTTC || 0;
-        }
+    });
+    // Encaissé du mois = paiements reçus ce mois-là (date du paiement), partiels compris
+    paymentEvents(allInvoices, Storage.get('payments', []) || []).forEach(e => {
+        const dp = new Date(e.date);
+        if (isNaN(dp)) return;
+        const mp = months.find(x => x.year === dp.getFullYear() && x.month === dp.getMonth());
+        if (mp) mp.received += e.amount;
     });
     
     const max = Math.max(...months.map(m => Math.max(m.billed, m.received)), 1);
@@ -9444,17 +9598,20 @@ function renderCashFlowChart() {
 
 function renderSlowPayers() {
     const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
-        i.type !== 'credit' && i.status === 'paid' && i.paymentDate && i.date
+        i.type !== 'credit' && i.status === 'paid' && i.date
     );
+    const _spPay = Storage.get('payments', []) || [];
     
     const clientStats = {};
     allInvoices.forEach(i => {
+        const lastPay = invoiceLastPaymentDate(i, _spPay);
+        if (!lastPay) return;
         const key = i.clientName || 'Inconnu';
         if (!clientStats[key]) {
             clientStats[key] = { name: key, count: 0, totalDelay: 0, totalAmount: 0, clientId: i.clientId };
         }
         const d1 = new Date(i.date);
-        const d2 = new Date(i.paymentDate);
+        const d2 = new Date(lastPay);
         const delay = Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
         clientStats[key].count++;
         clientStats[key].totalDelay += delay;
@@ -9927,6 +10084,16 @@ function renderReportFiscal() {
 // ============================================
 // EXPORT CSV REPORTS
 // ============================================
+function exportPaymentsCSV() {
+    const invoices = Storage.get('invoices', []) || [], payments = Storage.get('payments', []) || [];
+    if (paymentEvents(invoices, payments).length === 0) { showToast('Aucun paiement à exporter', 'error'); return; }
+    const blob = new Blob(['\uFEFF' + paymentsCsv(invoices, payments)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = `facturapro-paiements-${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    showToast('Paiements exportés ✓', 'success');
+}
+
 function exportReportCSV(type) {
     const range = getReportDateRange();
     let headers, rows, filename;
@@ -9935,18 +10102,24 @@ function exportReportCSV(type) {
         const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
             i.type !== 'credit' && i.status !== 'draft' && isInReportRange(i.date, range)
         );
-        headers = ['N° Facture', 'Date', 'Client', 'Montant HT', 'TVA', 'Montant TTC', 'Échéance', 'Statut', 'Date Paiement'];
-        rows = allInvoices.map(i => [
-            i.number || '',
-            formatDate(i.date),
-            i.clientName || '',
-            (i.totalHT || 0).toFixed(2),
-            (i.totalTVA || 0).toFixed(2),
-            (i.totalTTC || 0).toFixed(2),
-            i.dueDate ? formatDate(i.dueDate) : '',
-            i.status || '',
-            i.paymentDate ? formatDate(i.paymentDate) : ''
-        ]);
+        const _rpPay = Storage.get('payments', []) || [], _rpAll = Storage.get('invoices', []) || [];
+        headers = ['N° Facture', 'Date', 'Client', 'Montant HT', 'TVA', 'Montant TTC', 'Encaissé', 'Reste à payer', 'Échéance', 'Statut', 'Date dernier paiement'];
+        rows = allInvoices.map(i => {
+            const st = getInvoiceWithStatus(i).status, lp = invoiceLastPaymentDate(i, _rpPay);
+            return [
+                i.number || '',
+                formatDate(i.date),
+                i.clientName || '',
+                (i.totalHT || 0).toFixed(2),
+                (i.totalTVA || 0).toFixed(2),
+                (i.totalTTC || 0).toFixed(2),
+                invoicePaidAmount(i, _rpPay).toFixed(2),
+                invoiceRemaining(i, _rpPay, _rpAll).toFixed(2),
+                i.dueDate ? formatDate(i.dueDate) : '',
+                statusLabel(st),
+                lp ? formatDate(lp) : ''
+            ];
+        });
         filename = 'rapport-factures';
     } else if (type === 'topclients') {
         const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
@@ -10018,10 +10191,7 @@ function exportReportCSV(type) {
     }
     
     let csv = headers.join(';') + '\n';
-    csv += rows.map(r => r.map(cell => {
-        const s = String(cell || '');
-        return s.includes(';') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(';')).join('\n');
+    csv += rows.map(r => r.map(csvText).join(';')).join('\n');   // csvText : guillemets, retours à la ligne et formules (=, +, -, @) neutralisées
     
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -10393,6 +10563,8 @@ function updateLogoSection() {
         activeSection.style.display = 'none';
     }
     
+    updateStampSection();
+
     // Update accounting export note based on tier
     const noteEl = document.getElementById('accountingExportNote');
     if (noteEl) {
@@ -10459,6 +10631,53 @@ function removeLogo() {
     showToast('Logo supprimé', 'success');
 }
 
+// Cachet et signature de l'entreprise : abonnés seulement (comme le logo), image stockée dans « company » (donc synchronisée avec le compte)
+const STAMP_MAX_BYTES = 300 * 1024;
+function updateStampSection() {
+    const locked = document.getElementById('stampLockedSection'), active = document.getElementById('stampActiveSection');
+    if (!locked || !active) return;
+    if (!isUserLicensed()) { locked.style.display = 'block'; active.style.display = 'none'; return; }
+    locked.style.display = 'none'; active.style.display = 'block';
+    const company = Storage.get('company', {});
+    const preview = document.getElementById('stampPreview'), btn = document.getElementById('removeStampBtn');
+    if (company.stamp) {
+        preview.innerHTML = '<img src="' + company.stamp + '" style="max-width: 100%; max-height: 90px; object-fit: contain;" alt="Cachet">';
+        if (btn) btn.style.display = 'block';
+    } else {
+        preview.innerHTML = '<span style="color: var(--ink-mute); font-size: 12px;">Aucun cachet</span>';
+        if (btn) btn.style.display = 'none';
+    }
+}
+
+function handleStampUpload(event) {
+    if (!isUserLicensed()) { showToast('🔒 Activez votre licence pour ajouter un cachet', 'error'); return; }
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > STAMP_MAX_BYTES) { showToast('Image trop volumineuse. Max 300 Ko.', 'error'); event.target.value = ''; return; }
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) { showToast('Format non supporté. Utilisez PNG, JPG ou WebP.', 'error'); event.target.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const company = Storage.get('company', {});
+        company.stamp = e.target.result; // base64
+        Storage.set('company', company);
+        updateStampSection();
+        showToast('Cachet enregistré ✓', 'success');
+    };
+    reader.onerror = () => showToast('Erreur lors de la lecture du fichier', 'error');
+    reader.readAsDataURL(file);
+}
+
+function removeStamp() {
+    if (!confirm('Supprimer le cachet et la signature ?')) return;
+    const company = Storage.get('company', {});
+    delete company.stamp;
+    Storage.set('company', company);
+    updateStampSection();
+    const input = document.getElementById('stampUploadInput');
+    if (input) input.value = '';
+    showToast('Cachet supprimé', 'success');
+}
+
 function loadCompanyForm() {
     const company = Storage.get('company', {});
     
@@ -10485,6 +10704,7 @@ function loadCompanyForm() {
     
     // Logo handling - only for licensed users
     updateLogoSection();
+    updateStartNumbersSection();
     
     // Stats (filtrables par période)
     try { const sel = document.getElementById('cmpStatPeriod'); const v = localStorage.getItem('fp_stat_period'); if (sel && v) sel.value = v; } catch {}
@@ -10510,7 +10730,8 @@ function renderCompanyStats() {
     const invoices = Storage.get('invoices', []).filter(i => inPeriod(i.date));
     const quotes = Storage.get('quotes', []).filter(q => inPeriod(q.date));
     const clients = Storage.get('clients', []).filter(c => inPeriod(c.createdAt));
-    const totalCA = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const statPays = Storage.get('payments', []) || [];
+    const totalCA = invoices.reduce((s, i) => s + invoicePaidAmount(i, statPays), 0);
     document.getElementById('cmpStatInvoices').textContent = invoices.length;
     document.getElementById('cmpStatQuotes').textContent = quotes.length;
     document.getElementById('cmpStatClients').textContent = clients.length;
@@ -10519,6 +10740,7 @@ function renderCompanyStats() {
 
 function saveCompany() {
     const company = Storage.get('company', {});
+    if (!applyStartNumbers()) return;   // valeur invalide : rien n'est enregistré
     
     const updated = {
         ...company,
@@ -10549,8 +10771,95 @@ function saveCompany() {
     renderDashboard();
 }
 
+// ---- Numérotation de départ (souscription en cours d'année) ----------------
+// Le compteur local sert de plancher à la PREMIÈRE attribution serveur (next_doc_number, sql/14) ;
+// ensuite le serveur tient la suite et le client ne peut plus la modifier. On verrouille donc le champ
+// dès qu'un document de ce type a déjà été émis ici.
+const START_NUMBER_MAX = 1000000;
+const START_NUMBER_FIELDS = { invoice: 'cmpStartInvoice', quote: 'cmpStartQuote', credit: 'cmpStartCredit' };
+function hasIssuedDocs(type) {
+    if (type === 'quote') return (Storage.get('quotes', []) || []).some(d => d && d.number && !isDraftNumber(d.number));
+    return (Storage.get('invoices', []) || []).some(d => d && d.number && !isDraftNumber(d.number) && (d.type || 'invoice') === type);
+}
+function updateStartNumbersSection() {
+    const counter = Storage.get('counter', {}) || {};
+    let locked = 0;
+    for (const t of Object.keys(START_NUMBER_FIELDS)) {
+        const el = document.getElementById(START_NUMBER_FIELDS[t]);
+        if (!el) continue;
+        el.value = String(counter[t] || 0);
+        const l = hasIssuedDocs(t);
+        el.disabled = l;
+        if (l) locked++;
+    }
+    const yr = document.querySelector('#startNumbersBox .yr'); if (yr) yr.textContent = String(new Date().getFullYear());
+    const hint = document.getElementById('startNumbersHint');
+    if (hint) hint.textContent = locked
+        ? 'Les champs grisés sont verrouillés : des documents de ce type ont déjà été émis, le serveur tient la suite.'
+        : 'Aucun document émis pour l\'instant : vous pouvez encore régler le départ.';
+}
+// Retourne false (et affiche l'erreur) si une valeur est invalide ; n'écrit rien dans ce cas.
+function applyStartNumbers() {
+    const counter = Object.assign({ invoice: 0, quote: 0, credit: 0 }, Storage.get('counter', {}) || {});
+    let changed = false;
+    for (const t of Object.keys(START_NUMBER_FIELDS)) {
+        const el = document.getElementById(START_NUMBER_FIELDS[t]);
+        if (!el || el.disabled) continue;
+        const raw = String(el.value).trim();
+        if (el.validity && el.validity.badInput) { showToast('Numérotation de départ invalide : entier entre 0 et ' + START_NUMBER_MAX, 'error'); return false; }
+        if (raw === '') continue;
+        const n = Number(raw);
+        if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 0 || n > START_NUMBER_MAX) {
+            showToast('Numérotation de départ invalide : entier entre 0 et ' + START_NUMBER_MAX, 'error');
+            return false;
+        }
+        if (n !== (counter[t] || 0)) { counter[t] = n; changed = true; }
+    }
+    if (changed) { Storage.set('counter', counter); updateStartNumbersSection(); }
+    return true;
+}
+
+// ---- Exemples (aperçu seulement : rien n'est enregistré, aucun numéro consommé) ----
+function buildSampleData() {
+    const iso = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    const items = [
+        { description: 'Prestation d\'exemple', quantity: 2, price: 500, unitPrice: 500, tva: 20, discount: 0, totalHT: 1000, totalTVA: 200, totalTTC: 1200 },
+        { description: 'Produit d\'exemple', quantity: 1, price: 250, unitPrice: 250, tva: 20, discount: 0, totalHT: 250, totalTVA: 50, totalTTC: 300 }
+    ];
+    const invoice = { id: 'sample-invoice', type: 'invoice', number: getNextNumberPreview('invoice') + ' (EXEMPLE)', clientId: 'sample-client',
+        clientName: 'CLIENT EXEMPLE SARL', clientICE: '000000000000000', clientAddress: 'Adresse fictive, Casablanca', date: iso(0), dueDate: iso(-30), status: 'draft',
+        items, totalHT: 1250, totalTVA: 250, totalTTC: 1500, notes: 'EXEMPLE FICTIF : document non valable, non enregistré.' };
+    const payment = { id: 'sample-payment', invoiceId: invoice.id, date: iso(0), amount: 500, method: 'virement', reference: 'EXEMPLE', createdAt: new Date().toISOString() };
+    return { invoice, payment, client: { id: 'sample-client', name: invoice.clientName, ice: invoice.clientICE } };
+}
+function drawSampleWatermark(pdf) {
+    const n = pdf.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+        pdf.setPage(i);
+        pdf.saveGraphicsState();
+        pdf.setGState(new pdf.GState({ opacity: 0.15 }));
+        pdf.setTextColor(200, 30, 30); pdf.setFontSize(90); pdf.setFont('helvetica', 'bold');
+        pdf.text('EXEMPLE', 105, 165, { align: 'center', angle: -30 });
+        pdf.restoreGraphicsState();
+    }
+}
+async function downloadSampleInvoice() {
+    const sm = buildSampleData();
+    await generatePDF(sm.invoice.id, 'invoice', { sample: sm.invoice });
+}
+async function downloadSampleReceipt() {
+    const sm = buildSampleData();
+    await generatePaymentReceiptPDF(sm.payment.id, { sample: sm });
+}
+
+// ---- Sauvegarde technique (JSON) --------------------------------------------
+const TECH_BACKUP_FORMAT = 'facturapro-sauvegarde-technique';
+const TECH_BACKUP_MAX_BYTES = 10 * 1024 * 1024;
+const TECH_BACKUP_MAX_ITEMS = 5000;
 function exportData() {
     const data = {
+        format: TECH_BACKUP_FORMAT,
+        version: 1,
         company: Storage.get('company'),
         clients: Storage.get('clients', []),
         products: Storage.get('products', []),
@@ -10566,10 +10875,90 @@ function exportData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `facturapro-export-${todayISO()}.json`;
+    a.download = `facturapro-sauvegarde-technique-${todayISO()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Export téléchargé ✓', 'success');
+    showToast('Sauvegarde technique téléchargée ✓', 'success');
+}
+// Copie « propre » : JSON pur, sans clés dangereuses (__proto__/constructor/prototype), profondeur bornée.
+function cleanImported(v, depth) {
+    if (depth > 8) return undefined;
+    if (v === null || typeof v === 'string' || typeof v === 'boolean') return v;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+    if (Array.isArray(v)) return v.slice(0, TECH_BACKUP_MAX_ITEMS).map(x => cleanImported(x, depth + 1)).filter(x => x !== undefined);
+    if (typeof v === 'object') {
+        const o = {};
+        for (const k of Object.keys(v)) {
+            if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+            const c = cleanImported(v[k], depth + 1);
+            if (c !== undefined) o[k] = c;
+        }
+        return o;
+    }
+    return undefined;
+}
+// Analyse + fusion sans écrasement. Pure (ne touche pas au stockage) : renvoie le plan.
+function planTechnicalImport(parsed, current) {
+    const errors = [];
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { errors: ['Le fichier n\'est pas une sauvegarde FacturaPro.'] };
+    if (parsed.format !== TECH_BACKUP_FORMAT && !(Array.isArray(parsed.clients) || Array.isArray(parsed.invoices))) return { errors: ['Format non reconnu : ce n\'est pas une sauvegarde technique FacturaPro.'] };
+    if (parsed.version !== undefined && parsed.version !== 1) errors.push('Version de sauvegarde non prise en charge : ' + String(parsed.version).slice(0, 20));
+    for (const k of ['clients', 'products', 'invoices', 'quotes', 'payments']) {
+        if (parsed[k] !== undefined && !Array.isArray(parsed[k])) errors.push('Champ « ' + k + ' » invalide (liste attendue).');
+        else if (Array.isArray(parsed[k]) && parsed[k].length > TECH_BACKUP_MAX_ITEMS) errors.push('Trop d\'éléments dans « ' + k + ' » (maximum ' + TECH_BACKUP_MAX_ITEMS + ').');
+    }
+    if (errors.length) return { errors };
+    const plan = { errors: [], add: { clients: [], products: [], invoices: [], quotes: [] }, skipped: { duplicates: 0, invalid: 0, issuedInvoices: 0, payments: 0 } };
+    const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+    const goodId = (x) => isObj(x) && typeof x.id === 'string' && x.id.length > 0 && x.id.length <= 100;
+    const ids = (arr) => new Set((arr || []).map(x => x && x.id));
+    const take = (key, label, test) => {
+        const have = ids(current[key]); const seen = new Set();
+        for (const raw of (parsed[key] || [])) {
+            if (!goodId(raw) || !test(raw)) { if (key === 'invoices' && isObj(raw) && raw.number && !isDraftNumber(raw.number) && (raw.status || 'draft') !== 'draft') plan.skipped.issuedInvoices++; else plan.skipped.invalid++; continue; }
+            if (have.has(raw.id) || seen.has(raw.id)) { plan.skipped.duplicates++; continue; }
+            seen.add(raw.id);
+            plan.add[key].push(cleanImported(raw, 0));
+        }
+    };
+    take('clients', 'clients', c => typeof c.name === 'string' && c.name.trim().length > 0);
+    take('products', 'produits', c => typeof c.name === 'string' && c.name.trim().length > 0);
+    // Factures : SEULS les brouillons (le serveur refuse tout document émis ou numéroté, sql/14)
+    take('invoices', 'factures', d => (d.status || 'draft') === 'draft' && (!d.number || isDraftNumber(d.number)) && Array.isArray(d.items));
+    // Devis : numéro libre mais jamais en double avec un devis existant
+    const haveNums = new Set((current.quotes || []).map(q => q && q.number).filter(Boolean));
+    take('quotes', 'devis', d => Array.isArray(d.items) && (!d.number || isDraftNumber(d.number) || !haveNums.has(d.number)));
+    plan.skipped.payments = Array.isArray(parsed.payments) ? parsed.payments.length : 0;
+    return plan;
+}
+function importTechnicalBackup(event) {
+    const input = event && event.target; const file = input && input.files && input.files[0];
+    if (!file) return;
+    const done = () => { try { input.value = ''; } catch (e) {} };
+    if (file.size > TECH_BACKUP_MAX_BYTES) { showToast('Fichier trop volumineux (10 Mo maximum).', 'error'); return done(); }
+    const reader = new FileReader();
+    reader.onerror = () => { showToast('Lecture du fichier impossible.', 'error'); done(); };
+    reader.onload = () => {
+        let parsed;
+        try { parsed = JSON.parse(String(reader.result)); } catch (e) { showToast('Fichier illisible : JSON invalide. Rien n\'a été modifié.', 'error'); return done(); }
+        const current = { clients: Storage.get('clients', []), products: Storage.get('products', []), invoices: Storage.get('invoices', []), quotes: Storage.get('quotes', []) };
+        const plan = planTechnicalImport(parsed, current);
+        if (plan.errors.length) { showToast(plan.errors[0] + ' Rien n\'a été modifié.', 'error'); return done(); }
+        const a = plan.add, n = a.clients.length + a.products.length + a.invoices.length + a.quotes.length;
+        const sk = plan.skipped;
+        const msg = 'Importer cette sauvegarde technique ?\n\nSeront AJOUTÉS : ' + a.clients.length + ' client(s), ' + a.products.length + ' produit(s), ' + a.invoices.length + ' brouillon(s) de facture, ' + a.quotes.length + ' devis.\n'
+            + 'Ignorés : ' + sk.duplicates + ' déjà présent(s), ' + sk.invalid + ' invalide(s), ' + sk.issuedInvoices + ' facture(s) émise(s) et ' + sk.payments + ' paiement(s) (non réimportables : verrouillés par le serveur).\n'
+            + 'Rien de ce qui existe déjà ne sera écrasé.';
+        if (n === 0) { showToast('Rien de nouveau à importer. Aucune donnée modifiée.', 'warning'); return done(); }
+        if (!confirm(msg)) { showToast('Import annulé. Rien n\'a été modifié.', 'warning'); return done(); }
+        for (const k of ['clients', 'products', 'invoices', 'quotes']) {
+            if (a[k].length) Storage.set(k, (Storage.get(k, []) || []).concat(a[k]));
+        }
+        try { renderDashboard(); } catch (e) {}
+        showToast('Import terminé : ' + n + ' élément(s) ajouté(s) ✓', 'success');
+        done();
+    };
+    reader.readAsText(file);
 }
 
 // ============================================
@@ -10625,6 +11014,7 @@ function exportAccounting(format = 'csv') {
         ];
         
         const rows = [];
+        const _acPay = Storage.get('payments', []) || [], _acLast = (inv) => invoiceLastPaymentDate(inv, _acPay);
         invoices.forEach(inv => {
             const client = (Storage.get('clients', []).find(c => c.id === inv.clientId)) || {};
             
@@ -10648,17 +11038,14 @@ function exportAccounting(format = 'csv') {
                     Number(L.totalTVA || 0).toFixed(2),
                     Number(L.totalTTC || 0).toFixed(2),
                     inv.status || '',
-                    inv.paymentDate ? formatDate(inv.paymentDate) : '',
-                    inv.paymentMode || ''
+                    _acLast(inv) ? formatDate(_acLast(inv)) : '',
+                    invoicePaymentMethods(inv, _acPay)
                 ]);
             });
         });
         
         let csv = headers.join(';') + '\n'; // ; pour Excel français
-        csv += rows.map(r => r.map(cell => {
-            const s = String(cell || '');
-            return s.includes(';') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-        }).join(';')).join('\n');
+        csv += rows.map(r => r.map(csvText).join(';')).join('\n');
         
         const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -11739,7 +12126,155 @@ function getOverdueDays(invoice) {
     return diff > 0 ? diff : 0;
 }
 
+// <PAIEMENTS-CALC>
+// Montants encaissés / restants : règle unique pour tout l'écran (tableau de bord, paiements, relances).
+// Fonctions pures : aucune lecture de stockage ni de DOM, testées dans tests/paiements.unit.test.js.
+function money2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+// Montant déjà encaissé sur une facture (jamais négatif, jamais au-delà du TTC). Facture « payée » = soldée.
+function invoicePaidAmount(inv, payments) {
+    const ttc = money2(inv && inv.totalTTC);
+    if (!inv || ttc <= 0 || inv.status === 'draft') return 0;
+    if (inv.status === 'paid') return ttc;
+    const sum = (Array.isArray(payments) ? payments : []).filter(p => p && p.invoiceId === inv.id)
+        .reduce((t, p) => t + money2(p.amount), 0);
+    return Math.min(ttc, Math.max(0, money2(Math.max(sum, Number(inv.paidAmount) || 0))));
+}
+// Montant (positif) crédité par des avoirs émis sur cette facture. Règle interne : un avoir réduit la somme due ; l'application
+// n'émet qu'un avoir par facture, toujours égal au TTC (annulation totale).
+function invoiceCreditedAmount(inv, invoices) {
+    if (!inv || inv.type === 'credit' || !Array.isArray(invoices)) return 0;
+    return money2(invoices.filter(c => c && c.type === 'credit' && c.status !== 'draft' &&
+        ((c.relatedInvoiceId && c.relatedInvoiceId === inv.id) || (!c.relatedInvoiceId && c.relatedInvoiceNumber && c.relatedInvoiceNumber === inv.number)))
+        .reduce((t, c) => t + Math.abs(money2(c.totalTTC)), 0));
+}
+// Facture entièrement annulée par un avoir (et non payée : une facture déjà payée puis créditée relève d'un remboursement, non géré).
+function isCancelledByCredit(inv, invoices) {
+    const ttc = money2(inv && inv.totalTTC);
+    if (!inv || ttc <= 0 || inv.status === 'draft' || inv.status === 'paid') return false;
+    return invoiceCreditedAmount(inv, invoices) >= ttc - 0.005;
+}
+// Reste à payer (0 pour un brouillon, un avoir, une facture soldée ou annulée par avoir). `invoices` : toutes les pièces, pour tenir compte des avoirs.
+function invoiceRemaining(inv, payments, invoices) {
+    const ttc = money2(inv && inv.totalTTC);
+    if (!inv || ttc <= 0 || inv.status === 'draft') return 0;
+    return money2(Math.max(0, ttc - invoicePaidAmount(inv, payments) - invoiceCreditedAmount(inv, invoices)));
+}
+// Un paiement est-il acceptable ? { ok, reason }
+function checkPaymentAmount(inv, amount, payments, invoices) {
+    const a = money2(amount);
+    if (!inv) return { ok: false, reason: 'Sélectionnez une facture' };
+    if (!(a > 0)) return { ok: false, reason: 'Date et montant requis' };
+    if (isCancelledByCredit(inv, invoices)) return { ok: false, reason: 'Cette facture est annulée par un avoir' };
+    const rest = invoiceRemaining(inv, payments, invoices);
+    if (rest <= 0) return { ok: false, reason: 'Cette facture est déjà soldée' };
+    if (a > rest + 0.005) return { ok: false, reason: 'Montant supérieur au reste à payer' };
+    return { ok: true, remaining: rest };
+}
+// Rapprochement des factures après le REFUS SERVEUR d'un tableau de paiements (plafond, sql/26) : l'écriture de la facture (statut « payée »,
+// paidAmount) est partie séparément et a pu être acceptée. Pour chaque facture dont le cumul refusé dépasse celui du serveur, on retire de
+// paidAmount l'excédent refusé (sans jamais descendre sous les paiements du serveur) et une facture devenue « payée » à tort repasse « envoyée ».
+// Fonction pure : retourne de NOUVEAUX objets, ne modifie pas les entrées.
+function reconcileInvoicesAfterPaymentRefusal(invoices, serverPayments, refusedPayments) {
+    const sumFor = (list, id) => (Array.isArray(list) ? list : []).filter(p => p && p.invoiceId === id).reduce((t, p) => t + money2(p.amount), 0);
+    let changed = 0;
+    const out = (Array.isArray(invoices) ? invoices : []).map(inv => {
+        if (!inv || !inv.id || inv.status === 'draft') return inv;
+        const inc = money2(sumFor(refusedPayments, inv.id) - sumFor(serverPayments, inv.id));
+        if (inc <= 0.005) return inv;                                           // ce paiement refusé ne concerne pas cette facture
+        const paidNow = money2(inv.paidAmount), srv = money2(sumFor(serverPayments, inv.id));
+        const newPaid = money2(Math.max(srv, paidNow - inc));
+        if (newPaid >= paidNow - 0.005) return inv;                             // avancement déjà cohérent
+        const fixed = { ...inv, paidAmount: newPaid };
+        if (fixed.status === 'paid' && newPaid + 0.01 < money2(inv.totalTTC)) { fixed.status = 'sent'; delete fixed.paidAt; }
+        changed++;
+        return fixed;
+    });
+    return { invoices: out, changed };
+}
+
+// Encaissements datés : une ligne par paiement enregistré (date du paiement) ; pour une facture « payée » ou avec un montant payé sans
+// ligne de paiement (anciennes données), le complément est daté de paidAt / paymentDate / date de la facture. Jamais de brouillon ni d'avoir.
+function paymentEvents(invoices, payments) {
+    const list = Array.isArray(payments) ? payments : [], ev = [];
+    (Array.isArray(invoices) ? invoices : []).forEach(inv => {
+        const ttc = money2(inv && inv.totalTTC);
+        if (!inv || inv.type === 'credit' || ttc <= 0 || inv.status === 'draft') return;
+        let covered = 0;
+        list.filter(p => p && p.invoiceId === inv.id).forEach(p => {
+            const a = money2(p.amount); if (a <= 0) return;
+            covered = money2(covered + a);
+            ev.push({ invoiceId: inv.id, date: String(p.date || inv.paidAt || inv.date || '').slice(0, 10), amount: a, method: p.method || '', reference: p.reference || '' });
+        });
+        const target = inv.status === 'paid' ? ttc : Math.min(ttc, money2(Number(inv.paidAmount) || 0));
+        if (target - covered > 0.005) ev.push({ invoiceId: inv.id, date: String(inv.paidAt || inv.paymentDate || inv.date || '').slice(0, 10), amount: money2(target - covered), method: '', reference: '' });
+    });
+    return ev;
+}
+// Date du dernier encaissement d'une facture ('' si aucun) et modes de paiement utilisés.
+function invoiceLastPaymentDate(inv, payments) {
+    const d = paymentEvents([inv], payments).map(e => e.date).filter(Boolean).sort();
+    return d.length ? d[d.length - 1] : '';
+}
+function invoicePaymentMethods(inv, payments) {
+    return Array.from(new Set(paymentEvents([inv], payments).map(e => e.method).filter(Boolean))).join(' / ');
+}
+// Export CSV des paiements (pièces justificatives) : une ligne par encaissement, neutralisation des formules, séparateur « ; ».
+function paymentsCsv(invoices, payments) {
+    const byId = {}; (invoices || []).forEach(i => { if (i) byId[i.id] = i; });
+    const rows = paymentEvents(invoices, payments).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const L = [['Date', 'N° facture', 'Client', 'Montant', 'Mode', 'Référence'].join(';')];
+    rows.forEach(e => { const i = byId[e.invoiceId] || {}; L.push([e.date, csvText(i.number || ''), csvText(i.clientName || ''), e.amount.toFixed(2), csvText(e.method), csvText(e.reference)].join(';')); });
+    return L.join('\n');
+}
+// Situation d'encaissement d'une facture pour l'affichage : { state, total, paid, remaining }.
+// state : 'none' (rien payé), 'partial' (acompte), 'paid' (soldée), 'closed' (brouillon, avoir, annulée), 'credited' (annulée par avoir).
+// Source unique du « reste à payer » : invoiceRemaining (tient compte des avoirs), jamais un second calcul.
+function paymentSituation(inv, payments, invoices) {
+    const total = money2(inv && inv.totalTTC);
+    if (!inv || inv.status === 'draft' || inv.type === 'credit' || total <= 0) return { state: 'closed', total, paid: 0, remaining: 0 };
+    // Une facture annulée par un avoir est passée au statut « cancelled » par getInvoiceWithStatus : on la reconnaît AVANT le statut.
+    if (isCancelledByCredit(inv, invoices)) return { state: 'credited', total, paid: invoicePaidAmount(inv, payments), remaining: 0 };
+    if (inv.status === 'cancelled') return { state: 'closed', total, paid: 0, remaining: 0 };
+    const paid = invoicePaidAmount(inv, payments), remaining = invoiceRemaining(inv, payments, invoices);
+    if (remaining <= 0 || inv.status === 'paid') return { state: 'paid', total, paid, remaining: 0 };
+    return { state: paid > 0 ? 'partial' : 'none', total, paid, remaining };
+}
+// Nature d'une pièce dans la liste des factures : 'draft' (brouillon non enregistré), 'credit' (avoir) ou 'issued' (facture enregistrée, numérotée, verrouillée).
+function invoiceListKind(inv) {
+    if (!inv) return 'draft';
+    if (inv.type === 'credit' || money2(inv.totalTTC) < 0) return 'credit';
+    if ((inv.status || 'draft') === 'draft' || (typeof inv.number === 'string' && inv.number.startsWith('BRO-'))) return 'draft';
+    return 'issued';
+}
+// La pièce passe-t-elle le filtre de la liste ? filter : all | draft | issued | none | partial | paid | overdue | credit
+function invoiceMatchesFilter(inv, filter, payments, invoices) {
+    const kind = invoiceListKind(inv);
+    if (!filter || filter === 'all') return true;
+    if (filter === 'draft') return kind === 'draft';
+    if (filter === 'credit') return kind === 'credit';
+    if (filter === 'issued') return kind === 'issued';
+    if (kind !== 'issued') return false;                                   // les filtres d'encaissement ne concernent que les factures enregistrées
+    const st = paymentSituation(inv, payments, invoices);
+    if (filter === 'none') return st.state === 'none';
+    if (filter === 'partial') return st.state === 'partial';
+    if (filter === 'paid') return st.state === 'paid';
+    if (filter === 'overdue') {
+        if (st.remaining <= 0 || !inv.dueDate) return false;
+        const due = new Date(inv.dueDate), t = new Date(); due.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
+        return t > due;
+    }
+    return true;
+}
+// </PAIEMENTS-CALC>
+
+let _creditCache = { ref: null, list: null };
 function getInvoiceWithStatus(invoice) {
+    // Facture annulée par un avoir : ni en attente, ni en retard, ni relançable
+    if (invoice.type !== 'credit' && invoice.status !== 'paid' && invoice.status !== 'draft') {
+        const all = Storage.get('invoices', []) || [];
+        if (_creditCache.ref !== all) _creditCache = { ref: all, list: all.filter(c => c && c.type === 'credit') };
+        if (_creditCache.list.length && isCancelledByCredit(invoice, _creditCache.list)) return { ...invoice, status: 'cancelled' };
+    }
     // Auto-detect overdue status
     if (invoice.status !== 'paid' && invoice.status !== 'draft') {
         const overdueDays = getOverdueDays(invoice);
@@ -11753,21 +12288,21 @@ function getInvoiceWithStatus(invoice) {
 function renderPayments() {
     const invoices = (Storage.get('invoices', []) || []).map(getInvoiceWithStatus);
     const payments = Storage.get('payments', []) || [];
-    const filter = document.getElementById('paymentFilter')?.value || 'pending';
+    const filter = document.getElementById('paymentFilter')?.value || 'open';
     
     // Stats
     const today = new Date();
-    const thisMonthInvoices = invoices.filter(i => {
-        const d = new Date(i.date);
-        return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear() && i.status === 'paid';
-    });
-    const thisMonthTotal = thisMonthInvoices.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    // Encaissé ce mois = paiements reçus ce mois (date du paiement), partiels compris
+    const thisMonthTotal = payments.filter(p => {
+        const d = new Date(p.date);
+        return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    }).reduce((s, p) => s + money2(p.amount), 0);
     
     const pending = invoices.filter(i => i.status === 'sent');
-    const pendingTotal = pending.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const pendingTotal = pending.reduce((s, i) => s + invoiceRemaining(i, payments), 0);
     
     const overdue = invoices.filter(i => i.status === 'overdue');
-    const overdueTotal = overdue.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const overdueTotal = overdue.reduce((s, i) => s + invoiceRemaining(i, payments), 0);
     
     // Average payment delay
     const paidInvoices = invoices.filter(i => i.status === 'paid');
@@ -11798,9 +12333,13 @@ function renderPayments() {
     
     // Filter invoices
     let filtered = invoices.filter(i => i.status !== 'draft');
-    if (filter === 'pending') filtered = filtered.filter(i => i.status === 'sent');
-    if (filter === 'overdue') filtered = filtered.filter(i => i.status === 'overdue');
-    if (filter === 'paid') filtered = filtered.filter(i => i.status === 'paid');
+    const sit = (i) => paymentSituation(i, payments, invoices);
+    filtered = filtered.filter(i => i.type !== 'credit' && sit(i).state !== 'closed');       // les avoirs et pièces sans montant ne sont pas « à encaisser »
+    if (filter === 'open') filtered = filtered.filter(i => ['none', 'partial'].includes(sit(i).state));
+    if (filter === 'none') filtered = filtered.filter(i => sit(i).state === 'none');
+    if (filter === 'partial') filtered = filtered.filter(i => sit(i).state === 'partial');
+    if (filter === 'overdue') filtered = filtered.filter(i => i.status === 'overdue' && sit(i).remaining > 0);
+    if (filter === 'paid') filtered = filtered.filter(i => sit(i).state === 'paid');
     
     const sorted = [...filtered].sort((a, b) => {
         // Overdue first, then by due date
@@ -11819,35 +12358,29 @@ function renderPayments() {
             </div>`;
     } else {
         listEl.innerHTML = `
-            <table class="tbl-act">
+            <table class="tbl-act tbl-pay">
                 <thead>
                     <tr>
                         <th>Facture</th>
-                        <th>Client</th>
-                        <th>Émission</th>
-                        <th>Échéance</th>
-                        <th>Montant</th>
-                        <th>Statut</th>
+                        <th>Encaissement</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${sorted.map(inv => {
-                        const overdueDays = inv.overdueDays || 0;
+                        const st = sit(inv), overdueDays = inv.overdueDays || 0;
+                        const money = (n) => formatCurrency(n);
+                        const line = st.state === 'paid' ? `<span class="pay-ok">✓ Soldée · ${money(st.total)}</span>`
+                            : st.state === 'credited' ? `<span class="pay-mute">Annulée (avoir)</span>`
+                            : st.state === 'partial' ? `<span class="pay-paid">Payé ${money(st.paid)}</span> <span class="pay-sep">·</span> <strong class="pay-rest">Reste ${money(st.remaining)}</strong><span class="pay-of">sur ${money(st.total)}</span>`
+                            : `<span class="pay-none">Aucun paiement</span> <span class="pay-sep">·</span> <strong class="pay-rest">Reste ${money(st.remaining)}</strong>`;
                         return `
                             <tr>
-                                <td><strong>${escapeHtml(inv.number)}</strong></td>
-                                <td>${escapeHtml(inv.clientName || '—')}</td>
-                                <td>${formatDate(inv.date)}</td>
+                                <td onclick="editInvoice('${inv.id}')"><strong>${escapeHtml(dn(inv.number))}</strong><br><span class="pay-client">${escapeHtml(inv.clientName || '—')}</span><br><span class="pay-due">Échéance ${formatDate(inv.dueDate)}${overdueDays > 0 ? ` <span style="color: var(--danger); font-weight: 700;">· +${overdueDays} j de retard</span>` : ''}</span></td>
+                                <td onclick="editInvoice('${inv.id}')">${line}</td>
                                 <td>
-                                    ${formatDate(inv.dueDate)}
-                                    ${overdueDays > 0 ? `<br><span style="color: var(--danger); font-size: 11px; font-weight: 700;">+${overdueDays} jours</span>` : ''}
-                                </td>
-                                <td><strong>${formatCurrency(inv.totalTTC)}</strong></td>
-                                <td><span class="status-pill status-${inv.status}">${statusLabel(inv.status)}</span></td>
-                                <td>
-                                    ${inv.status !== 'paid' ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">✓ Marquer payée</button>` : ''}
-                                    <button class="btn btn-ghost btn-sm" onclick="editInvoice('${inv.id}')" title="Voir">👁</button>
+                                    ${st.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">${st.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
+                                    <button class="btn btn-ghost btn-sm" onclick="editInvoice('${inv.id}')" title="Voir la facture">👁</button>
                                 </td>
                             </tr>
                         `;
@@ -11891,9 +12424,9 @@ function renderPayments() {
                         return `
                             <tr>
                                 <td>${formatDate(p.date)}</td>
-                                <td><strong>${escapeHtml(inv?.number || '—')}</strong></td>
+                                <td>${inv ? `<a href="#" onclick="editInvoice('${inv.id}'); return false;" style="color: inherit; font-weight: 700; text-decoration: underline dotted;" title="Ouvrir la facture">${escapeHtml(dn(inv.number))}</a>` : '<strong>—</strong>'}</td>
                                 <td>${escapeHtml(inv?.clientName || '—')}</td>
-                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong></td>
+                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong><br><button class="btn btn-secondary btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="generatePaymentReceiptPDF('${p.id}')" title="Télécharger le reçu de paiement (PDF)">🧾 Reçu</button>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
                                 <td>${methodLabels[p.method] || p.method}</td>
                                 <td>${escapeHtml(p.reference || '—')}</td>
                             </tr>
@@ -11912,14 +12445,15 @@ function recordPayment() {
     
     // Populate invoices select
     const invoices = (Storage.get('invoices', []) || []).map(getInvoiceWithStatus);
-    const unpaid = invoices.filter(i => i.status !== 'paid' && i.status !== 'draft');
+    const unpaid = invoices.filter(i => i.status !== 'paid' && i.status !== 'draft' && i.status !== 'cancelled');
     
     const select = document.getElementById('paymentInvoice');
     select.innerHTML = '<option value="">— Sélectionner une facture —</option>' +
-        unpaid.map(i => `<option value="${i.id}">${escapeHtml(i.number)} — ${escapeHtml(i.clientName || '—')} — ${formatCurrency(i.totalTTC)}</option>`).join('');
+        unpaid.filter(i => invoiceRemaining(i, Storage.get('payments', []) || []) > 0).map(i => { const r = invoiceRemaining(i, Storage.get('payments', []) || []); return `<option value="${i.id}">${escapeHtml(i.number)} — ${escapeHtml(i.clientName || '—')} — reste ${formatCurrency(r)}${r < (i.totalTTC || 0) ? ' sur ' + formatCurrency(i.totalTTC) : ''}</option>`; }).join('');
     
     document.getElementById('paymentDate').value = todayISO();
     document.getElementById('paymentAmount').value = '';
+    const hintEl = document.getElementById('paymentRemainingHint'); if (hintEl) hintEl.textContent = '';
     document.getElementById('paymentMethod').value = 'virement';
     document.getElementById('paymentReference').value = '';
     document.getElementById('paymentNotes').value = '';
@@ -11941,11 +12475,26 @@ function updatePaymentAmount() {
     const invoices = Storage.get('invoices', []) || [];
     const invoice = invoices.find(i => i.id === invoiceId);
     if (invoice) {
-        document.getElementById('paymentAmount').value = invoice.totalTTC || 0;
+        const rest = invoiceRemaining(invoice, Storage.get('payments', []) || []);
+        document.getElementById('paymentAmount').value = rest;
+        const hintEl = document.getElementById('paymentRemainingHint');
+        if (hintEl) hintEl.textContent = rest < (invoice.totalTTC || 0) ? `Reste à payer : ${formatCurrency(rest)} (déjà reçu : ${formatCurrency(invoicePaidAmount(invoice, Storage.get('payments', []) || []))})` : `Montant de la facture : ${formatCurrency(rest)}`;
     }
 }
 
+let _savingPayment = false;
+let _lastPaymentKey = null, _lastPaymentAt = 0;
 function savePayment() {
+    if (_savingPayment) return;            // double clic / double appui : un seul enregistrement
+    _savingPayment = true;
+    let saved = false;
+    try { saved = savePaymentOnce() === true; }
+    finally {
+        // Enregistré : on garde le verrou 600 ms (double clic). Refusé ou erreur : libéré tout de suite pour un nouvel essai légitime.
+        if (saved) setTimeout(() => { _savingPayment = false; }, 600); else _savingPayment = false;
+    }
+}
+function savePaymentOnce() {
     const invoiceId = document.getElementById('paymentInvoice').value;
     const date = document.getElementById('paymentDate').value;
     const amount = parseFloat(document.getElementById('paymentAmount').value);
@@ -11962,8 +12511,25 @@ function savePayment() {
         return;
     }
     
-    // Save payment
+    // Contrôles : facture existante, pas déjà soldée, pas de trop-perçu
     const payments = Storage.get('payments', []) || [];
+    const target = (Storage.get('invoices', []) || []).find(i => i.id === invoiceId);
+    const verdict = checkPaymentAmount(target, amount, payments, Storage.get('invoices', []) || []);
+    if (!verdict.ok) {
+        showToast(verdict.reason + (verdict.reason === 'Montant supérieur au reste à payer' && target ? ' (' + formatCurrency(invoiceRemaining(target, payments)) + ')' : ''), 'error');
+        return;
+    }
+    // Même paiement rejoué dans les 10 secondes (réseau lent, double appui) : ignoré
+    const key = [invoiceId, date, money2(amount), method, reference].join('|');
+    if (key === _lastPaymentKey && Date.now() - _lastPaymentAt < 10000) {
+        showToast('Ce paiement vient déjà d\'être enregistré', 'warning');
+        return;
+    }
+    _lastPaymentKey = key; _lastPaymentAt = Date.now();
+    
+    // Save payment (si l'écriture échoue, la clé anti-doublon est annulée pour permettre un nouvel essai)
+    let invoices = [], idx = -1;
+    try {
     payments.push({
         id: uuid(),
         invoiceId: invoiceId,
@@ -11977,8 +12543,8 @@ function savePayment() {
     Storage.set('payments', payments);
     
     // Mark invoice as paid
-    const invoices = Storage.get('invoices', []) || [];
-    const idx = invoices.findIndex(i => i.id === invoiceId);
+    invoices = Storage.get('invoices', []) || [];
+    idx = invoices.findIndex(i => i.id === invoiceId);
     if (idx >= 0) {
         const totalPaid = payments.filter(p => p.invoiceId === invoiceId).reduce((t, p) => t + (p.amount || 0), 0);
         invoices[idx].paidAmount = totalPaid;
@@ -11991,11 +12557,13 @@ function savePayment() {
         Storage.set('invoices', invoices);
         logDoc('paiement', invoices[idx], `${amount} DH (${method})`);
     }
+    } catch (e) { _lastPaymentKey = null; showToast('Paiement non enregistré, réessayez', 'error'); return false; }
     
     closeModal('paymentModal');
-    showToast(invoices[idx] && invoices[idx].status !== 'paid' ? 'Paiement partiel enregistré ✓ — reste ' + formatCurrency((invoices[idx].totalTTC||0) - (invoices[idx].paidAmount||0)) : 'Paiement enregistré ✓', 'success');
+    showToast(invoices[idx] && invoices[idx].status !== 'paid' ? 'Paiement partiel enregistré ✓ — reste ' + formatCurrency(invoiceRemaining(invoices[idx], payments)) : 'Paiement enregistré ✓', 'success');
     renderPayments();
     renderDashboard();
+    return true;
 }
 
 // ============================================
@@ -12041,7 +12609,8 @@ function renderReminders() {
     const level2 = overdue.filter(i => i.overdueDays >= 15 && i.overdueDays < 30);
     const level3 = overdue.filter(i => i.overdueDays >= 30);
     
-    const totalAmount = overdue.reduce((s, i) => s + (i.totalTTC || 0), 0);
+    const payList = Storage.get('payments', []) || [];
+    const totalAmount = overdue.reduce((s, i) => s + invoiceRemaining(i, payList), 0);
     
     document.getElementById('reminderLevel1').textContent = `${level1.length} facture(s)`;
     document.getElementById('reminderLevel2').textContent = `${level2.length} facture(s)`;
@@ -12093,7 +12662,7 @@ function renderReminders() {
                             <td>${formatDate(inv.dueDate)}</td>
                             <td><strong style="color: var(--danger);">+${inv.overdueDays} jours</strong></td>
                             <td><span style="color: ${levelColor}; font-weight: 600; font-size: 12px;">${levelLabel}</span></td>
-                            <td><strong>${formatCurrency(inv.totalTTC)}</strong></td>
+                            <td><strong>${formatCurrency(invoiceRemaining(inv, payList))}</strong></td>
                             <td>
                                 <button class="btn btn-primary btn-sm" onclick="generateReminderEmail('${inv.id}', ${level})">📧 Générer email</button>
                             </td>
@@ -12130,7 +12699,7 @@ function generateReminderEmail(invoiceId, level) {
     const message = template
         .replace(/{CLIENT}/g, client?.name || invoice.clientName || 'Cher client')
         .replace(/{NUMERO}/g, invoice.number)
-        .replace(/{MONTANT}/g, formatCurrency(invoice.totalTTC, false))
+        .replace(/{MONTANT}/g, formatCurrency(invoiceRemaining(invoice, Storage.get('payments', []) || []) || invoice.totalTTC, false))
         .replace(/{ECHEANCE}/g, formatDate(invoice.dueDate))
         .replace(/{ENTREPRISE}/g, company.name || 'Mon entreprise');
     
@@ -12242,9 +12811,24 @@ async function enableArabicPdf(pdf) {
     };
 }
 
+// Cachet de l'entreprise sur un PDF (abonnés). Dessine l'image dans une boîte w × h mm, alignée à droite de x, sans la déformer.
+// Retourne la hauteur occupée (0 si pas de cachet / non abonné / image illisible).
+function drawStampOnPdf(pdf, company, xRight, y, boxW, boxH) {
+    if (!company || !company.stamp || !isUserLicensed()) return 0;
+    try {
+        const props = pdf.getImageProperties(company.stamp);
+        const k = Math.min(boxW / props.width, boxH / props.height);
+        const w = props.width * k, h = props.height * k;
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(120, 128, 145);
+        pdf.text('Cachet et signature', xRight - boxW / 2, y, { align: 'center' });
+        pdf.addImage(company.stamp, props.fileType, xRight - boxW / 2 - w / 2, y + 2, w, h);
+        return 2 + h + 2;
+    } catch (err) { console.warn('Could not add stamp to PDF:', err); return 0; }
+}
+
 async function generatePDF(id, type, opts) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
-    const doc_data = collection.find(d => d.id === id);
+    const doc_data = (opts && opts.sample) || collection.find(d => d.id === id);
     if (!doc_data) return;
     
     const company = Storage.get('company', {});
@@ -12531,6 +13115,13 @@ async function generatePDF(id, type, opts) {
         yPos += noteLines.length * 4 + 5;
     }
     
+    // === CACHET ET SIGNATURE (abonnés) : bas de page, à droite, au-dessus du pied de page (270 mm) ===
+    if (company.stamp && isUserLicensed()) {
+        const STAMP_W = 55, STAMP_H = 30, need = STAMP_H + 8;
+        if (yPos + need > 266) { pdf.addPage(); yPos = 20; }
+        drawStampOnPdf(pdf, company, 195, Math.min(yPos, 266 - need), STAMP_W, STAMP_H);
+    }
+
     // === BANK INFO (Footer) ===
     if (company.rib || company.bank) {
         const footerY = 270;
@@ -12588,7 +13179,8 @@ async function generatePDF(id, type, opts) {
         });
     }
     
-    const pdfFileName = `${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`;
+    if (opts && opts.sample) drawSampleWatermark(pdf);
+    const pdfFileName = (opts && opts.sample) ? 'EXEMPLE-facture.pdf' : `${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`;
     // Partage direct (WhatsApp, e-mail…) : on renvoie le fichier sans le télécharger
     if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: pdfFileName };
     pdf.save(pdfFileName);
@@ -12599,6 +13191,148 @@ async function generatePDF(id, type, opts) {
     } else {
         showToast('PDF téléchargé ✓', 'success');
     }
+}
+
+// ============================================
+// REÇU DE PAIEMENT (justificatif d'encaissement, NON fiscal) : en-tête, logo et cachet de l'entreprise comme sur les factures
+// Numéro dérivé (aucun compteur à gérer) : « REÇU <n° de facture>-<rang du paiement sur cette facture> ». Le rang suit l'ordre des dates.
+// ============================================
+function paymentReceiptRank(p, payments) {
+    const same = (payments || []).filter(x => x.invoiceId === p.invoiceId).slice().sort((a, b) =>
+        String(a.date || '').localeCompare(String(b.date || '')) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id).localeCompare(String(b.id)));
+    const idx = same.findIndex(x => x.id === p.id);
+    return { rank: idx + 1, paidThrough: money2(same.slice(0, idx + 1).reduce((t, x) => t + (Number(x.amount) || 0), 0)) };
+}
+function paymentReceiptNumber(p, invoice, payments) {
+    return 'REÇU ' + ((invoice && invoice.number) || 'SANS-FACTURE') + '-' + paymentReceiptRank(p, payments).rank;
+}
+
+async function generatePaymentReceiptPDF(paymentId, opts) {
+    const sample = opts && opts.sample;
+    const payments = sample ? [sample.payment] : (Storage.get('payments', []) || []);
+    const p = payments.find(x => x.id === paymentId);
+    if (!p) { showToast('Paiement introuvable', 'error'); return; }
+    const invoice = sample ? sample.invoice : (Storage.get('invoices', []) || []).find(i => i.id === p.invoiceId);
+    if (!invoice) { showToast('Facture du paiement introuvable', 'error'); return; }
+    const company = Storage.get('company', {});
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    if (ARABIC_RE.test(JSON.stringify([p, invoice, company]))) {
+        try { await enableArabicPdf(pdf); }
+        catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée). Le PDF sera généré sans lui.', 'warning'); }
+    }
+    const dStyle = getDocStyle(company);
+    const primaryColor = dStyle.primary, accentColor = dStyle.accent;
+    const sober = dStyle.template === 'sobre';
+    const hdrText = sober ? primaryColor : [255, 255, 255];
+    const hdrSub = sober ? [90, 98, 115] : [220, 220, 220];
+    const grayDark = [74, 84, 104], grayLight = [240, 237, 230];
+    const number = paymentReceiptNumber(p, invoice, payments);
+    const { paidThrough } = paymentReceiptRank(p, payments);
+    const total = money2(invoice.totalTTC || 0);
+    const remaining = Math.max(0, money2(total - paidThrough));
+
+    // === EN-TÊTE (même présentation que les factures) ===
+    if (!sober) { pdf.setFillColor(...primaryColor); pdf.rect(0, 0, 210, 38, 'F'); }
+    pdf.setFillColor(...accentColor); pdf.rect(0, 38, 210, 1.5, 'F');
+    let textX = 15;
+    if (company.logo && isUserLicensed()) {
+        try { pdf.addImage(company.logo, 'PNG', 12, 7, 24, 24); textX = 42; } catch (err) { console.warn('Could not add logo to PDF:', err); }
+    }
+    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
+    pdf.text(company.name || 'Mon Entreprise', textX, 18);
+    const statusLabels = { ae: 'Auto-Entrepreneur', freelance: 'Profession libérale', sarl: 'SARL', autre: 'Société' };
+    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
+    pdf.text(statusLabels[company.status] || '', textX, 25);
+    pdf.setTextColor(...hdrSub); pdf.setFontSize(8);
+    let addr = ''; if (company.address) addr += company.address;
+    if (company.city && !addr.includes(company.city)) addr += (addr ? ', ' : '') + company.city;
+    if (addr) pdf.text(addr, 15, 31);
+    if (dStyle.headerNote) { pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.text(String(dStyle.headerNote).slice(0, 90), 15, 35.5); pdf.setFont('helvetica', 'normal'); }
+    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
+    pdf.text('REÇU DE PAIEMENT', 195, 22, { align: 'right' });
+    pdf.setFontSize(10); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
+    pdf.text(number, 195, 30, { align: 'right' });
+
+    // === IDENTITÉ DE L'ENTREPRISE ===
+    let y = 48;
+    pdf.setTextColor(...grayDark); pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+    const info = [];
+    if (company.ice) info.push(`ICE : ${company.ice}`);
+    if (company.if) info.push(`IF : ${company.if}`);
+    if (company.rc) info.push(`RC : ${company.rc}`);
+    if (company.phone) info.push(`Tél : ${company.phone}`);
+    if (company.email) info.push(company.email);
+    if (info.length) { pdf.text(info.join('   ·   '), 15, y); y += 10; } else { y += 4; }
+
+    // === REÇU DE ===
+    const client = sample ? sample.client : (Storage.get('clients', []) || []).find(c => c.id === invoice.clientId);
+    pdf.setTextColor(...primaryColor); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
+    pdf.text('REÇU DE', 15, y); y += 6;
+    pdf.setTextColor(...grayDark); pdf.setFontSize(12);
+    pdf.text(String(invoice.clientName || (client && client.name) || 'Client'), 15, y); y += 5;
+    pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal');
+    if (client && client.ice) { pdf.text(`ICE : ${client.ice}`, 15, y); y += 4.5; }
+    y += 6;
+
+    // === MONTANT REÇU (bandeau) ===
+    pdf.setFillColor(...primaryColor); pdf.roundedRect(15, y, 180, 20, 2, 2, 'F');
+    pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11);
+    pdf.text('Montant reçu', 21, y + 8);
+    pdf.setTextColor(...accentColor); pdf.setFontSize(18);
+    pdf.text(formatCurrencyForPDF(p.amount), 189, y + 13, { align: 'right' });
+    y += 30;
+
+    // === DÉTAIL ===
+    const methodLabels = { virement: 'Virement bancaire', cheque: 'Chèque', especes: 'Espèces', cmi: 'Carte bancaire (CMI)', effet: 'Effet', autre: 'Autre' };
+    const rows = [
+        ['Date du paiement', formatDate(p.date)],
+        ['Mode de paiement', methodLabels[p.method] || String(p.method || '—')],
+        ['Référence', String(p.reference || '—')],
+        ['Facture concernée', `${isDraftNumber(invoice.number) ? 'BROUILLON' : invoice.number} du ${formatDate(invoice.date)}`],
+        ['Total de la facture (TTC)', formatCurrencyForPDF(total)],
+        ['Total payé à ce jour (ce versement inclus)', formatCurrencyForPDF(paidThrough)],
+        [remaining > 0 ? 'Reste dû' : 'Situation', remaining > 0 ? formatCurrencyForPDF(remaining) : 'Facture soldée']
+    ];
+    pdf.setFontSize(10);
+    rows.forEach((r, i) => {
+        if (i % 2 === 0) { pdf.setFillColor(...grayLight); pdf.rect(15, y - 5, 180, 8, 'F'); }
+        pdf.setTextColor(...grayDark); pdf.setFont('helvetica', 'normal'); pdf.text(r[0], 18, y);
+        pdf.setFont('helvetica', 'bold'); pdf.text(r[1], 192, y, { align: 'right' });
+        y += 8;
+    });
+    if (p.notes) {
+        y += 4; pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...primaryColor); pdf.text('Notes', 15, y); y += 5;
+        pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...grayDark);
+        const nl = pdf.splitTextToSize(String(p.notes), 180).slice(0, 4); pdf.text(nl, 15, y); y += nl.length * 4 + 4;
+    }
+    y += 6;
+    pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(120, 128, 145);
+    const mention = pdf.splitTextToSize('Justificatif d\'encaissement, non fiscal. Il ne remplace pas la facture ci-dessus. Établi le ' + formatDate(todayISO()) + '.', 180);
+    pdf.text(mention, 15, y); y += mention.length * 4 + 8;
+
+    // === CACHET ET SIGNATURE (abonnés) ===
+    if (company.stamp && isUserLicensed()) {
+        const need = 38;
+        if (y + need > 285) { pdf.addPage(); y = 20; }
+        drawStampOnPdf(pdf, company, 195, y, 55, 30);
+    }
+    if (dStyle.footerNote) {
+        pdf.setFontSize(7.5); pdf.setTextColor(120, 128, 145); pdf.setFont('helvetica', 'normal');
+        const fl = pdf.splitTextToSize(String(dStyle.footerNote), 180).slice(0, 2);
+        pdf.text(fl, 105, fl.length > 1 ? 291 : 293, { align: 'center' });
+    }
+    if (!isUserLicensed()) {
+        pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity: 0.06 })); pdf.setTextColor(27, 58, 107); pdf.setFontSize(70); pdf.setFont('helvetica', 'bold');
+        pdf.text('FACTURAPRO', 105, 160, { align: 'center', angle: -30 }); pdf.restoreGraphicsState();
+        pdf.setFontSize(8); pdf.setTextColor(180, 180, 180); pdf.setFont('helvetica', 'italic');
+        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 290, { align: 'center' });
+    }
+    if (sample) drawSampleWatermark(pdf);
+    const fileName = sample ? 'EXEMPLE-recu.pdf' : number.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') + '.pdf';
+    if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: fileName };
+    pdf.save(fileName);
+    showToast('Reçu téléchargé ✓', 'success');
 }
 
 // ============================================
@@ -12643,8 +13377,8 @@ function blockedByLicense() {
     ['newInvoice','newQuote','newClient','newProduct','editInvoice','duplicateInvoice',
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
      'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
-     'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo',
-     'generateInvitationCode','cancelInvitation','removeTeamMember'
+     'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo','handleStampUpload','removeStamp',
+     'importTechnicalBackup','generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
         const orig = window[name];
         if (typeof orig !== 'function') return;

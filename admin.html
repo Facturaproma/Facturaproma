@@ -855,7 +855,7 @@
                         <option value="unconfirmed">Jamais connectés (non confirmés)</option>
                         <option value="everyone">Tous (confirmés ou non)</option>
                     </select>
-                    <input type="text" class="search-input" id="searchUsers" placeholder="🔍 Rechercher par email..." oninput="renderUsers()">
+                    <input type="text" class="search-input" id="searchUsers" placeholder="🔍 Rechercher par e-mail ou société..." oninput="renderUsers()">
                     <button class="btn btn-secondary btn-sm" onclick="exportAccountsCSV()">⬇️ CSV</button>
                 </div>
             </div>
@@ -1274,6 +1274,19 @@
 
             <div class="alert">
                 <strong>📋 Offres en vente</strong> — Essai gratuit 14 jours, Mensuel 49 DH, Annuel 449 DH, et l'offre Fondateur (299 DH/an, 30 places). Les chiffres ci-dessous viennent des vrais comptes.
+            </div>
+
+            <div class="card" id="founderCard" style="margin-bottom: 20px;">
+                <div class="card-header">
+                    <h2>🎁 Offre Fondateur <small style="color: var(--ink-mute); font-weight: 400;">(299 DH/an, 30 places)</small></h2>
+                </div>
+                <div style="padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+                    <div>
+                        <div id="founderState" style="font-weight: 700; font-size: 15px;">—</div>
+                        <div id="founderStateNote" style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">Les codes déjà émis restent valables, même offre fermée.</div>
+                    </div>
+                    <button class="btn btn-secondary" id="founderToggleBtn" onclick="toggleFounderOffer()" style="display: none;">—</button>
+                </div>
             </div>
 
             <div class="card master-only" id="plansCard" style="margin-bottom: 20px;">
@@ -2740,6 +2753,7 @@ async function loadAllData() {
     }
     
     await loadCustomPlans();
+    await loadFounderSetting();
 
     // Load payments
     try {
@@ -2834,6 +2848,14 @@ async function loadAccounts() {
         const { data, error } = await supaClient.rpc('admin_list_accounts');
         if (error) throw error;
         allAccounts = (data || []).map(a => ({ ...a, _exp: a.expires_at ? new Date(a.expires_at) : null }));
+        // Nom de société (sql/28) : facultatif. Si la fonction n'est pas installée, la colonne reste simplement vide.
+        try {
+            const { data: cos, error: cErr } = await supaClient.rpc('admin_account_companies');
+            if (!cErr && Array.isArray(cos)) {
+                const byId = new Map(cos.map(c => [c.user_id, c.company_name]));
+                allAccounts.forEach(a => { a.company_name = byId.get(a.user_id) || ''; });
+            }
+        } catch (e) { /* sql/28 absent : on continue sans nom de société */ }
         accountsAvailable = true;
         accountsError = '';
     } catch (e) {
@@ -3285,7 +3307,7 @@ async function processRequest(requestId) {
         });
         await loadAllData();
     } catch (err) {
-        showToast(isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message, 'error');
+        showToast(founderErrorText(err) || (isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message), 'error');
         console.error(err);
     }
 }
@@ -3355,7 +3377,7 @@ function renderUsers() {
     const scope = document.getElementById('filterConnected')?.value || 'real';
     const hidden = allAccounts.filter(a => !isRealAccount(a)).length;
     const rows = allAccounts.filter(a => {
-        if (search && !(a.email || '').toLowerCase().includes(search)) return false;
+        if (search && !((a.email || '').toLowerCase().includes(search) || (a.company_name || '').toLowerCase().includes(search))) return false;
         if (scope === 'real' && !isRealAccount(a)) return false;
         if (scope === 'unconfirmed' && isRealAccount(a)) return false;
         const st = acctState(a);
@@ -3394,7 +3416,7 @@ function renderUsers() {
             <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount('${a.user_id}')">🗑️ Supprimer</button>`;
         return `
             <tr>
-                <td><strong>${esc(a.email)}</strong></td>
+                <td><strong>${esc(a.email)}</strong>${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
                 <td>${formatDate(a.created_at)}</td>
                 <td>${activity}</td>
                 <td style="font-size:12px;">${a.invoices_count} fact.<br>${a.clients_count} clients</td>
@@ -3693,13 +3715,68 @@ function renderCodes() {
 }
 
 const FOUNDER_LIMIT = 30;
+// Interrupteur « offre ouverte / fermée » : réglage admin_settings.founder_open (écriture réservée au Master, contrôlée par la base : sql/27)
+let founderOpen = true;
+async function loadFounderSetting() {
+    try {
+        const { data, error } = await supaClient.from('admin_settings').select('value').eq('key', 'founder_open').maybeSingle();
+        if (error) throw error;
+        founderOpen = !(data && /^(false|0|non|fermee|fermée)$/i.test(String(data.value || '').trim()));
+    } catch (err) { console.warn('Réglage de l\'offre Fondateur illisible (offre considérée ouverte) :', err.message || err); founderOpen = true; }
+    refreshFounderCounter();
+}
+// Message d'impossibilité d'émettre un code fondateur (null = possible). La base applique les mêmes règles (sql/27) : ceci évite seulement un aller-retour.
+function founderBlockMessage() {
+    if (!founderOpen) return 'L\'offre Fondateur est fermée. Le propriétaire peut la rouvrir dans Tarifs & Plans.';
+    if (countFounderCodes() >= FOUNDER_LIMIT) return `Limite atteinte : ${FOUNDER_LIMIT} codes fondateurs déjà émis`;
+    return null;
+}
+function founderErrorText(err) {
+    const m = String((err && err.message) || err || '');
+    if (/OFFRE_FONDATEUR_FERMEE/.test(m)) return 'L\'offre Fondateur est fermée.';
+    if (/LIMITE_FONDATEUR_ATTEINTE/.test(m)) return `Limite atteinte : ${FOUNDER_LIMIT} codes fondateurs déjà émis.`;
+    if (/MASTER_REQUIS/.test(m)) return 'Seul le propriétaire peut ouvrir ou fermer l\'offre Fondateur.';
+    return null;
+}
+async function toggleFounderOffer() {
+    if (!currentAdmin || !currentAdmin.isMaster) { showToast('Réservé au propriétaire', 'error'); return; }
+    const next = !founderOpen;
+    if (!confirm(next ? 'Rouvrir l\'offre Fondateur ?' : 'Fermer l\'offre Fondateur ? Plus aucun code fondateur ne pourra être émis. Les codes déjà émis restent valables.')) return;
+    try {
+        const { error } = await supaClient.from('admin_settings').upsert({ key: 'founder_open', value: next ? 'true' : 'false' }, { onConflict: 'key' });
+        if (error) throw error;
+        founderOpen = next;
+        refreshFounderCounter();
+        showToast(next ? 'Offre Fondateur rouverte' : 'Offre Fondateur fermée', 'success');
+    } catch (err) {
+        showToast(founderErrorText(err) || 'Erreur : ' + (err.message || err) + ' (script sql/27 appliqué ?)', 'error');
+    }
+}
+
 function countFounderCodes() {
     // Les codes révoqués ne comptent pas : la place est libérée
     return (allCodes || []).filter(c => (c.note || '').startsWith('FONDATEUR') && c.status !== 'revoked').length;
 }
 function refreshFounderCounter() {
+    const n = countFounderCodes();
+    const full = n >= FOUNDER_LIMIT;
     const el = document.getElementById('founderCounter');
-    if (el) el.textContent = `Fondateurs émis : ${countFounderCodes()} / ${FOUNDER_LIMIT}`;
+    if (el) el.textContent = `Fondateurs émis : ${n} / ${FOUNDER_LIMIT}` + (!founderOpen ? ' · offre FERMÉE' : (full ? ' · complète' : ''));
+    // Les options « Fondateur » des deux formulaires sont désactivées quand l'offre est fermée ou complète
+    ['codeType', 'activateType'].forEach(id => {
+        const sel = document.getElementById(id); if (!sel) return;
+        const o = [...sel.options].find(x => x.value === 'founder'); if (!o) return;
+        if (!o.dataset.label) o.dataset.label = o.textContent;
+        o.disabled = !founderOpen || full;
+        o.textContent = o.dataset.label + (!founderOpen ? ' — fermée' : (full ? ' — complète' : ''));
+        if (o.disabled && sel.value === 'founder') sel.value = 'annual';
+    });
+    const st = document.getElementById('founderState');
+    if (st) {
+        st.innerHTML = (founderOpen ? '🟢 Offre ouverte' : '🔴 Offre fermée') + ` · ${n} / ${FOUNDER_LIMIT} codes émis` + (full ? ' · complète' : '');
+        const btn = document.getElementById('founderToggleBtn');
+        if (btn) { const master = !!(currentAdmin && currentAdmin.isMaster); btn.style.display = master ? '' : 'none'; btn.textContent = founderOpen ? '⏸️ Fermer l\'offre' : '▶️ Rouvrir l\'offre'; }
+    }
 }
 
 function generateLicenseCode() {
@@ -3720,10 +3797,8 @@ async function generateCode() {
 
     // Offre fondateurs : licence annuelle, 30 codes maximum, chacun à usage unique et lié à un e-mail
     if (type === 'founder') {
-        if (countFounderCodes() >= FOUNDER_LIMIT) {
-            showToast(`Limite atteinte : ${FOUNDER_LIMIT} codes fondateurs déjà émis`, 'error');
-            return;
-        }
+        const fb = founderBlockMessage();
+        if (fb) { showToast(fb, 'error'); return; }
         type = 'annual';
         note = ('FONDATEUR 299 DH/an ' + note).trim();
     }
@@ -3756,7 +3831,7 @@ async function generateCode() {
         showToast('Code généré avec succès !', 'success');
         await loadAllData();
     } catch (err) {
-        showToast(isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message, 'error');
+        showToast(founderErrorText(err) || (isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message), 'error');
         console.error(err);
     }
 }
@@ -3904,10 +3979,8 @@ async function activateLicense() {
     // Offre fondateurs : licence annuelle, 30 codes maximum (même règle que « Générer codes »)
     let type = rawType, finalNote = note;
     if (rawType === 'founder') {
-        if (countFounderCodes() >= FOUNDER_LIMIT) {
-            showToast(`Offre fondateurs complète (${FOUNDER_LIMIT}/${FOUNDER_LIMIT})`, 'error');
-            return;
-        }
+        const fb = founderBlockMessage();
+        if (fb) { showToast(fb, 'error'); return; }
         type = 'annual';
         finalNote = ('FONDATEUR 299 DH/an ' + note).trim();
     }
@@ -3940,7 +4013,7 @@ async function activateLicense() {
         showToast('Code généré ! Envoie-le au client.', 'success');
         await loadAllData();
     } catch (err) {
-        showToast(isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message, 'error');
+        showToast(founderErrorText(err) || (isDoubleSubError(err) ? 'Ce client a déjà un abonnement actif : seule une formule plus longue est possible.' : 'Erreur: ' + err.message), 'error');
     }
 }
 
