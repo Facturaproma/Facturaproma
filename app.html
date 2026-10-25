@@ -2742,7 +2742,13 @@
 
         /* Hidden helper */
         .hidden { display: none !important; }
-    </style>
+    .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
+.fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
+.fp-pg:disabled { opacity:.4; cursor:default; }
+.fp-pg-on { background:var(--ink, #1b2a49); color:#fff; border-color:var(--ink, #1b2a49); font-weight:700; }
+.fp-gap { color:var(--ink-mute, #6b7280); padding:0 2px; }
+.fp-info { width:100%; text-align:center; font-size:12px; color:var(--ink-mute, #6b7280); }
+</style>
 </head>
 <body>
 
@@ -6692,6 +6698,42 @@ function addDaysISO(days) {
     return d.toISOString().split('T')[0];
 }
 
+// ---- Pagination des listes (10 par page, onglets 1 2 3…) --------------------
+const FP_PAGE_SIZE = 10;
+const _fpPagers = {};
+// rows : liste complète (déjà filtrée/triée) ; sig : empreinte des filtres (change → retour page 1) ; renderFn : redessine la liste
+function fpPaginate(key, rows, sig, renderFn) {
+    const st = _fpPagers[key] || (_fpPagers[key] = { page: 1, sig: '' });
+    if (st.sig !== sig) { st.sig = sig; st.page = 1; }
+    st.fn = renderFn;
+    const total = rows.length;
+    const pages = Math.max(1, Math.ceil(total / FP_PAGE_SIZE));
+    if (st.page > pages) st.page = pages;
+    if (st.page < 1) st.page = 1;
+    const from = (st.page - 1) * FP_PAGE_SIZE;
+    const items = rows.slice(from, from + FP_PAGE_SIZE);
+    let html = '';
+    if (pages > 1) {
+        const nums = [];
+        for (let n = 1; n <= pages; n++) if (n === 1 || n === pages || Math.abs(n - st.page) <= 1) nums.push(n);
+        let tabs = '', prev = 0;
+        for (const n of nums) {
+            if (prev && n - prev > 1) tabs += '<span class="fp-gap">…</span>';
+            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto('${key}',${n})">${n}</button>`;
+            prev = n;
+        }
+        html = `<div class="fp-pager" role="navigation" aria-label="Pages">
+            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page + 1})" aria-label="Page suivante">›</button>
+            <span class="fp-info">${from + 1}–${from + items.length} sur ${total}</span></div>`;
+    }
+    return { items, html, page: st.page, pages, total, from };
+}
+function fpGoto(key, n) {
+    const st = _fpPagers[key]; if (!st || !st.fn) return;
+    st.page = Math.max(1, Math.floor(Number(n)) || 1);
+    st.fn();
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text || '';
@@ -7752,10 +7794,12 @@ function renderInvoices() {
             </tr>`;
     };
     const group = (label, n) => `<tr class="inv-group"><td colspan="3">${label} <span>(${n})</span></td></tr>`;
-    const body = (drafts.length && registered.length ? group('Brouillons — non enregistrés, modifiables', drafts.length) : '')
-        + drafts.map(row).join('')
-        + (drafts.length && registered.length ? group('Factures enregistrées — verrouillées', registered.length) : '')
-        + registered.map(row).join('');
+    const pg = fpPaginate('invoices', [...drafts, ...registered], search + '|' + filter, renderInvoices);
+    const pgDrafts = pg.items.filter(i => invoiceListKind(i) === 'draft'), pgReg = pg.items.filter(i => invoiceListKind(i) !== 'draft');
+    const body = (drafts.length && registered.length && pgDrafts.length ? group('Brouillons — non enregistrés, modifiables', drafts.length) : '')
+        + pgDrafts.map(row).join('')
+        + (drafts.length && registered.length && pgReg.length ? group('Factures enregistrées — verrouillées', registered.length) : '')
+        + pgReg.map(row).join('');
     
     el.innerHTML = `
         <table class="tbl-act tbl-inv">
@@ -7767,7 +7811,7 @@ function renderInvoices() {
                 </tr>
             </thead>
             <tbody>${body}</tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function newInvoice() {
@@ -8438,7 +8482,9 @@ function renderQuotes() {
                (q.clientName || '').toLowerCase().includes(search);
     });
     
-    const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sortedAll = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const pg = fpPaginate('quotes', sortedAll, search, renderQuotes);
+    const sorted = pg.items;
     
     const el = document.getElementById('quotesList');
     if (sorted.length === 0) {
@@ -8484,7 +8530,7 @@ function renderQuotes() {
                     </tr>
                 `).join('')}
             </tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function newQuote() {
@@ -8625,6 +8671,7 @@ function renderClients() {
                (c.email || '').toLowerCase().includes(search);
     });
     
+    const pg = fpPaginate('clients', filtered, search, renderClients);
     const el = document.getElementById('clientsList');
     if (filtered.length === 0) {
         el.innerHTML = `
@@ -8651,7 +8698,7 @@ function renderClients() {
                 </tr>
             </thead>
             <tbody>
-                ${filtered.map(c => {
+                ${pg.items.map(c => {
                     const clientInvoices = invoices.filter(i => i.clientId === c.id);
                     const _allPay = Storage.get('payments', []) || [];
                     const totalCA = clientInvoices.filter(i => i.type !== 'credit').reduce((s, i) => s + invoicePaidAmount(i, _allPay), 0);
@@ -8671,7 +8718,7 @@ function renderClients() {
                     `;
                 }).join('')}
             </tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function populateClientSelect() {
@@ -8776,6 +8823,7 @@ function renderProducts() {
                (p.category || '').toLowerCase().includes(search);
     });
     
+    const pg = fpPaginate('products', filtered, search, renderProducts);
     const el = document.getElementById('productsList');
     if (filtered.length === 0) {
         el.innerHTML = `
@@ -8802,7 +8850,7 @@ function renderProducts() {
                 </tr>
             </thead>
             <tbody>
-                ${filtered.map(p => {
+                ${pg.items.map(p => {
                     const ttc = p.price * (1 + (p.tva || 0) / 100);
                     return `
                         <tr>
@@ -8823,7 +8871,7 @@ function renderProducts() {
                     `;
                 }).join('')}
             </tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function newProduct() {
@@ -12324,7 +12372,7 @@ function renderPayments() {
     if (filter === 'overdue') filtered = filtered.filter(i => i.status === 'overdue' && sit(i).remaining > 0);
     if (filter === 'paid') filtered = filtered.filter(i => sit(i).state === 'paid');
     
-    const sorted = [...filtered].sort((a, b) => {
+    const sortedAll = [...filtered].sort((a, b) => {
         // Overdue first, then by due date
         if (a.status === 'overdue' && b.status !== 'overdue') return -1;
         if (a.status !== 'overdue' && b.status === 'overdue') return 1;
@@ -12332,7 +12380,9 @@ function renderPayments() {
     });
     
     const listEl = document.getElementById('paymentsList');
-    if (sorted.length === 0) {
+    const pgDue = fpPaginate('payDue', sortedAll, filter, renderPayments);
+    const sorted = pgDue.items;
+    if (sortedAll.length === 0) {
         listEl.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">💳</div>
@@ -12369,13 +12419,15 @@ function renderPayments() {
                         `;
                     }).join('')}
                 </tbody>
-            </table>`;
+            </table>${pgDue.html}`;
     }
     
     // History list
     const historyEl = document.getElementById('paymentsHistoryList');
-    const sortedPayments = [...payments].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
-    if (sortedPayments.length === 0) {
+    const sortedPaymentsAll = [...payments].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const pgHist = fpPaginate('payHist', sortedPaymentsAll, String(sortedPaymentsAll.length), renderPayments);
+    const sortedPayments = pgHist.items;
+    if (sortedPaymentsAll.length === 0) {
         historyEl.innerHTML = `
             <div class="empty-state" style="padding: 32px;">
                 <p>Aucun paiement enregistré</p>
@@ -12416,7 +12468,7 @@ function renderPayments() {
                         `;
                     }).join('')}
                 </tbody>
-            </table>`;
+            </table>${pgHist.html}`;
     }
 }
 

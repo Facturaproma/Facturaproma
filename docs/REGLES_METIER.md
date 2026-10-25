@@ -53,3 +53,10 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 
 - « Facture d'exemple » / « Reçu d'exemple » (Mon Entreprise) : PDF fictifs portant le filigrane EXEMPLE, avec les réglages réels de l'entreprise (en-tête, logo, cachet, préfixe, prochain numéro). Rien n'est enregistré, aucun numéro n'est consommé. Ils ne permettent pas de tester l'enregistrement d'un vrai paiement.
 - « Sauvegarde technique (JSON) » : fichier de dépannage (format `facturapro-sauvegarde-technique`, version 1), pas un document comptable ni la sauvegarde officielle (celle du serveur). L'import est additif : il ajoute clients, produits, brouillons de facture et devis absents, n'écrase rien, ignore factures émises, paiements, compteur et entreprise (verrouillés ou sensibles côté serveur). Confirmation obligatoire avant écriture.
+
+## Pagination des listes
+
+- Toutes les grandes listes affichent **10 lignes par page**, avec onglets ‹ 1 2 3 › et l'indication « 1–10 sur N » : application (factures, devis, clients, produits, paiements à encaisser, historique des paiements) et administration (comptes, demandes, licences, codes, paiements, trésorerie, documents, journal).
+- Un changement de recherche ou de filtre ramène à la page 1. Les exports (CSV) et les totaux portent toujours sur **toute** la liste filtrée, pas seulement sur la page affichée.
+- Les anciennes coupures silencieuses (50 codes, 10 derniers paiements) disparaissent : tout est consultable page par page.
+- Non paginés : les rapports et tableaux récapitulatifs (TVA, CNSS, top clients…), qui sont des synthèses.
