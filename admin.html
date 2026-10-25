@@ -855,7 +855,7 @@
                         <option value="unconfirmed">Jamais connectés (non confirmés)</option>
                         <option value="everyone">Tous (confirmés ou non)</option>
                     </select>
-                    <input type="text" class="search-input" id="searchUsers" placeholder="🔍 Rechercher par email..." oninput="renderUsers()">
+                    <input type="text" class="search-input" id="searchUsers" placeholder="🔍 Rechercher par e-mail ou société..." oninput="renderUsers()">
                     <button class="btn btn-secondary btn-sm" onclick="exportAccountsCSV()">⬇️ CSV</button>
                 </div>
             </div>
@@ -2848,6 +2848,14 @@ async function loadAccounts() {
         const { data, error } = await supaClient.rpc('admin_list_accounts');
         if (error) throw error;
         allAccounts = (data || []).map(a => ({ ...a, _exp: a.expires_at ? new Date(a.expires_at) : null }));
+        // Nom de société (sql/28) : facultatif. Si la fonction n'est pas installée, la colonne reste simplement vide.
+        try {
+            const { data: cos, error: cErr } = await supaClient.rpc('admin_account_companies');
+            if (!cErr && Array.isArray(cos)) {
+                const byId = new Map(cos.map(c => [c.user_id, c.company_name]));
+                allAccounts.forEach(a => { a.company_name = byId.get(a.user_id) || ''; });
+            }
+        } catch (e) { /* sql/28 absent : on continue sans nom de société */ }
         accountsAvailable = true;
         accountsError = '';
     } catch (e) {
@@ -3369,7 +3377,7 @@ function renderUsers() {
     const scope = document.getElementById('filterConnected')?.value || 'real';
     const hidden = allAccounts.filter(a => !isRealAccount(a)).length;
     const rows = allAccounts.filter(a => {
-        if (search && !(a.email || '').toLowerCase().includes(search)) return false;
+        if (search && !((a.email || '').toLowerCase().includes(search) || (a.company_name || '').toLowerCase().includes(search))) return false;
         if (scope === 'real' && !isRealAccount(a)) return false;
         if (scope === 'unconfirmed' && isRealAccount(a)) return false;
         const st = acctState(a);
@@ -3408,7 +3416,7 @@ function renderUsers() {
             <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount('${a.user_id}')">🗑️ Supprimer</button>`;
         return `
             <tr>
-                <td><strong>${esc(a.email)}</strong></td>
+                <td><strong>${esc(a.email)}</strong>${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
                 <td>${formatDate(a.created_at)}</td>
                 <td>${activity}</td>
                 <td style="font-size:12px;">${a.invoices_count} fact.<br>${a.clients_count} clients</td>
