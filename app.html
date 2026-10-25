@@ -4023,6 +4023,23 @@
                 </table></div>
             </div>
 
+            <div class="calc-card" style="margin-top: 16px;" id="aeCnssSettings">
+                <h3>⚙️ Barème CNSS auto-entrepreneur (modifiable)</h3>
+                <p class="subtitle" id="aeCnssSource">—</p>
+                <div class="notice" id="aeCnssErrors" style="display: none; border-left-color: var(--danger, #b42318);"></div>
+                <div class="form-group"><label for="aeRateServices">Taux d'impôt libératoire — services (%)</label><input type="number" id="aeRateServices" min="0" max="10" step="0.01"></div>
+                <div class="form-group"><label for="aeRateCommerce">Taux d'impôt libératoire — commerce / industrie / artisanat (%)</label><input type="number" id="aeRateCommerce" min="0" max="10" step="0.01"></div>
+                <div class="items-scroll"><table style="margin-top: 8px;">
+                    <thead><tr><th>Tranche</th><th>Impôt annuel jusqu'à (DH)</th><th>Cotisation par trimestre (DH)</th></tr></thead>
+                    <tbody id="aeCnssGrid"></tbody>
+                </table></div>
+                <div class="form-group" style="margin-top: 12px;"><label><input type="checkbox" id="aePension"> Ajouter la retraite au total (AMO × coefficient)</label></div>
+                <div class="form-group"><label for="aeCoef">Coefficient retraite</label><input type="number" id="aeCoef" min="0" max="5" step="0.01"></div>
+                <button class="btn btn-primary" onclick="saveAeCnssSettings()">Enregistrer ce barème</button>
+                <button class="btn btn-secondary" onclick="resetAeCnssSettings()">Rétablir le barème de référence</button>
+                <p class="subtitle" style="margin-top: 8px;">Ce barème ne s'applique qu'à votre société. En cas de changement officiel, modifiez-le ici après vérification sur <a href="https://ae.gov.ma" target="_blank" rel="noopener noreferrer">ae.gov.ma</a> ou auprès de la CNSS.</p>
+            </div>
+
             <div class="calc-card" style="margin-top: 16px;">
                 <h3>👥 Déclaration employeur (Damancom) — récapitulatif indicatif</h3>
                 <p class="subtitle">Pour vos salariés déclarés à la CNSS. Ne saisissez que ce qui est utile (nom ou prénom suffit).</p>
@@ -9017,7 +9034,61 @@ function deleteProduct(id) {
 // ============================================
 // CNSS CALCULATIONS
 // ============================================
+// ---------- Barème AE de la société (modifiable) ----------
+function loadAeCnssConfig() {
+    const cfg = Storage.get('aeCnssConfig', null), v = aeCnssValidate(cfg);
+    AE_CNSS_OVERRIDE = (v.ok && v.rules) ? v.rules : null;
+    return cfg;
+}
+function renderAeCnssSettings() {
+    const cfg = loadAeCnssConfig(), r = aeCnssRules(), custom = !!AE_CNSS_OVERRIDE;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('aeRateServices', +(r.irRates.services * 100).toFixed(4)); set('aeRateCommerce', +(r.irRates.commerce * 100).toFixed(4));
+    set('aeCoef', r.pensionCoef); const pc = document.getElementById('aePension'); if (pc) pc.checked = !!r.includePension;
+    const rows = r.amoAmounts.map((amt, i) => {
+        const bound = i === 0 ? `<input type="number" id="aeT1Below" min="0" step="1" value="${r.t1BelowAnnualIr}" aria-label="Tranche 1 : impôt annuel inférieur à"> <small>(inférieur à)</small>`
+            : i < r.amoAmounts.length - 1 ? `<input type="number" id="aeBound${i}" min="0" step="1" value="${r.annualIrUpperBounds[i - 1]}" aria-label="Tranche ${i + 1} : impôt annuel jusqu'à">`
+            : '<small>au-delà de la borne précédente</small>';
+        return `<tr><td><strong>T${i + 1}</strong></td><td>${bound}</td><td><input type="number" id="aeAmo${i}" min="0" step="0.01" value="${amt}" aria-label="Tranche ${i + 1} : cotisation par trimestre"></td></tr>`;
+    }).join('');
+    const g = document.getElementById('aeCnssGrid'); if (g) g.innerHTML = rows;
+    const src = document.getElementById('aeCnssSource');
+    if (src) src.textContent = custom
+        ? 'Barème personnalisé de votre société' + (cfg && cfg.savedAt ? ' (enregistré le ' + new Date(cfg.savedAt).toLocaleDateString('fr-FR') + ')' : '') + '.'
+        : 'Barème de référence FacturaProMa (relu le ' + fiscalDateFr(FISCAL_RULES.reviewedOn) + ', décret 2.21.928 et barème CGI 73-II-B-6° ; à confirmer sur ae.gov.ma).';
+    const er = document.getElementById('aeCnssErrors'); if (er) { er.style.display = 'none'; er.textContent = ''; }
+}
+function readAeCnssForm() {
+    const val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+    const nb = (x) => Number(String(x).replace(',', '.'));
+    const n = FISCAL_RULES.aeCnss.amoAmounts.length;
+    return {
+        irRates: { services: nb(val('aeRateServices')) / 100, commerce: nb(val('aeRateCommerce')) / 100 },
+        pensionCoef: nb(val('aeCoef')), includePension: !!(document.getElementById('aePension') || {}).checked,
+        t1BelowAnnualIr: nb(val('aeT1Below')),
+        annualIrUpperBounds: Array.from({ length: n - 2 }, (_, k) => nb(val('aeBound' + (k + 1)))),
+        amoAmounts: Array.from({ length: n }, (_, i) => nb(val('aeAmo' + i)))
+    };
+}
+function saveAeCnssSettings() {
+    const form = readAeCnssForm();
+    // Les champs vides donnent Number('') = 0 : on les refuse explicitement
+    const empty = [...document.querySelectorAll('#aeCnssSettings input[type=number]')].some(el => el.value.trim() === '');
+    const v = empty ? { ok: false, errors: ['Remplissez tous les champs.'] } : aeCnssValidate(form);
+    const er = document.getElementById('aeCnssErrors');
+    if (!v.ok) { if (er) { er.style.display = ''; er.textContent = v.errors.join(' '); } showToast('Barème non enregistré : ' + v.errors[0], 'error'); return; }
+    Storage.set('aeCnssConfig', Object.assign({}, v.rules, { savedAt: new Date().toISOString() }));
+    renderCNSS();
+    showToast('Barème enregistré pour votre société', 'success');
+}
+function resetAeCnssSettings() {
+    Storage.set('aeCnssConfig', {});          // objet vide = barème de référence (pas de null : la base exige une valeur)
+    renderCNSS();
+    showToast('Barème de référence rétabli', 'success');
+}
+
 function renderCNSS() {
+    renderAeCnssSettings();
     calculateCNSS();
     
     // YTD CA (HT, pas TTC - CNSS se calcule sur HT au Maroc)
@@ -9211,9 +9282,36 @@ function vatReportCsv(per, basis, col, ded, bal) {
     return L.join('\n');
 }
 // CNSS employeur (indicatif)
+// Barème AE propre à la société : l'utilisateur peut le modifier (écran CNSS) en cas de changement de réglementation, sans mise à jour de l'application.
+// AE_CNSS_OVERRIDE = barème validé enregistré par la société ; absent → barème de référence FISCAL_RULES.aeCnss.
+let AE_CNSS_OVERRIDE = null;
+function aeCnssRules() { return AE_CNSS_OVERRIDE || FISCAL_RULES.aeCnss; }
+// Valide un barème saisi (objet) ; retourne { ok, errors, rules } (rules normalisé à 2 décimales). Un objet vide ou absent = barème de référence.
+function aeCnssValidate(cfg) {
+    const errors = [], n = (x) => (typeof x === 'number' ? x : (typeof x === 'string' && x.trim() !== '' ? Number(x.replace(',', '.')) : NaN));
+    if (!cfg || typeof cfg !== 'object' || !Object.keys(cfg).length) return { ok: true, errors, rules: null };
+    const ref = FISCAL_RULES.aeCnss, r2 = fiscalR2;
+    const rs = n(cfg.irRates && cfg.irRates.services), rc = n(cfg.irRates && cfg.irRates.commerce);
+    if (!(rs >= 0 && rs <= 0.1)) errors.push('Taux d\'impôt « services » : entre 0 % et 10 %.');
+    if (!(rc >= 0 && rc <= 0.1)) errors.push('Taux d\'impôt « commerce / industrie » : entre 0 % et 10 %.');
+    const amo = Array.isArray(cfg.amoAmounts) ? cfg.amoAmounts.map(n) : [];
+    if (amo.length !== ref.amoAmounts.length || amo.some(x => !(x >= 0 && x <= 1000000))) errors.push('Les ' + ref.amoAmounts.length + ' montants de cotisation doivent être des nombres positifs.');
+    else if (amo.some((x, i) => i && !(x > amo[i - 1]))) errors.push('Les montants de cotisation doivent augmenter de tranche en tranche.');
+    const t1 = n(cfg.t1BelowAnnualIr), bounds = Array.isArray(cfg.annualIrUpperBounds) ? cfg.annualIrUpperBounds.map(n) : [];
+    if (!(t1 > 0)) errors.push('Seuil de la tranche 1 : nombre positif.');
+    if (bounds.length !== ref.annualIrUpperBounds.length || bounds.some(x => !(x > 0))) errors.push('Les ' + ref.annualIrUpperBounds.length + ' bornes de tranches doivent être des nombres positifs.');
+    else if (t1 > 0 && (!(bounds[0] > t1) || bounds.some((x, i) => i && !(x > bounds[i - 1])))) errors.push('Les bornes de tranches doivent augmenter (et dépasser le seuil de la tranche 1).');
+    const coef = n(cfg.pensionCoef);
+    if (!(coef >= 0 && coef <= 5)) errors.push('Coefficient retraite : entre 0 et 5.');
+    if (errors.length) return { ok: false, errors, rules: null };
+    return { ok: true, errors, rules: {
+        irRates: { services: rs, commerce: rc }, pensionCoef: coef, includePension: cfg.includePension === true,
+        annualIrUpperBounds: bounds.map(r2), t1BelowAnnualIr: r2(t1), amoAmounts: amo.map(r2)
+    } };
+}
 // Auto-entrepreneur : impôt libératoire du trimestre, tranche, AMO fixe, retraite (AMO × 1,57). ca = CA encaissé du trimestre (HT).
 function aeCnssQuarter(ca, activity, rules) {
-    const r = rules || FISCAL_RULES.aeCnss, v = Math.max(0, fiscalNum(ca));
+    const r = rules || aeCnssRules(), v = Math.max(0, fiscalNum(ca));
     const rate = activity === 'commerce' ? r.irRates.commerce : r.irRates.services;
     const ir = fiscalR2(v * rate), annualIr = fiscalR2(ir * 4);
     let idx = 0;
@@ -13562,7 +13660,7 @@ function blockedByLicense() {
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
      'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
      'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo','handleStampUpload','removeStamp',
-     'importTechnicalBackup','generateInvitationCode','cancelInvitation','removeTeamMember'
+     'importTechnicalBackup','saveAeCnssSettings','resetAeCnssSettings','generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
         const orig = window[name];
         if (typeof orig !== 'function') return;

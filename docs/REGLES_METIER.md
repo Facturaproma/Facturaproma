@@ -73,3 +73,11 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 - **Ancienne erreur corrigée** : l'écran appliquait 1 % / 0,5 % du CA comme « cotisation CNSS » (taux de l'impôt) puis, dans une première version de cette correction, la grille seule comme total CNSS (AMO uniquement).
 - **Paiement** : ae.gov.ma ou agence Al Barid Bank (le portail rn.ae.gov.ma était suspendu le 25/10/2026 pour raisons de sécurité ; le message officiel invitait à payer en agence Al Barid Bank).
 - **Non vérifié** : plafonds de CA AE affichés (500 000 DH services / 200 000 DH commerce) et taux salariés/employeur (inchangés).
+
+### Barème CNSS auto-entrepreneur modifiable par la société
+
+- L'écran CNSS contient une carte « Barème CNSS auto-entrepreneur (modifiable) » : taux d'impôt libératoire (services, commerce), seuil de la tranche 1, bornes des tranches T2 à T7, 8 montants de cotisation, case « ajouter la retraite » et coefficient.
+- Enregistrement par société (clé `aeCnssConfig`, synchronisée comme les autres réglages). Validation avant enregistrement : nombres positifs, montants strictement croissants, bornes croissantes et supérieures au seuil T1, taux 0–10 %, coefficient 0–5, aucun champ vide. Un barème refusé n'écrase jamais l'ancien.
+- « Rétablir le barème de référence » enregistre un objet vide (la base exige une valeur) : le barème de référence `FISCAL_RULES.aeCnss` s'applique alors.
+- Le barème de référence reste dans l'application (mis à jour par déploiement) ; une société qui l'a personnalisé garde son barème jusqu'à ce qu'elle le rétablisse. Responsabilité : la société vérifie ses valeurs sur ae.gov.ma ou auprès de la CNSS.
+- Non fait : mise à jour centralisée du barème par l'administration pour toutes les sociétés (possible plus tard via les réglages admin).
