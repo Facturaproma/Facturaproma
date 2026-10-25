@@ -6601,6 +6601,15 @@ function navTo(page) {
 // ============================================
 // ADMINS MANAGEMENT (Master only)
 // ============================================
+// Dernière connexion d'un admin : la colonne admins.last_login n'est jamais renseignée ;
+// on utilise la vraie dernière connexion du compte (auth.users, via la liste des comptes).
+function adminLastLogin(a) {
+    if (a && a.last_login) return a.last_login;
+    const email = String((a && a.email) || '').toLowerCase();
+    const acc = (typeof allAccounts !== 'undefined' ? allAccounts : []).find(x => String(x.email || '').toLowerCase() === email);
+    return (acc && acc.last_sign_in) || null;
+}
+
 async function loadAllAdmins() {
     if (!currentAdmin?.isMaster) return;
     
@@ -6647,7 +6656,7 @@ async function renderAdmins() {
                 <td><strong>${a.email}</strong>${isCurrentUser ? ' <span style="color: var(--success); font-size: 11px;">(vous)</span>' : ''}</td>
                 <td>${roleBadge}</td>
                 <td>${formatDate(a.created_at)}</td>
-                <td>${a.last_login ? formatDate(a.last_login) : '—'}</td>
+                <td>${adminLastLogin(a) ? formatDate(adminLastLogin(a)) : '—'}</td>
                 <td>
                     ${canDelete ? `
                         <button class="btn btn-secondary btn-sm" onclick="resetAdminPassword('${a.email}')" title="Réinitialiser mot de passe">
