@@ -18,6 +18,7 @@ function createDb(opts = {}) {
   psql(db, ['-f', path.join(ROOT, 'tests/sql/stub_supabase.sql')]);
   for (const f of SQL_FILES) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   psql(db, ['-c', 'GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated; REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.doc_counters, public.doc_events FROM authenticated;']);
+  if (opts.messagerie) for (const f of ['28_admin_nom_societe', '29_messagerie_support']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   if (opts.docs) {
     // comme Supabase : privilèges par défaut larges, puis les scripts 15/16/17 retirent ce qui doit l'être
     psql(db, ['-c', 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated']);
@@ -49,7 +50,10 @@ function makeBackend(db) {
   const session = (id, email) => ({ access_token: 'tok_' + id, user: { id, email }, expires_at: Math.floor(Date.now() / 1000) + 3600 });
   const RPC = { my_license: [], activate_license: ['p_code'], next_doc_number: ['p_type', 'p_floor'],
     get_doc_mode: [], upsert_document: ['p_doc', 'p_expected_version', 'p_op_id'], delete_document: ['p_type', 'p_id', 'p_expected_version', 'p_op_id'],
-    record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'], get_contact_info: [], admin_whoami: [] };
+    record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'], get_contact_info: [], admin_whoami: [],
+    support_my_messages: [], support_send: ['p_body'], support_mark_read: [], support_unread_count: [],
+    admin_support_threads: [], admin_support_messages: ['p_user'], admin_support_reply: ['p_user', 'p_body'], admin_support_mark_read: ['p_user'], admin_support_unread_total: [] };
+  const RPC_SET = ['support_my_messages', 'admin_support_threads', 'admin_support_messages'];   // fonctions qui renvoient une table
   const GENERIC = ['subscription_requests', 'admin_codes', 'admin_settings', 'licenses', 'admins'];
   const JSONB_PARAMS = ['p_doc', 'p_payment', 'p_entries'];
   const DOC_TABLES = { documents: 'doc_type, id, version, body, created_at', doc_payments: 'id, body, created_at', doc_history: 'seq, ts, body' };
@@ -75,6 +79,7 @@ function makeBackend(db) {
         if (!names) return { data: null, error: { message: 'fonction non autorisée dans le test', code: 'PGRST202' } };
         const vals = names.map(n => JSONB_PARAMS.includes(n) ? JSON.stringify((a.args || {})[n]) : (a.args || {})[n]);
         const placeholders = names.map((n, i) => `${n} => $${i + 1}${JSONB_PARAMS.includes(n) ? '::jsonb' : ''}`).join(', ');
+        if (RPC_SET.includes(a.fn)) { const r = await asUser(uid, c => c.query(`SELECT * FROM public.${a.fn}(${placeholders})`, vals)); return { data: r.rows, error: null }; }
         const r = await asUser(uid, c => c.query(`SELECT public.${a.fn}(${placeholders}) AS r`, vals));
         return { data: r.rows[0].r, error: null };
       }
