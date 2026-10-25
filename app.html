@@ -3922,42 +3922,55 @@
                 <h1>CNSS</h1>
             </div>
 
-            <div class="notice">
-                <strong>ℹ️ Calcul indicatif</strong> — Estimations non officielles. Les taux et échéances n'ont pas pu être relus automatiquement sur cnss.ma : confirmez-les avant toute déclaration, qui se fait uniquement sur le portail Damancom.
-            </div>
-
             <div class="calc-grid">
                 <div class="calc-card">
                     <h3>Cotisation Auto-Entrepreneur</h3>
-                    <p class="subtitle">Calcul de votre cotisation CNSS sur le CA</p>
+                    <p class="subtitle">Cotisation AMO fixe par trimestre, selon la tranche de votre impôt (T1 à T8)</p>
 
                     <div class="form-group">
-                        <label>Chiffre d'affaires de la période</label>
-                        <input type="number" id="cnssCA" placeholder="0" oninput="calculateCNSS()">
+                        <label>Chiffre d'affaires encaissé du trimestre</label>
+                        <input type="number" id="cnssCA" placeholder="0" min="0" oninput="calculateCNSS()">
                     </div>
 
                     <div class="form-group">
                         <label>Type d'activité</label>
                         <select id="cnssActivity" onchange="calculateCNSS()">
-                            <option value="services">Services / Prestations (1%)</option>
-                            <option value="commerce">Commerce / Industrie (0,5%)</option>
+                            <option value="services">Services / Prestations (impôt 1 %)</option>
+                            <option value="commerce">Commerce / Industrie / Artisanat (impôt 0,5 %)</option>
                         </select>
                     </div>
 
                     <div class="calc-result">
                         <div class="calc-line">
-                            <span>Chiffre d'affaires</span>
+                            <span>Chiffre d'affaires du trimestre</span>
                             <span id="cnssCADisplay">0,00 DH</span>
                         </div>
                         <div class="calc-line">
-                            <span>Taux applicable</span>
-                            <span id="cnssRate">1%</span>
+                            <span>Impôt libératoire (<span id="cnssRate">1 %</span>)</span>
+                            <span id="cnssIr">0,00 DH</span>
+                        </div>
+                        <div class="calc-line">
+                            <span>Tranche CNSS</span>
+                            <span id="cnssTranche">T1</span>
+                        </div>
+                        <div class="calc-line">
+                            <span>AMO (assurance maladie)</span>
+                            <span id="cnssAmo">300,00 DH</span>
+                        </div>
+                        <div class="calc-line" id="cnssRetraiteLine" style="display: none;">
+                            <span>Retraite (AMO × 1,57)</span>
+                            <span id="cnssRetraite">0,00 DH</span>
                         </div>
                         <div class="calc-line total">
-                            <span>Cotisation CNSS</span>
-                            <span id="cnssTotal">0,00 DH</span>
+                            <span>Cotisation CNSS du trimestre</span>
+                            <span id="cnssTotal">300,00 DH</span>
+                        </div>
+                        <div class="calc-line">
+                            <span>Total à payer (impôt + CNSS)</span>
+                            <span id="cnssAllAE">300,00 DH</span>
                         </div>
                     </div>
+                    <p class="subtitle" style="margin-top: 10px;">Le portail des auto-entrepreneurs ne prélève que l'impôt et cette cotisation AMO : la retraite n'y est pas incluse. La cotisation est due même sans chiffre d'affaires (minimum T1), avant la fin du mois suivant chaque trimestre (ou chaque mois si vous avez choisi le paiement mensuel). Paiement avec l'impôt, sur <a href="https://ae.gov.ma" target="_blank" rel="noopener noreferrer">ae.gov.ma</a> ou en agence Al Barid Bank.</p>
                 </div>
 
                 <div class="calc-card">
@@ -3974,7 +3987,7 @@
                             <span id="cnssCAProjected">0,00 DH</span>
                         </div>
                         <div class="calc-line">
-                            <span>Cotisation projetée</span>
+                            <span>Cotisation CNSS projetée (année)</span>
                             <span id="cnssProjected">0,00 DH</span>
                         </div>
                         <div class="calc-line">
@@ -3992,15 +4005,16 @@
             </div>
 
             <div class="calc-card">
-                <h3>📅 Échéancier indicatif (chiffre d'affaires auto-entrepreneur)</h3>
-                <p class="subtitle">Par trimestre, échéance supposée : fin du mois suivant le trimestre (à valider auprès de l'administration)</p>
+                <h3>📅 Échéancier trimestriel (auto-entrepreneur)</h3>
+                <p class="subtitle">Impôt et cotisation CNSS à régler avant le 30 avril, 31 juillet, 31 octobre et 31 janvier suivant</p>
 
                 <div class="items-scroll"><table style="margin-top: 16px;">
                     <thead>
                         <tr>
                             <th>Période</th>
-                            <th>CA</th>
-                            <th>Cotisation</th>
+                            <th>CA encaissé</th>
+                            <th>Impôt</th>
+                            <th>Cotisation CNSS</th>
                             <th>Échéance</th>
                             <th>Statut</th>
                         </tr>
@@ -9009,8 +9023,6 @@ function renderCNSS() {
     // YTD CA (HT, pas TTC - CNSS se calcule sur HT au Maroc)
     const company = Storage.get('company', {});
     const activity = company.activity || 'services';
-    const cnssRate = activity === 'commerce' ? 0.005 : 0.01;
-    
     const invoices = Storage.get('invoices', []);
     const currentYear = new Date().getFullYear();
     const paidThisYear = invoices.filter(i => 
@@ -9025,7 +9037,8 @@ function renderCNSS() {
     
     document.getElementById('cnssCAYTD').textContent = formatCurrency(caYTD);
     document.getElementById('cnssCAProjected').textContent = formatCurrency(projected);
-    document.getElementById('cnssProjected').textContent = formatCurrency(projected * cnssRate);
+    // Cotisation fixe : 4 trimestres au niveau du CA trimestriel moyen projeté
+    document.getElementById('cnssProjected').textContent = formatCurrency(aeCnssQuarter(projected / 4, activity).cnss * 4);
     
     // Schedule
     renderCNSSSchedule();
@@ -9035,13 +9048,18 @@ function renderCNSS() {
 function calculateCNSS() {
     const ca = parseFloat(document.getElementById('cnssCA').value) || 0;
     const activity = document.getElementById('cnssActivity').value;
-    const rate = activity === 'services' ? 0.01 : 0.005;
-    const cotisation = ca * rate;
-    
-    document.getElementById('cnssCADisplay').textContent = formatCurrency(ca);
-    document.getElementById('cnssRate').textContent = activity === 'services' ? '1%' : '0,5%';
-    document.getElementById('cnssTotal').textContent = formatCurrency(cotisation);
-    
+    const q = aeCnssQuarter(ca, activity);
+
+    document.getElementById('cnssCADisplay').textContent = formatCurrency(q.ca);
+    document.getElementById('cnssRate').textContent = activity === 'services' ? '1 %' : '0,5 %';
+    document.getElementById('cnssIr').textContent = formatCurrency(q.ir);
+    document.getElementById('cnssTranche').textContent = 'T' + q.tranche;
+    document.getElementById('cnssAmo').textContent = formatCurrency(q.amo);
+    document.getElementById('cnssRetraite').textContent = formatCurrency(q.retraite);
+    document.getElementById('cnssRetraiteLine').style.display = q.includePension ? '' : 'none';
+    document.getElementById('cnssTotal').textContent = formatCurrency(q.cnss);
+    document.getElementById('cnssAllAE').textContent = formatCurrency(q.total);
+
     const plafond = activity === 'services' ? 500000 : 200000;
     document.getElementById('cnssPlafond').textContent = formatCurrency(plafond);
 }
@@ -9097,6 +9115,21 @@ const FISCAL_RULES = {
     reviewedOn: '2026-10-22',
     // TVA : déclaration et paiement avant la fin du mois suivant la période (mensuel ou trimestriel). Source secondaire, à valider sur tax.gov.ma.
     vat: { monthlyThresholdDH: 1000000 },
+    // Auto-entrepreneur (décret 2.21.928 du 29/11/2021, art. 3 à 5 — texte lu) : la cotisation AMO est un MONTANT FIXE par trimestre
+    // (« droits complémentaires », barème de l'art. 73-II-B-6° du CGI) selon la tranche de l'impôt libératoire annuel projeté ; la cotisation
+    // RETRAITE = AMO × 1,57 (art. 4). Payée à la fréquence choisie (mensuelle ou trimestrielle) avant la fin du mois suivant la période (art. 5).
+    // Barème des montants : repris de la presse (Médias24, 17/11/2021) et de guides 2026 concordants ; le CGI lui-même n'a pas pu être relu (accès refusé).
+    aeCnss: {
+        irRates: { services: 0.01, commerce: 0.005 },          // impôt libératoire sur le CA encaissé
+        pensionCoef: 1.57,                                      // retraite = AMO × 1,57 (décret 2.21.928, art. 4)
+        // La retraite est prévue par le décret mais, d'après le propriétaire, le portail de paiement des auto-entrepreneurs n'affiche et ne prélève
+        // que l'impôt + le droit complémentaire (AMO) : par défaut elle n'est PAS ajoutée au total. Passer à true si la CNSS/DGI confirme son prélèvement.
+        includePension: false,
+        // T1 si impôt annuel projeté < 500 ; T2 de 500 à 1 000 ; T3 jusqu'à 2 500 ; T4 5 000 ; T5 10 000 ; T6 25 000 ; T7 50 000 ; T8 au-delà
+        annualIrUpperBounds: [1000, 2500, 5000, 10000, 25000, 50000],   // bornes hautes incluses de T2 à T7
+        t1BelowAnnualIr: 500,
+        amoAmounts: [300, 390, 570, 720, 1050, 1500, 2250, 3600]         // AMO par trimestre, de T1 à T8
+    },
     // CNSS : sources secondaires (non officielles) ; à valider sur cnss.ma / damancom.ma.
     cnss: {
         dueDay: 10,
@@ -9178,6 +9211,16 @@ function vatReportCsv(per, basis, col, ded, bal) {
     return L.join('\n');
 }
 // CNSS employeur (indicatif)
+// Auto-entrepreneur : impôt libératoire du trimestre, tranche, AMO fixe, retraite (AMO × 1,57). ca = CA encaissé du trimestre (HT).
+function aeCnssQuarter(ca, activity, rules) {
+    const r = rules || FISCAL_RULES.aeCnss, v = Math.max(0, fiscalNum(ca));
+    const rate = activity === 'commerce' ? r.irRates.commerce : r.irRates.services;
+    const ir = fiscalR2(v * rate), annualIr = fiscalR2(ir * 4);
+    let idx = 0;
+    if (annualIr >= r.t1BelowAnnualIr) { const k = r.annualIrUpperBounds.findIndex(b => annualIr <= b); idx = k < 0 ? r.amoAmounts.length - 1 : k + 1; }
+    const amo = r.amoAmounts[idx], retraite = fiscalR2(amo * r.pensionCoef), cnss = fiscalR2(amo + (r.includePension ? retraite : 0));
+    return { ca: v, rate, ir, annualIr, tranche: idx + 1, amo, retraite, includePension: !!r.includePension, cnss, total: fiscalR2(ir + cnss) };
+}
 function cnssForEmployee(gross, rules) {
     const r = rules || FISCAL_RULES.cnss, g = Math.max(0, fiscalNum(gross)), capped = Math.min(g, r.ceilingDH);
     let emp = 0, er = 0;
@@ -9198,23 +9241,25 @@ function renderCNSSSchedule() {
     const invoices = Storage.get('invoices', []);
     const currentYear = new Date().getFullYear();
     const company = Storage.get('company', {});
-    const rate = (company.activity || 'services') === 'commerce' ? 0.005 : 0.01;
+    const activity = company.activity || 'services';
     const today = todayISO();
     const rows = vatPeriods('quarterly', currentYear).map(per => {
         const ca = invoices.filter(i => i.type !== 'credit' && i.status === 'paid' && fiscalInPeriod(i.paidAt || i.paymentDate || i.date, per))
             .reduce((s, i) => s + (fiscalNum(i.totalHT) || fiscalNum(i.totalTTC)), 0);
-        return { label: per.label, ca, cotisation: ca * rate, due: per.due, isPast: per.due < today };
+        const q = aeCnssQuarter(ca, activity);
+        return { label: per.label, ca, ir: q.ir, cotisation: q.cnss, tranche: q.tranche, due: per.due, isPast: per.due < today, started: per.start <= today };
     });
     document.getElementById('cnssSchedule').innerHTML = rows.map(m => `
         <tr>
             <td><strong>${escapeHtml(m.label)}</strong></td>
             <td>${formatCurrency(m.ca)}</td>
-            <td>${formatCurrency(m.cotisation)}</td>
+            <td>${formatCurrency(m.ir)}</td>
+            <td>${formatCurrency(m.cotisation)} <small style="color: var(--muted, #6b7280);">(T${m.tranche})</small></td>
             <td>${escapeHtml(fiscalDateFr(m.due))}</td>
             <td>
-                ${m.ca === 0 ? '<span class="status-pill status-draft">Pas de CA</span>' :
-                  m.isPast ? '<span class="status-pill status-overdue">À vérifier</span>' :
-                  '<span class="status-pill status-pending">À venir</span>'}
+                ${!m.started ? '<span class="status-pill status-draft">À venir</span>' :
+                  m.isPast ? '<span class="status-pill status-overdue">À régler / vérifier</span>' :
+                  '<span class="status-pill status-pending">En cours</span>'}
             </td>
         </tr>
     `).join('');
