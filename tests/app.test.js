@@ -267,6 +267,12 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   await E(() => { document.getElementById('tvaRegime').value = 'quarterly'; onVatControlChange(true); });
   await E(() => navTo('cnss')); await p.waitForTimeout(300);
   await E(() => { document.getElementById('ceLabel').value = 'Salarié test'; document.getElementById('ceGross').value = '5000'; addCnssEmployee(); });
+  check('CNSS AE : plus d\'avertissement « Calcul indicatif » en tête de page', await E(() => !/Calcul indicatif|n'ont pas pu être relus/.test(document.querySelector('#page-cnss').textContent.split('Déclaration employeur')[0])));
+  await E(() => { document.getElementById('cnssCA').value = '112000'; document.getElementById('cnssActivity').value = 'services'; calculateCNSS(); });
+  check('CNSS AE : CA 112 000 services → impôt 1 120, tranche T4, cotisation 720, total 1 840', await E(() => { const n = (id) => document.getElementById(id).textContent.replace(/\s|\u00a0|\u202f/g, ''); return n('cnssIr').includes('1120,00') && n('cnssTranche') === 'T4' && n('cnssTotal').includes('720,00') && n('cnssAllAE').includes('1840,00'); }));
+  await E(() => { document.getElementById('cnssCA').value = ''; calculateCNSS(); });
+  check('CNSS AE : sans CA, minimum T1 300 DH affiché', await E(() => document.getElementById('cnssTranche').textContent === 'T1' && document.getElementById('cnssTotal').textContent.replace(/\s|\u00a0|\u202f/g, '').includes('300,00')));
+  check('CNSS AE : échéancier 4 trimestres, 6 colonnes, échéances 30/04 31/07 31/10 31/01', await E(() => { const rows = [...document.querySelectorAll('#cnssSchedule tr')]; const t = document.getElementById('cnssSchedule').textContent; return rows.length === 4 && rows.every(r => r.children.length === 6) && /30 avril/.test(t) && /31 juillet/.test(t) && /31 octobre/.test(t) && /31 janvier/.test(t); }));
   check('CNSS employeur : 5 000 DH -> 337,00 salarié / 1 054,50 patronal', await E(() => { const t = document.getElementById('cnssEmployeesBody').textContent.replace(/\s|\u00a0|\u202f/g, ''); return t.includes('337,00DH') && t.includes('1054,50DH'); }));
   check('CNSS : liens officiels Damancom et cnss.ma, échéance affichée', await E(() => { const h = [...document.querySelectorAll('#page-cnss a')].map(a => a.href); return h.some(x => /^https:\/\/www\.damancom\.ma/.test(x)) && h.some(x => /^https:\/\/www\.cnss\.ma/.test(x)) && /^\d+(er)? \S+ \d{4} — déclaration des salaires de /.test(document.getElementById('cnssNextDue').textContent); }));
 

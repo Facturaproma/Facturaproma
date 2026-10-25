@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
 const a = html.indexOf('// <FISCAL-CALC>'), b = html.indexOf('// </FISCAL-CALC>');
 assert(a > 0 && b > a, 'bloc FISCAL-CALC introuvable');
-const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr };')();
+const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 
 // Échéances trimestrielles : fin du mois suivant le trimestre
@@ -53,6 +53,16 @@ ok('CSV : formule neutralisée (=cmd -> \'=cmd)', csv.includes("'=cmd") && !/;=c
 ok('CSV : totaux et mention non officielle', csv.includes('Total collecté') && csv.includes('Total déductible') && csv.includes('Estimation non officielle'));
 ok('CSV : séparateur ; et guillemets', api.csvText('a;b"c') === '"a;b""c"');
 
+// CNSS auto-entrepreneur : montant fixe par tranche selon l'impôt libératoire du trimestre
+const ae = (ca, act) => api.aeCnssQuarter(ca, act || 'services');
+ok('AE : CA 0 → impôt 0, tranche T1, CNSS minimum 300 DH (due même sans CA)', (() => { const r = ae(0); return r.ir === 0 && r.tranche === 1 && r.cnss === 300 && r.total === 300; })());
+ok('AE services : CA 10 000 → impôt 100 (1 %), T1, 300 DH', (() => { const r = ae(10000); return r.ir === 100 && r.tranche === 1 && r.cnss === 300; })());
+ok('AE services : CA 12 500 → impôt 125, borne haute de T1', ae(12500).tranche === 1 && ae(12501).tranche === 2);
+ok('AE commerce : CA 100 000 → impôt 500 (0,5 %), T3, 570 DH', (() => { const r = ae(100000, 'commerce'); return r.ir === 500 && r.tranche === 3 && r.cnss === 570; })());
+ok('AE services : CA 112 000 → impôt 1 120, T4, 720 DH ; total 1 840', (() => { const r = ae(112000); return r.ir === 1120 && r.tranche === 4 && r.cnss === 720 && r.total === 1840; })());
+ok('AE services : CA 1 500 000 → impôt 15 000, T8, 3 600 DH', (() => { const r = ae(1500000); return r.tranche === 8 && r.cnss === 3600; })());
+ok('AE : la grille a 8 montants croissants et 7 bornes croissantes', (() => { const g = api.FISCAL_RULES.aeCnss; return g.amounts.length === 8 && g.irUpperBounds.length === 7 && g.amounts.every((v, i, a) => !i || v > a[i - 1]) && g.irUpperBounds.every((v, i, a) => !i || v > a[i - 1]); })());
+ok('AE : valeurs négatives ou invalides traitées comme 0', ae(-50).cnss === 300 && ae('abc').cnss === 300);
 // CNSS
 ok('CNSS : taux salarié 6,74 % et employeur 21,09 % sous le plafond', (() => { const r = api.cnssForEmployee(5000); return r.emp === 337 && r.er === 1054.5; })());
 ok('CNSS : plafond 6 000 sur les prestations, AMO/allocations/formation sans plafond', (() => { const r = api.cnssForEmployee(10000); return r.emp === 494.8 && r.er === 1749.8; })());

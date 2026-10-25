@@ -60,3 +60,12 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 - Un changement de recherche ou de filtre ramène à la page 1. Les exports (CSV) et les totaux portent toujours sur **toute** la liste filtrée, pas seulement sur la page affichée.
 - Les anciennes coupures silencieuses (50 codes, 10 derniers paiements) disparaissent : tout est consultable page par page.
 - Non paginés : les rapports et tableaux récapitulatifs (TVA, CNSS, top clients…), qui sont des synthèses.
+
+## CNSS des auto-entrepreneurs (écran CNSS)
+
+- **Règle appliquée** : cotisation CNSS (AMO + retraite TNS) = **montant fixe par trimestre**, selon une tranche T1 à T8 déterminée par l'impôt libératoire du trimestre (0,5 % commerce/industrie/artisanat, 1 % services, sur le CA encaissé HT). Due **même sans chiffre d'affaires** (minimum T1).
+- **Grille** (impôt trimestriel → cotisation par trimestre) : ≤ 125 → 300 DH ; ≤ 250 → 390 ; ≤ 625 → 570 ; ≤ 1 250 → 720 ; ≤ 2 500 → 1 050 ; ≤ 6 250 → 1 500 ; ≤ 12 500 → 2 250 ; au-delà → 3 600. (Équivalent annuel : 500 / 1 000 / 2 500 / 5 000 / 10 000 / 25 000 / 50 000.)
+- **Échéances** : 30 avril (T1), 31 juillet (T2), 31 octobre (T3), 31 janvier de l'année suivante (T4) ; paiement avec l'impôt sur ae.gov.ma.
+- **Ancienne erreur corrigée** : l'écran appliquait 1 % / 0,5 % du CA comme « cotisation CNSS » ; ce sont les taux de l'impôt, pas de la CNSS.
+- **Sources** : guides publiés en 2026 (Fatoura Plus, LMoukawil, ClicPaie), concordants sur la grille ; décrets cités par ces guides : 2.21.477, 2.21.928, 2.22.208 ; lois 114-13, 98-15, 99-15. **Les pages officielles (cnss.ma, rn.ae.gov.ma) n'ont pas pu être lues automatiquement** : à confirmer par le propriétaire ou un comptable (montants, bornes exactes ≤ / <, éventuelle révision par décret). Les valeurs sont dans `FISCAL_RULES.aeCnss` (app.html), modifiables en un seul endroit.
+- **Non vérifié** : plafonds de chiffre d'affaires AE affichés (500 000 DH services / 200 000 DH commerce), et taux salariés/employeur (inchangés).
