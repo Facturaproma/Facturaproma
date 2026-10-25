@@ -81,3 +81,9 @@ Aucune règle n'est présentée comme officielle sans source officielle. Derniè
 - « Rétablir le barème de référence » enregistre un objet vide (la base exige une valeur) : le barème de référence `FISCAL_RULES.aeCnss` s'applique alors.
 - Le barème de référence reste dans l'application (mis à jour par déploiement) ; une société qui l'a personnalisé garde son barème jusqu'à ce qu'elle le rétablisse. Responsabilité : la société vérifie ses valeurs sur ae.gov.ma ou auprès de la CNSS.
 - Non fait : mise à jour centralisée du barème par l'administration pour toutes les sociétés (possible plus tard via les réglages admin).
+
+### Écran CNSS : affichage selon le statut et taux employeur modifiables
+
+- L'écran CNSS a deux onglets : « Auto-entrepreneur » et « Employeur (salariés) ». À chaque ouverture, l'onglet par défaut dépend du statut de la société : auto-entrepreneur (`ae`) → onglet AE ; autres statuts (freelance, SARL, société) → onglet employeur. L'autre onglet reste accessible.
+- Taux employeur modifiables par société (clé `cnssEmployerConfig`) : taux salarié et employeur de chacune des 4 branches (prestations sociales plafonnées, AMO, allocations familiales, formation professionnelle), plafond mensuel et jour limite de déclaration. Validation : taux 0–50 %, plafond positif, jour entier de 1 à 28, aucun champ vide ; un réglage refusé n'écrase pas l'ancien. « Rétablir » enregistre un objet vide (référence).
+- Référence employeur actuelle (`FISCAL_RULES.cnss`) : prestations sociales 4,48 % salarié / 8,98 % employeur (plafond 6 000 DH/mois), AMO 2,26 % / 4,11 %, allocations familiales 6,40 % employeur, formation professionnelle 1,60 % employeur ; total 6,74 % / 21,09 % ; échéance le 10 du mois suivant. Concordant avec deux guides 2026 (Sahlcompta, mai 2026 ; Humantal, janvier 2026), **non confirmé sur un texte officiel CNSS** (pages illisibles par accès automatique).

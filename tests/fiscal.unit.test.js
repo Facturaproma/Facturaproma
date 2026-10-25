@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
 const a = html.indexOf('// <FISCAL-CALC>'), b = html.indexOf('// </FISCAL-CALC>');
 assert(a > 0 && b > a, 'bloc FISCAL-CALC introuvable');
-const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, aeCnssValidate, aeCnssRules, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr };')();
+const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, aeCnssValidate, aeCnssRules, cnssValidate, cnssRules, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 
 // Échéances trimestrielles : fin du mois suivant le trimestre
@@ -78,6 +78,14 @@ ok('AE barème : bornes non croissantes ou ≤ seuil T1 refusées', (() => { con
 ok('AE barème : taux hors 0–10 %, négatifs, texte, NaN refusés', (() => { const c = base(); c.irRates.services = 0.5; const d = base(); d.amoAmounts[0] = -1; const e = base(); e.amoAmounts[2] = 'abc'; const f = base(); f.pensionCoef = NaN; return [c, d, e, f].every(x => !api.aeCnssValidate(x).ok); })());
 ok('AE barème : mauvais nombre de tranches refusé ; virgule décimale acceptée', (() => { const c = base(); c.amoAmounts.pop(); const d = base(); d.amoAmounts[0] = '310,5'; const v = api.aeCnssValidate(d); return !api.aeCnssValidate(c).ok && v.ok && v.rules.amoAmounts[0] === 310.5; })());
 ok('AE barème : sans barème personnalisé, aeCnssRules() = référence', api.aeCnssRules() === api.FISCAL_RULES.aeCnss);
+// Taux CNSS employeur modifiables par société
+const cbase = () => JSON.parse(JSON.stringify(api.FISCAL_RULES.cnss));
+ok('CNSS employeur : absent ou objet vide → référence ; référence valide', (() => { const a = api.cnssValidate({}), b = api.cnssValidate(cbase()); return a.ok && a.rules === null && b.ok && b.rules.ceilingDH === 6000 && b.rules.dueDay === 10 && b.rules.branches.length === 4; })());
+ok('CNSS employeur : taux modifié appliqué (AMO salarié 3 % sur 5 000 → 150 + autres)', (() => { const c = cbase(); c.branches.find(b => b.id === 'amo').emp = 0.03; const v = api.cnssValidate(c); return v.ok && api.cnssForEmployee(5000, v.rules).emp === 5000 * (0.0448 + 0.03); })());
+ok('CNSS employeur : plafond modifié (7 000) appliqué aux prestations', (() => { const c = cbase(); c.ceilingDH = 7000; const v = api.cnssValidate(c); return v.ok && api.cnssForEmployee(10000, v.rules).emp === 7000 * 0.0448 + 10000 * 0.0226; })());
+ok('CNSS employeur : jour limite modifié (15) appliqué à l\'échéance', (() => { const c = cbase(); c.dueDay = 15; const v = api.cnssValidate(c); return v.ok && api.cnssNextDue('2026-10-12', v.rules).due === '2026-10-15'; })());
+ok('CNSS employeur : valeurs invalides refusées (taux > 50 %, négatif, plafond 0, jour 0 ou 31, branche manquante, texte)', (() => { const mk = (f) => { const c = cbase(); f(c); return !api.cnssValidate(c).ok; }; return mk(c => { c.branches[0].er = 0.9; }) && mk(c => { c.branches[1].emp = -0.01; }) && mk(c => { c.ceilingDH = 0; }) && mk(c => { c.dueDay = 0; }) && mk(c => { c.dueDay = 31; }) && mk(c => { c.branches.pop(); }) && mk(c => { c.branches[2].er = 'abc'; }); })());
+ok('CNSS employeur : sans réglage, cnssRules() = référence', api.cnssRules() === api.FISCAL_RULES.cnss);
 // CNSS
 ok('CNSS : taux salarié 6,74 % et employeur 21,09 % sous le plafond', (() => { const r = api.cnssForEmployee(5000); return r.emp === 337 && r.er === 1054.5; })());
 ok('CNSS : plafond 6 000 sur les prestations, AMO/allocations/formation sans plafond', (() => { const r = api.cnssForEmployee(10000); return r.emp === 494.8 && r.er === 1749.8; })());

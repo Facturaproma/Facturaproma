@@ -2757,6 +2757,9 @@
 .msg-form { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--line, #e2ded3); border-top:0; border-radius:0 0 12px 12px; background:var(--card, #fff); }
 .msg-form textarea { width:100%; min-height:72px; resize:vertical; font:inherit; font-size:15px; padding:10px; border:1px solid var(--line, #d9d4c7); border-radius:8px; box-sizing:border-box; }
 .msg-foot { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; color:var(--ink-mute, #6b7280); }
+    /* Tableaux de réglages CNSS : champs assez larges pour lire les montants (le tableau défile dans sa carte sur téléphone) */
+    #aeCnssGrid input, #cnssEmpGrid input { width: 100%; min-width: 68px; padding-left: 8px; padding-right: 8px; box-sizing: border-box; }
+    #aeCnssSettings td, #aeCnssSettings th, #cnssEmpSettings td, #cnssEmpSettings th { padding-left: 6px; padding-right: 6px; }
     .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
 .fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
 .fp-pg:disabled { opacity:.4; cursor:default; }
@@ -3922,6 +3925,12 @@
                 <h1>CNSS</h1>
             </div>
 
+            <div class="tabs" id="cnssTabs" role="tablist">
+                <button class="tab" id="cnssTabAe" role="tab" onclick="showCnssPart('ae')">Auto-entrepreneur</button>
+                <button class="tab" id="cnssTabEmployer" role="tab" onclick="showCnssPart('employer')">Employeur (salariés)</button>
+            </div>
+
+            <div id="cnssAeBlock">
             <div class="calc-grid">
                 <div class="calc-card">
                     <h3>Cotisation Auto-Entrepreneur</h3>
@@ -4040,6 +4049,9 @@
                 <p class="subtitle" style="margin-top: 8px;">Ce barème ne s'applique qu'à votre société. En cas de changement officiel, modifiez-le ici après vérification sur <a href="https://ae.gov.ma" target="_blank" rel="noopener noreferrer">ae.gov.ma</a> ou auprès de la CNSS.</p>
             </div>
 
+            </div>
+
+            <div id="cnssEmployerBlock" style="display: none;">
             <div class="calc-card" style="margin-top: 16px;">
                 <h3>👥 Déclaration employeur (Damancom) — récapitulatif indicatif</h3>
                 <p class="subtitle">Pour vos salariés déclarés à la CNSS. Ne saisissez que ce qui est utile (nom ou prénom suffit).</p>
@@ -4049,10 +4061,9 @@
                     <span id="cnssNextDue">—</span>
                 </div>
                 <div class="notice" style="margin-top: 12px;">
-                    <strong>⚠️ À valider</strong> — Échéance (le <span id="cnssDueDayTxt">10</span> du mois suivant), plafond (<span id="cnssCeilingTxt">6 000</span> DH) et taux proviennent de sources secondaires non officielles. Vérifiez-les sur
-                    <a href="https://www.cnss.ma" target="_blank" rel="noopener noreferrer">cnss.ma</a> avant de déclarer sur
-                    <a href="https://www.damancom.ma" target="_blank" rel="noopener noreferrer">Damancom</a>.
-                    Le fichier de déclaration (BDS/eBDS) n'est pas généré par FacturaProMa.
+                    Taux de référence conformes aux guides 2026 consultés (à confirmer sur
+                    <a href="https://www.cnss.ma" target="_blank" rel="noopener noreferrer">cnss.ma</a>) : échéance le <span id="cnssDueDayTxt">10</span> du mois suivant, plafond <span id="cnssCeilingTxt">6 000</span> DH. Modifiables plus bas si la réglementation change. Déclaration sur
+                    <a href="https://www.damancom.ma" target="_blank" rel="noopener noreferrer">Damancom</a> ; le fichier de déclaration (BDS/eBDS) n'est pas généré par FacturaProMa.
                 </div>
 
                 <div class="form-group"><label for="ceLabel">Salarié (nom ou prénom)</label><input type="text" id="ceLabel" maxlength="80"></div>
@@ -4069,6 +4080,22 @@
                     <div class="calc-line total"><span>Total estimé à verser</span><span id="cnssAllTotal">0,00 DH</span></div>
                 </div>
                 <p class="subtitle" style="margin-top: 8px;">Autres cotisations éventuelles (selon votre situation) non incluses.</p>
+            </div>
+
+            <div class="calc-card" style="margin-top: 16px;" id="cnssEmpSettings">
+                <h3>⚙️ Taux CNSS employeur (modifiables)</h3>
+                <p class="subtitle" id="cnssEmpSource">—</p>
+                <div class="notice" id="cnssEmpErrors" style="display: none; border-left-color: var(--danger, #b42318);"></div>
+                <div class="items-scroll"><table style="margin-top: 8px;">
+                    <thead><tr><th>Branche</th><th>Part salarié (%)</th><th>Part employeur (%)</th></tr></thead>
+                    <tbody id="cnssEmpGrid"></tbody>
+                </table></div>
+                <div class="form-group" style="margin-top: 12px;"><label for="cnssEmpCeiling">Plafond mensuel des prestations sociales (DH)</label><input type="number" id="cnssEmpCeiling" min="0" step="1"></div>
+                <div class="form-group"><label for="cnssEmpDueDay">Jour limite de déclaration et de paiement (du mois suivant)</label><input type="number" id="cnssEmpDueDay" min="1" max="28" step="1"></div>
+                <button class="btn btn-primary" onclick="saveCnssEmpSettings()">Enregistrer ces taux</button>
+                <button class="btn btn-secondary" onclick="resetCnssEmpSettings()">Rétablir les taux de référence</button>
+                <p class="subtitle" style="margin-top: 8px;">Ces taux ne s'appliquent qu'à votre société. En cas de changement officiel, modifiez-les ici après vérification sur <a href="https://www.cnss.ma" target="_blank" rel="noopener noreferrer">cnss.ma</a>.</p>
+            </div>
             </div>
         </section>
 
@@ -7560,7 +7587,7 @@ function navTo(page) {
     if (page === 'products') renderProducts();
     if (page === 'payments') renderPayments();
     if (page === 'reminders') renderReminders();
-    if (page === 'cnss') renderCNSS();
+    if (page === 'cnss') { cnssPart = null; renderCNSS(); }
     if (page === 'taxes') renderTaxes();
     if (page === 'company') loadCompanyForm();
     if (page === 'team') { navTo('dashboard'); return; }
@@ -9087,8 +9114,64 @@ function resetAeCnssSettings() {
     showToast('Barème de référence rétabli', 'success');
 }
 
+// ---------- Taux CNSS employeur de la société (modifiables) ----------
+const CNSS_BRANCH_LABELS = { prestations: 'Prestations sociales (plafonnées)', amo: 'AMO (assurance maladie)', allocations: 'Allocations familiales', formation: 'Formation professionnelle' };
+function loadCnssEmpConfig() {
+    const cfg = Storage.get('cnssEmployerConfig', null), v = cnssValidate(cfg);
+    CNSS_EMP_OVERRIDE = (v.ok && v.rules) ? v.rules : null;
+    return cfg;
+}
+function renderCnssEmpSettings() {
+    const cfg = loadCnssEmpConfig(), r = cnssRules(), custom = !!CNSS_EMP_OVERRIDE;
+    const pc = (x) => +(x * 100).toFixed(4);
+    const g = document.getElementById('cnssEmpGrid');
+    if (g) g.innerHTML = r.branches.map(b => `<tr><td>${escapeHtml(CNSS_BRANCH_LABELS[b.id] || b.id)}</td>
+        <td><input type="number" id="cnssEmp_${b.id}_emp" min="0" max="50" step="0.01" value="${pc(b.emp)}" aria-label="${escapeHtml(b.id)} part salarié"></td>
+        <td><input type="number" id="cnssEmp_${b.id}_er" min="0" max="50" step="0.01" value="${pc(b.er)}" aria-label="${escapeHtml(b.id)} part employeur"></td></tr>`).join('');
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('cnssEmpCeiling', r.ceilingDH); set('cnssEmpDueDay', r.dueDay);
+    const src = document.getElementById('cnssEmpSource');
+    if (src) src.textContent = custom
+        ? 'Taux personnalisés de votre société' + (cfg && cfg.savedAt ? ' (enregistrés le ' + new Date(cfg.savedAt).toLocaleDateString('fr-FR') + ')' : '') + '.'
+        : 'Taux de référence FacturaProMa (guides 2026 concordants : salarié 6,74 %, employeur 21,09 % ; à confirmer sur cnss.ma).';
+    const er = document.getElementById('cnssEmpErrors'); if (er) { er.style.display = 'none'; er.textContent = ''; }
+}
+function saveCnssEmpSettings() {
+    const el = (id) => document.getElementById(id);
+    const empty = [...document.querySelectorAll('#cnssEmpSettings input[type=number]')].some(x => x.value.trim() === '');
+    const num = (id) => Number(String(el(id).value).replace(',', '.'));
+    const form = { ceilingDH: num('cnssEmpCeiling'), dueDay: num('cnssEmpDueDay'),
+        branches: FISCAL_RULES.cnss.branches.map(b => ({ id: b.id, emp: num('cnssEmp_' + b.id + '_emp') / 100, er: num('cnssEmp_' + b.id + '_er') / 100 })) };
+    const v = empty ? { ok: false, errors: ['Remplissez tous les champs.'] } : cnssValidate(form);
+    const er = el('cnssEmpErrors');
+    if (!v.ok) { if (er) { er.style.display = ''; er.textContent = v.errors.join(' '); } showToast('Taux non enregistrés : ' + v.errors[0], 'error'); return; }
+    Storage.set('cnssEmployerConfig', Object.assign({}, v.rules, { savedAt: new Date().toISOString() }));
+    renderCNSS();
+    showToast('Taux enregistrés pour votre société', 'success');
+}
+function resetCnssEmpSettings() {
+    Storage.set('cnssEmployerConfig', {});          // objet vide = taux de référence
+    renderCNSS();
+    showToast('Taux de référence rétablis', 'success');
+}
+// Onglets : auto-entrepreneur par défaut pour le statut « ae », employeur pour les autres statuts ; l'autre partie reste accessible.
+let cnssPart = null;
+function showCnssPart(part) {
+    cnssPart = part === 'employer' ? 'employer' : 'ae';
+    const ae = document.getElementById('cnssAeBlock'), em = document.getElementById('cnssEmployerBlock');
+    if (ae) ae.style.display = cnssPart === 'ae' ? '' : 'none';
+    if (em) em.style.display = cnssPart === 'employer' ? '' : 'none';
+    const ta = document.getElementById('cnssTabAe'), te = document.getElementById('cnssTabEmployer');
+    if (ta) { ta.classList.toggle('active', cnssPart === 'ae'); ta.setAttribute('aria-selected', cnssPart === 'ae'); }
+    if (te) { te.classList.toggle('active', cnssPart === 'employer'); te.setAttribute('aria-selected', cnssPart === 'employer'); }
+}
+function cnssDefaultPart() { const c = Storage.get('company', {}) || {}; return (c.status || 'ae') === 'ae' ? 'ae' : 'employer'; }
+
 function renderCNSS() {
+    loadCnssEmpConfig();
+    renderCnssEmpSettings();
     renderAeCnssSettings();
+    showCnssPart(cnssPart || cnssDefaultPart());
     calculateCNSS();
     
     // YTD CA (HT, pas TTC - CNSS se calcule sur HT au Maroc)
@@ -9319,14 +9402,33 @@ function aeCnssQuarter(ca, activity, rules) {
     const amo = r.amoAmounts[idx], retraite = fiscalR2(amo * r.pensionCoef), cnss = fiscalR2(amo + (r.includePension ? retraite : 0));
     return { ca: v, rate, ir, annualIr, tranche: idx + 1, amo, retraite, includePension: !!r.includePension, cnss, total: fiscalR2(ir + cnss) };
 }
+// Taux employeur propres à la société (modifiables). CNSS_EMP_OVERRIDE = réglage validé ; absent → référence FISCAL_RULES.cnss.
+let CNSS_EMP_OVERRIDE = null;
+function cnssRules() { return CNSS_EMP_OVERRIDE || FISCAL_RULES.cnss; }
+// Valide { dueDay, ceilingDH, branches: [{ id, emp, er }] } ; seuls les taux, le plafond et le jour limite sont modifiables (ids et plafonnement fixes).
+function cnssValidate(cfg) {
+    const errors = [], n = (x) => (typeof x === 'number' ? x : (typeof x === 'string' && x.trim() !== '' ? Number(x.replace(',', '.')) : NaN));
+    if (!cfg || typeof cfg !== 'object' || !Object.keys(cfg).length) return { ok: true, errors, rules: null };
+    const ref = FISCAL_RULES.cnss, list = Array.isArray(cfg.branches) ? cfg.branches : [];
+    const ceiling = n(cfg.ceilingDH), dueDay = n(cfg.dueDay);
+    if (!(ceiling > 0 && ceiling <= 1000000)) errors.push('Plafond : nombre positif.');
+    if (!(Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 28)) errors.push('Jour limite : entier de 1 à 28.');
+    const branches = ref.branches.map(rb => {
+        const b = list.find(x => x && x.id === rb.id), emp = b ? n(b.emp) : NaN, er = b ? n(b.er) : NaN;
+        if (!(emp >= 0 && emp <= 0.5) || !(er >= 0 && er <= 0.5)) errors.push('Taux « ' + rb.id + ' » : entre 0 % et 50 %.');
+        return { id: rb.id, emp: fiscalR2(emp * 1e4) / 1e4, er: fiscalR2(er * 1e4) / 1e4, capped: rb.capped };
+    });
+    if (errors.length) return { ok: false, errors, rules: null };
+    return { ok: true, errors, rules: { dueDay, ceilingDH: ceiling, branches } };
+}
 function cnssForEmployee(gross, rules) {
-    const r = rules || FISCAL_RULES.cnss, g = Math.max(0, fiscalNum(gross)), capped = Math.min(g, r.ceilingDH);
+    const r = rules || cnssRules(), g = Math.max(0, fiscalNum(gross)), capped = Math.min(g, r.ceilingDH);
     let emp = 0, er = 0;
     r.branches.forEach(b => { const base = b.capped ? capped : g; emp += base * b.emp; er += base * b.er; });
     return { emp: fiscalR2(emp), er: fiscalR2(er) };
 }
 function cnssNextDue(todayIso, rules) {
-    const r = rules || FISCAL_RULES.cnss, y = parseInt(todayIso.slice(0, 4), 10), m = parseInt(todayIso.slice(5, 7), 10) - 1, d = parseInt(todayIso.slice(8, 10), 10);
+    const r = rules || cnssRules(), y = parseInt(todayIso.slice(0, 4), 10), m = parseInt(todayIso.slice(5, 7), 10) - 1, d = parseInt(todayIso.slice(8, 10), 10);
     const dueM = d <= r.dueDay ? m : m + 1;                     // échéance du mois en cours si pas encore passée, sinon du mois suivant
     const periodM = dueM - 1;                                    // période déclarée = mois précédent l'échéance
     const pd = new Date(y, periodM, 1);
@@ -9367,8 +9469,8 @@ function renderCnssEmployer() {
     const emps = Storage.get('cnssEmployees', []) || [];
     const nd = cnssNextDue(todayISO());
     document.getElementById('cnssNextDue').textContent = fiscalDateFr(nd.due) + ' — déclaration des salaires de ' + nd.periodLabel;
-    document.getElementById('cnssDueDayTxt').textContent = FISCAL_RULES.cnss.dueDay;
-    document.getElementById('cnssCeilingTxt').textContent = FISCAL_RULES.cnss.ceilingDH.toLocaleString('fr-FR');
+    document.getElementById('cnssDueDayTxt').textContent = cnssRules().dueDay;
+    document.getElementById('cnssCeilingTxt').textContent = cnssRules().ceilingDH.toLocaleString('fr-FR');
     let te = 0, tr = 0;
     document.getElementById('cnssEmployeesBody').innerHTML = emps.map(e => {
         const c = cnssForEmployee(e.gross); te += c.emp; tr += c.er;
@@ -13660,7 +13762,7 @@ function blockedByLicense() {
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
      'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
      'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo','handleStampUpload','removeStamp',
-     'importTechnicalBackup','saveAeCnssSettings','resetAeCnssSettings','generateInvitationCode','cancelInvitation','removeTeamMember'
+     'importTechnicalBackup','saveAeCnssSettings','resetAeCnssSettings','saveCnssEmpSettings','resetCnssEmpSettings','generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
         const orig = window[name];
         if (typeof orig !== 'function') return;

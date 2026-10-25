@@ -283,6 +283,28 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   check('CNSS AE barème : champ vide refusé', await E(() => /Remplissez/.test(document.getElementById('aeCnssErrors').textContent) && Storage.get('aeCnssConfig').amoAmounts[1] === 390));
   await E(() => { resetAeCnssSettings(); document.getElementById('cnssCA').value = '10000'; calculateCNSS(); });
   check('CNSS AE barème : rétablir le barème de référence (T1 = 300, impôt 100, source « référence »)', await E(() => { const n = (id) => document.getElementById(id).textContent.replace(/\s|\u00a0|\u202f/g, ''); return n('cnssTotal').includes('300,00') && n('cnssIr').includes('100,00') && /référence/.test(document.getElementById('aeCnssSource').textContent) && document.getElementById('aeAmo0').value === '300'; }));
+  await E(() => { const c = Storage.get('company', {}) || {}; Storage.set('company', Object.assign({}, c, { status: 'ae' })); navTo('cnss'); });
+  check('CNSS selon le statut : auto-entrepreneur → partie AE visible, employeur masquée', await E(() => document.getElementById('cnssAeBlock').style.display !== 'none' && document.getElementById('cnssEmployerBlock').style.display === 'none' && document.getElementById('cnssTabAe').classList.contains('active')));
+  await E(() => { const c = Storage.get('company', {}) || {}; Storage.set('company', Object.assign({}, c, { status: 'sarl' })); navTo('cnss'); });
+  check('CNSS selon le statut : SARL → partie employeur visible, AE masquée', await E(() => document.getElementById('cnssEmployerBlock').style.display !== 'none' && document.getElementById('cnssAeBlock').style.display === 'none' && document.getElementById('cnssTabEmployer').classList.contains('active')));
+  await E(() => document.getElementById('cnssTabAe').click());
+  check('CNSS selon le statut : l\'onglet permet d\'afficher l\'autre partie', await E(() => document.getElementById('cnssAeBlock').style.display !== 'none' && document.getElementById('cnssEmployerBlock').style.display === 'none'));
+  await E(() => document.getElementById('cnssTabEmployer').click());
+  check('CNSS employeur : formulaire rempli avec la référence (4 branches, plafond 6 000, jour 10)', await E(() => document.querySelectorAll('#cnssEmpGrid input').length === 8 && document.getElementById('cnssEmpCeiling').value === '6000' && document.getElementById('cnssEmpDueDay').value === '10' && document.getElementById('cnssEmp_amo_emp').value === '2.26' && document.getElementById('cnssEmp_amo_er').value === '4.11'));
+  await E(() => { document.getElementById('cnssEmp_amo_emp').value = '3'; saveCnssEmpSettings(); });
+  check('CNSS employeur : AMO salarié 3 % enregistré → part salariale 374,00 (5 000 × 7,48 %), source « personnalisés »', await E(() => document.getElementById('cnssEmpTotal').textContent.replace(/\s|\u00a0|\u202f/g, '').includes('374,00') && /personnalisés/.test(document.getElementById('cnssEmpSource').textContent)));
+  await E(() => { document.getElementById('cnssEmp_amo_er').value = '90'; saveCnssEmpSettings(); });
+  check('CNSS employeur : taux 90 % refusé, message affiché, réglage précédent conservé', await E(() => document.getElementById('cnssEmpErrors').style.display !== 'none' && Storage.get('cnssEmployerConfig').branches.find(b => b.id === 'amo').er === 0.0411));
+  await E(() => { renderCNSS(); document.getElementById('cnssEmpDueDay').value = ''; saveCnssEmpSettings(); });
+  check('CNSS employeur : champ vide refusé', await E(() => /Remplissez/.test(document.getElementById('cnssEmpErrors').textContent)));
+  await E(() => resetCnssEmpSettings());
+  check('CNSS employeur : rétablir la référence → part salariale 337,00', await E(() => document.getElementById('cnssEmpTotal').textContent.replace(/\s|\u00a0|\u202f/g, '').includes('337,00') && /référence/.test(document.getElementById('cnssEmpSource').textContent)));
+  if (process.env.SHOT_DIR) {
+    await p.setViewportSize({ width: 390, height: 844 });
+    await E(() => { showCnssPart('employer'); document.getElementById('page-cnss').scrollIntoView(); }); await p.screenshot({ path: process.env.SHOT_DIR + '/cnss-employeur.png', fullPage: true });
+    await E(() => showCnssPart('ae')); await p.screenshot({ path: process.env.SHOT_DIR + '/cnss-ae.png', fullPage: true });
+    await p.setViewportSize({ width: 1280, height: 800 });
+  }
   check('CNSS employeur : 5 000 DH -> 337,00 salarié / 1 054,50 patronal', await E(() => { const t = document.getElementById('cnssEmployeesBody').textContent.replace(/\s|\u00a0|\u202f/g, ''); return t.includes('337,00DH') && t.includes('1054,50DH'); }));
   check('CNSS : liens officiels Damancom et cnss.ma, échéance affichée', await E(() => { const h = [...document.querySelectorAll('#page-cnss a')].map(a => a.href); return h.some(x => /^https:\/\/www\.damancom\.ma/.test(x)) && h.some(x => /^https:\/\/www\.cnss\.ma/.test(x)) && /^\d+(er)? \S+ \d{4} — déclaration des salaires de /.test(document.getElementById('cnssNextDue').textContent); }));
 
