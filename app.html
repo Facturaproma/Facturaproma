@@ -358,6 +358,10 @@
             white-space: normal; min-width: 150px;
         }
         table.tbl-act thead th:last-child { background: var(--surface-soft); }
+        /* Liste clients : défilement horizontal dans la carte au lieu de couper les colonnes (ex. « EMAI ») sur téléphone */
+        #clientsList { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        #clientsList th, #clientsList td { white-space: nowrap; }
+        #clientsList td:last-child { white-space: normal; }
         table.tbl-act td:last-child { display: table-cell; }
         /* Écran Paiements : une ligne = facture + situation d'encaissement (payé / reste), lisible sans défilement horizontal */
         table.tbl-pay td { vertical-align: top; }
@@ -7877,6 +7881,13 @@ function newInvoice() {
     navTo('invoice-editor');
 }
 
+// Nouvelle facture avec le client déjà choisi (parcours du premier client)
+function newInvoiceForClient(clientId) {
+    newInvoice();
+    const sel = document.getElementById('editorClient');
+    if (sel && (Storage.get('clients', []) || []).some(c => c.id === clientId)) sel.value = clientId;
+}
+
 // Facture émise = lecture seule (le serveur refuse aussi toute modification : sql/14)
 function applyEditorLock() {
     const locked = editingType !== 'quote' && isLockedDoc(editingInvoice);
@@ -8719,7 +8730,13 @@ function renderClients() {
         return;
     }
     
-    el.innerHTML = `
+    // Premier client enregistré, aucune facture : l'étape suivante est proposée tout de suite (client déjà choisi)
+    const nextStep = (clients.length > 0 && invoices.length === 0 && !search)
+        ? `<div id="clientsNextStep" style="margin:0 0 14px; padding:12px 14px; background:rgba(27,58,107,0.08); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+               <span style="flex:1; min-width:180px;">✓ Client prêt. Étape suivante : créez sa première facture.</span>
+               <button class="btn btn-primary btn-sm" onclick="newInvoiceForClient('${escapeHtml(clients[clients.length - 1].id)}')">Créer la facture →</button>
+           </div>` : '';
+    el.innerHTML = nextStep + `
         <table class="tbl-act">
             <thead>
                 <tr>
