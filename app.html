@@ -9046,6 +9046,52 @@ function calculateCNSS() {
     document.getElementById('cnssPlafond').textContent = formatCurrency(plafond);
 }
 
+// <WORDS-CALC> — montant en toutes lettres (français, orthographe moderne, tirets). Fonctions pures testées hors navigateur.
+const WORDS_UNITS = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+const WORDS_TENS = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante'];
+// 0 à 999 ; « final » = le mot termine le nombre complet (accord de « vingts » et « cents »)
+function wordsUnder1000(n, final) {
+    if (n === 0) return '';
+    const h = Math.floor(n / 100), r = n % 100, out = [];
+    if (h > 0) out.push((h > 1 ? WORDS_UNITS[h] + '-' : '') + 'cent' + (h > 1 && r === 0 && final ? 's' : ''));
+    if (r > 0) out.push(wordsUnder100(r, final));
+    return out.join('-');
+}
+function wordsUnder100(n, final) {
+    if (n < 20) return WORDS_UNITS[n];
+    const t = Math.floor(n / 10), u = n % 10;
+    if (t <= 6) return WORDS_TENS[t] + (u === 1 ? '-et-un' : u > 1 ? '-' + WORDS_UNITS[u] : '');
+    if (t === 7) return 'soixante-' + (u === 1 ? 'et-onze' : WORDS_UNITS[10 + u]);
+    if (t === 8) return 'quatre-vingt' + (u === 0 ? (final ? 's' : '') : '-' + WORDS_UNITS[u]);
+    return 'quatre-vingt-' + WORDS_UNITS[10 + u];            // 90 à 99
+}
+// Entier 0 à 999 999 999 999 (milliards inclus) en lettres
+function integerInWordsFr(n) {
+    n = Math.floor(Math.abs(Number(n) || 0));
+    if (n === 0) return 'zéro';
+    if (n > 999999999999) return String(n);
+    const groups = [[1e9, 'milliard'], [1e6, 'million'], [1e3, 'mille']], parts = [];
+    let rest = n;
+    for (const [v, name] of groups) {
+        const q = Math.floor(rest / v); rest %= v;
+        if (q === 0) continue;
+        if (name === 'mille') parts.push(q === 1 ? 'mille' : wordsUnder1000(q, false) + '-mille');
+        else parts.push(wordsUnder1000(q, false) + '-' + name + (q > 1 ? 's' : ''));
+    }
+    if (rest > 0) parts.push(wordsUnder1000(rest, true));
+    // « quatre-vingts » et « cents » ne prennent le « s » que s'ils terminent le nombre : le cas des milliers est géré par final = false
+    return parts.join('-').replace(/-+/g, '-');
+}
+// Montant en dirhams et centimes : « onze mille sept cent dirhams et cinquante centimes » (arrondi au centime)
+function amountInWordsFr(amount) {
+    const cents = Math.round(Math.abs(Number(amount) || 0) * 100), d = Math.floor(cents / 100), c = cents % 100;
+    const dh = integerInWordsFr(d).replace(/-/g, ' ').replace(/\s+/g, ' ');
+    let out = dh + (d > 1 ? ' dirhams' : ' dirham');
+    if (c > 0) out += ' et ' + integerInWordsFr(c).replace(/-/g, ' ') + (c > 1 ? ' centimes' : ' centime');
+    return out;
+}
+// </WORDS-CALC>
+
 // <FISCAL-CALC> — règles et calculs purs (testés hors navigateur). Toute valeur "À valider" est modifiable ici.
 const FISCAL_RULES = {
     reviewedOn: '2026-10-22',
@@ -13183,6 +13229,15 @@ async function generatePDF(id, type, opts) {
         ttc.after.push(['Reste à payer', formatCurrencyForPDF(situation.remaining), true]);
     }
     y = pdfTotals(pdf, T, y, rows, ttc);
+
+    // Montant en toutes lettres (usage courant sur les factures marocaines ; une obligation légale n'est pas établie ici)
+    {
+        const lbl = isCredit ? 'Arrêté le présent avoir à la somme de : ' : isInvoice ? 'Arrêtée la présente facture à la somme de : ' : 'Arrêté le présent devis à la somme de : ';
+        y = pdfEnsure(pdf, y, 14);
+        pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8.5); pdf.setTextColor(...PDF_INK);
+        y = pdfParagraph(pdf, y, lbl + amountInWordsFr(doc_data.totalTTC) + '.', 15, 180, 4);
+        y += 4;
+    }
 
     // === MENTIONS (inchangées : à faire valider par un comptable) ===
     const hasTva = (doc_data.totalTVA || 0) > 0;

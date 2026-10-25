@@ -172,6 +172,16 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   check('PDF facture téléchargé (FAC-' + yr + '-001.pdf)', f && f.suggestedFilename() === `FAC-${yr}-001.pdf`, f && f.suggestedFilename());
   if (f) { const pth = await f.path(); const txt = fs.readFileSync(pth).toString('latin1'); check('PDF valide (en-tête %PDF)', txt.startsWith('%PDF')); }
 
+  // Montant en toutes lettres sur le PDF (texte capturé au moment du dessin, le flux PDF étant compressé)
+  const words = await E(async (id) => {
+    const J = window.jspdf.jsPDF, seen = [];
+    window.jspdf.jsPDF = function (...a) { const d = new J(...a); const t = d.text.bind(d); d.text = (x, ...r) => { seen.push(Array.isArray(x) ? x.join(' ') : String(x)); return t(x, ...r); }; return d; };
+    try { await generatePDF(id, 'invoice'); } finally { window.jspdf.jsPDF = J; }
+    const inv = Storage.get('invoices', []).find(x => x.id === id);
+    return { line: seen.find(t => /Arrêtée la présente facture/.test(t)) || '', ttc: inv.totalTTC, expected: amountInWordsFr(inv.totalTTC) };
+  }, i1.id);
+  check('PDF facture : « Arrêtée la présente facture à la somme de … » avec le montant TTC en lettres', words.line.includes(words.expected) && /dirham/.test(words.line), words.line.slice(0, 120));
+
   // --- 7 bis. WhatsApp : PDF en pièce jointe via le partage du téléphone, sinon repli ; brouillon non présenté comme facture définitive ---
   const shared = await E(async (id) => {
     window.__shared = null; window.__opened = null;
