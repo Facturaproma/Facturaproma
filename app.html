@@ -13436,7 +13436,7 @@ function renderSupportRows(rows) {
     for (const r of rows) {
         const b = document.createElement('div'); b.className = 'msg-b ' + (r.sender === 'client' ? 'msg-me' : 'msg-them');
         b.appendChild(document.createTextNode(String(r.body == null ? '' : r.body)));
-        const sm = document.createElement('small'); sm.textContent = (r.sender === 'client' ? 'Vous' : 'Équipe FacturaPro') + ' · ' + msgDateTime(r.created_at);
+        const sm = document.createElement('small'); sm.textContent = (r.sender === 'client' ? 'Vous' : 'Admin') + ' · ' + msgDateTime(r.created_at);
         b.appendChild(sm); box.appendChild(b);
     }
     box.scrollTop = box.scrollHeight;

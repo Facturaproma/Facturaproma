@@ -80,6 +80,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await a.fill('#amInput', 'Bonjour, voici la marche à suivre : Mon Entreprise > Informations bancaires.'); await a.click('#amSend'); await sleep(900);
     const R = await a.evaluate(() => ({ adm: document.querySelectorAll('#amMsgs .am-admin').length, empty: document.getElementById('amInput').value === '' }));
     ok('admin : réponse envoyée et affichée', R.adm === 1 && R.empty);
+    const lab = await a.evaluate(() => document.querySelector('#amMsgs .am-admin small')?.textContent || '');
+    ok('admin : la réponse indique quel administrateur a répondu (e-mail visible côté admin)', /^Vous \(.+@.+\)/.test(lab), lab);
     await a.fill('#amInput', ''); await a.click('#amSend'); await sleep(300);
     ok('admin : réponse vide refusée', (await a.evaluate(() => document.querySelectorAll('#amMsgs .am-admin').length)) === 1);
     const ov = await a.evaluate(() => document.documentElement.scrollWidth - innerWidth);
@@ -92,6 +94,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.evaluate(() => navTo('messages')); await sleep(800);
     const back = await p.evaluate(() => ({ them: document.querySelectorAll('#msgThread .msg-them').length, badge: document.getElementById('badgeMessages').style.display, txt: document.querySelector('#msgThread .msg-them')?.textContent || '' }));
     ok('société : réponse de l\'équipe affichée à gauche, badge effacé', back.them === 1 && /marche à suivre/.test(back.txt) && back.badge === 'none');
+    const them = await p.evaluate(() => document.querySelector('#msgThread .msg-them small')?.textContent || '');
+    ok('société : la réponse est signée « Admin », sans aucun e-mail', /^Admin · /.test(them) && !/@/.test(them), them);
     const ov2 = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     ok('société : téléphone 390 px, pas de défilement horizontal', ov2 <= 1, String(ov2));
     if (process.env.SHOT_DIR) { require('fs').mkdirSync(process.env.SHOT_DIR, { recursive: true }); await p.screenshot({ path: process.env.SHOT_DIR + '/societe-messages.png' }); await a.screenshot({ path: process.env.SHOT_DIR + '/admin-messages.png' }); }
