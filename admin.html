@@ -584,7 +584,13 @@
             .card { overflow-x: auto; }
             .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
         }
-    </style>
+    .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
+.fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
+.fp-pg:disabled { opacity:.4; cursor:default; }
+.fp-pg-on { background:var(--ink, #1b2a49); color:#fff; border-color:var(--ink, #1b2a49); font-weight:700; }
+.fp-gap { color:var(--ink-mute, #6b7280); padding:0 2px; }
+.fp-info { width:100%; text-align:center; font-size:12px; color:var(--ink-mute, #6b7280); }
+</style>
 </head>
 <body>
 
@@ -2839,6 +2845,51 @@ const PLAN_LABEL = { trial: 'Essai', monthly: 'Mensuel', semestrial: 'Semestriel
 // Les inscriptions jamais confirmées (adresses bidon) ne comptent pas et sont masquées par défaut.
 function isRealAccount(a) { return !!(a.last_sign_in || a.is_staff || PAID_TYPES.includes(a.type)); }
 
+// ---- Pagination des listes (10 par page, onglets 1 2 3…) --------------------
+const FP_PAGE_SIZE = 10;
+const _fpPagers = {};
+// rows : liste complète (déjà filtrée/triée) ; sig : empreinte des filtres (change → retour page 1) ; renderFn : redessine la liste
+function fpPaginate(key, rows, sig, renderFn) {
+    const st = _fpPagers[key] || (_fpPagers[key] = { page: 1, sig: '' });
+    if (st.sig !== sig) { st.sig = sig; st.page = 1; }
+    st.fn = renderFn;
+    const total = rows.length;
+    const pages = Math.max(1, Math.ceil(total / FP_PAGE_SIZE));
+    if (st.page > pages) st.page = pages;
+    if (st.page < 1) st.page = 1;
+    const from = (st.page - 1) * FP_PAGE_SIZE;
+    const items = rows.slice(from, from + FP_PAGE_SIZE);
+    let html = '';
+    if (pages > 1) {
+        const nums = [];
+        for (let n = 1; n <= pages; n++) if (n === 1 || n === pages || Math.abs(n - st.page) <= 1) nums.push(n);
+        let tabs = '', prev = 0;
+        for (const n of nums) {
+            if (prev && n - prev > 1) tabs += '<span class="fp-gap">…</span>';
+            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto('${key}',${n})">${n}</button>`;
+            prev = n;
+        }
+        html = `<div class="fp-pager" role="navigation" aria-label="Pages">
+            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page + 1})" aria-label="Page suivante">›</button>
+            <span class="fp-info">${from + 1}–${from + items.length} sur ${total}</span></div>`;
+    }
+    return { items, html, page: st.page, pages, total, from };
+}
+function fpGoto(key, n) {
+    const st = _fpPagers[key]; if (!st || !st.fn) return;
+    st.page = Math.max(1, Math.floor(Number(n)) || 1);
+    st.fn();
+}
+
+// Admin : les listes sont des <tbody> ; le pager est placé juste après le <table> (créé au besoin).
+function fpHost(tbody, html) {
+    const table = tbody && tbody.closest('table'); if (!table) return;
+    let host = table.nextElementSibling;
+    if (!host || !host.classList.contains('fp-host')) { host = document.createElement('div'); host.className = 'fp-host'; table.insertAdjacentElement('afterend', host); }
+    host.innerHTML = html;
+}
+const fpSig = (rows, extra) => rows.length + '|' + (rows[0] ? (rows[0].id || rows[0].user_id || rows[0].email || rows[0].code || '') : '') + '|' + (extra || '');
+
 function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -3131,7 +3182,8 @@ function renderRequests() {
         rejected: '<span class="badge badge-danger">❌ Rejeté</span>'
     };
     
-    tbody.innerHTML = filtered.map(r => `
+const pg_requests = fpPaginate('requests', filtered, fpSig(filtered, (document.getElementById('searchRequests')?.value||'')), renderRequests); fpHost(tbody, pg_requests.html);
+    tbody.innerHTML = pg_requests.items.map(r => `
         <tr>
             <td>${formatDate(r.created_at)}<br><small style="color: var(--ink-mute);">${formatTime(r.created_at)}</small></td>
             <td><strong>${r.client_email}</strong></td>
@@ -3394,7 +3446,8 @@ function renderUsers() {
         return;
     }
 
-    tbody.innerHTML = (scope === 'real' && hidden ? `<tr><td colspan="8" class="empty" style="padding:8px;"><small>${hidden} inscription(s) jamais connectée(s) masquée(s) — voir « Jamais connectés ».</small></td></tr>` : '') + rows.map(a => {
+    const pg_users = fpPaginate('users', rows, fpSig(rows, search + '|' + filter + '|' + scope), renderUsers); fpHost(tbody, pg_users.html);
+    tbody.innerHTML = (scope === 'real' && hidden ? `<tr><td colspan="8" class="empty" style="padding:8px;"><small>${hidden} inscription(s) jamais connectée(s) masquée(s) — voir « Jamais connectés ».</small></td></tr>` : '') + pg_users.items.map(a => {
         const st = acctState(a);
         const d = acctDaysLeft(a);
         const plan = PLAN_LABEL[acctPlanKey(a)] || a.type;
@@ -3436,7 +3489,8 @@ function renderUsersLegacy() {
         tbody.innerHTML = '<tr><td colspan="8" class="empty"><div class="empty-icon">👥</div>Aucun client</td></tr>';
         return;
     }
-    tbody.innerHTML = filtered.map(u => {
+const pg_usersLegacy = fpPaginate('usersLegacy', filtered, fpSig(filtered, ''), renderUsers); fpHost(tbody, pg_usersLegacy.html);
+    tbody.innerHTML = pg_usersLegacy.items.map(u => {
         const codes = allCodes.filter(c => c.client_email === u.email);
         const payments = allPayments.filter(p => p.client_email === u.email);
         const hasLicense = codes.some(c => c.status === 'used');
@@ -3633,7 +3687,8 @@ function renderLicenses() {
         return;
     }
     
-    tbody.innerHTML = usedCodes.map(c => {
+const pg_licenses = fpPaginate('licenses', usedCodes, fpSig(usedCodes, ''), renderLicenses); fpHost(tbody, pg_licenses.html);
+    tbody.innerHTML = pg_licenses.items.map(c => {
         const acct = allAccounts.find(a => (a.email || '').toLowerCase() === (c.client_email || '').toLowerCase());
         let expire = '—', status = '<span class="badge badge-success">Active</span>';
         if (acct) {
@@ -3696,7 +3751,8 @@ function renderCodes() {
         return;
     }
     
-    tbody.innerHTML = allCodes.slice(0, 50).map(c => {
+const pg_codes = fpPaginate('codes', allCodes, fpSig(allCodes, ''), renderCodes); fpHost(tbody, pg_codes.html);
+    tbody.innerHTML = pg_codes.items.map(c => {
         let statusBadge;
         if (c.status === 'used') statusBadge = '<span class="badge badge-success">Utilisé</span>';
         else if (c.status === 'revoked') statusBadge = '<span class="badge badge-danger">Révoqué</span>';
@@ -3888,7 +3944,8 @@ function renderPayments() {
         virement: '🏦', cmi: '💳', cash: '💵', cheque: '📝'
     };
     
-    tbody.innerHTML = allPayments.map(p => `
+const pg_payments = fpPaginate('payments', allPayments, fpSig(allPayments, ''), renderPayments); fpHost(tbody, pg_payments.html);
+    tbody.innerHTML = pg_payments.items.map(p => `
         <tr>
             <td>${formatDate(p.payment_date)}</td>
             <td><strong>${p.client_email}</strong></td>
@@ -4404,7 +4461,8 @@ function renderTreasuryLedger() {
         return;
     }
     
-    tbody.innerHTML = entries.map(e => `
+const pg_ledger = fpPaginate('ledger', entries, fpSig(entries, ''), renderTreasuryLedger); fpHost(tbody, pg_ledger.html);
+    tbody.innerHTML = pg_ledger.items.map(e => `
         <tr>
             <td>${formatDate(e.date)}</td>
             <td><code style="font-size: 11px;">${e.number}</code></td>
@@ -4791,7 +4849,8 @@ function renderFpDocuments() {
         return;
     }
     
-    tbody.innerHTML = docs.map(d => {
+const pg_fpdocs = fpPaginate('fpdocs', docs, fpSig(docs, ''), renderFpDocuments); fpHost(tbody, pg_fpdocs.html);
+    tbody.innerHTML = pg_fpdocs.items.map(d => {
         const typeBadge = d.docType === 'invoice' 
             ? '<span class="badge" style="background: var(--primary); color: white;">📋 Facture</span>'
             : '<span class="badge" style="background: var(--accent); color: var(--ink);">📄 Reçu</span>';
@@ -5666,7 +5725,8 @@ function applyAuditFilters() {
     const tbody = document.getElementById('auditTable');
     const rows = currentAuditView();
     document.getElementById('auditCount').textContent = `${rows.length} action${rows.length > 1 ? 's' : ''} sur ${auditRows.length} chargée${auditRows.length > 1 ? 's' : ''}`;
-    tbody.innerHTML = rows.length ? rows.map(r => `
+    const pg_audit = fpPaginate('audit', rows, fpSig(rows, ''), applyAuditFilters); fpHost(tbody, pg_audit.html);
+    tbody.innerHTML = rows.length ? pg_audit.items.map(r => `
         <tr>
             <td>${formatDate(r.at)}</td>
             <td>${esc(r.admin_email || '—')}<br><small style="color: var(--ink-mute);">${auditRoleOf(r.admin_email)}</small></td>
