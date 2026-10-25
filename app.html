@@ -2742,6 +2742,17 @@
 
         /* Hidden helper */
         .hidden { display: none !important; }
+    
+.msg-wrap { display:flex; flex-direction:column; gap:0; max-width:760px; }
+.msg-thread { display:flex; flex-direction:column; gap:10px; padding:16px; min-height:240px; max-height:56vh; overflow-y:auto; background:var(--card, #fff); border:1px solid var(--line, #e2ded3); border-radius:12px 12px 0 0; }
+.msg-b { max-width:82%; padding:9px 12px; border-radius:12px; font-size:14px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+.msg-b small { display:block; margin-top:4px; font-size:11px; opacity:.65; }
+.msg-me { align-self:flex-end; background:var(--ink, #1b2a49); color:#fff; border-bottom-right-radius:3px; }
+.msg-them { align-self:flex-start; background:#f1efe8; color:var(--ink, #1b2a49); border-bottom-left-radius:3px; }
+.msg-empty { margin:auto; text-align:center; color:var(--ink-mute, #6b7280); font-size:14px; }
+.msg-form { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--line, #e2ded3); border-top:0; border-radius:0 0 12px 12px; background:var(--card, #fff); }
+.msg-form textarea { width:100%; min-height:72px; resize:vertical; font:inherit; font-size:15px; padding:10px; border:1px solid var(--line, #d9d4c7); border-radius:8px; box-sizing:border-box; }
+.msg-foot { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; color:var(--ink-mute, #6b7280); }
     .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
 .fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
 .fp-pg:disabled { opacity:.4; cursor:default; }
@@ -3091,6 +3102,10 @@
             </button>
             <button class="nav-item" data-page="team" onclick="navTo('team')" id="navTeam" style="display:none">
                 <span class="nav-icon">👥</span> <span data-i18n="nav.team">Mon équipe</span>
+            </button>
+            <button class="nav-item" data-page="messages" onclick="navTo('messages')" id="navMessages">
+                <span class="nav-icon">💬</span> <span>Messages</span>
+                <span class="nav-badge" id="badgeMessages" style="background: var(--danger); color: white; display:none;">0</span>
             </button>
             <button class="nav-item" data-page="license" onclick="navTo('license')">
                 <span class="nav-icon">💎</span> <span data-i18n="nav.license">Licence</span>
@@ -4339,6 +4354,25 @@
         </section>
 
         <!-- ============ LICENSE PAGE ============ -->
+        <section class="page" id="page-messages">
+            <div class="topbar">
+                <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <h1>💬 Messages</h1>
+            </div>
+            <div class="msg-wrap">
+                <div class="msg-thread" id="msgThread" aria-live="polite"></div>
+                <form class="msg-form" id="msgForm" onsubmit="return sendSupportMessage(event)">
+                    <label for="msgInput" style="font-size:13px;font-weight:600;">Écrire à l'équipe FacturaPro</label>
+                    <textarea id="msgInput" maxlength="2000" placeholder="Votre question ou votre demande…" oninput="updateMsgCount()"></textarea>
+                    <div class="msg-foot">
+                        <span><span id="msgCount">0</span> / 2000 · Texte seulement. N'écrivez jamais votre mot de passe.</span>
+                        <button type="submit" class="btn btn-primary btn-sm" id="msgSendBtn">Envoyer</button>
+                    </div>
+                </form>
+                <p style="font-size:12px;color:var(--ink-mute);margin-top:10px;">Les messages sont conservés tant que votre compte existe et ne sont lus que par l'équipe FacturaPro.</p>
+            </div>
+        </section>
+
         <section class="page" id="page-license">
             <div class="topbar">
                 <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
@@ -7497,6 +7531,7 @@ function navTo(page) {
     if (page === 'team') { navTo('dashboard'); return; }
     if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
+    if (page === 'messages') openSupportMessages();
     if (page === 'invoice-editor') { renderComplianceBox(); applyEditorLock(); }
     
     // Close mobile sidebar
@@ -13286,6 +13321,87 @@ async function generatePaymentReceiptPDF(paymentId, opts) {
     showToast('Reçu téléchargé ✓', 'success');
 }
 
+
+// ============================================
+// MESSAGERIE (société ↔ équipe FacturaPro) : sql/29. Texte seulement, rendu en textContent (jamais en HTML).
+// Pas de notification instantanée : le badge se met à jour toutes les 90 s et à l'ouverture de la page.
+// ============================================
+let _supportPoll = null, _supportBusy = false;
+function supportAvailable() { return typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof supaClient !== 'undefined' && supaClient && Storage._currentUserId; }
+function supportErrorText(err) {
+    const m = String((err && err.message) || err || '');
+    if (/MESSAGE_VIDE/.test(m)) return 'Écrivez un message avant d\'envoyer.';
+    if (/MESSAGE_TROP_LONG/.test(m)) return 'Message trop long (2 000 caractères maximum).';
+    if (/TROP_DE_MESSAGES/.test(m)) return 'Trop de messages envoyés : réessayez dans une heure.';
+    if (/FIL_PLEIN/.test(m)) return 'La conversation est pleine. Contactez-nous par e-mail ou WhatsApp.';
+    if ((err && (err.code === 'PGRST202' || err.code === '42883')) || /support_/.test(m)) return 'La messagerie n\'est pas encore activée sur ce compte.';
+    if (/NON_AUTHENTIFIE|JWT/.test(m)) return 'Session expirée : reconnectez-vous.';
+    return 'Envoi impossible pour le moment. Vérifiez votre connexion et réessayez.';
+}
+function msgDateTime(v) {
+    const d = new Date(v); if (isNaN(d.getTime())) return '';
+    const p2 = (n) => String(n).padStart(2, '0');
+    return formatDate(d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+}
+function updateMsgCount() { const t = document.getElementById('msgInput'), c = document.getElementById('msgCount'); if (t && c) c.textContent = String(t.value.length); }
+function setMessagesBadge(n) {
+    const b = document.getElementById('badgeMessages'); if (!b) return;
+    b.textContent = n > 99 ? '99+' : String(n); b.style.display = n > 0 ? '' : 'none';
+}
+async function refreshSupportBadge() {
+    if (!supportAvailable() || document.hidden) return;
+    try { const { data, error } = await supaClient.rpc('support_unread_count'); if (!error && Number.isInteger(data)) setMessagesBadge(data); } catch (e) { /* silencieux : simple indicateur */ }
+}
+function startSupportPolling() {
+    if (_supportPoll || !supportAvailable()) return;
+    refreshSupportBadge();
+    _supportPoll = setInterval(() => { if (document.getElementById('page-messages')?.classList.contains('active')) loadSupportThread(false); else refreshSupportBadge(); }, 90000);
+}
+function renderSupportRows(rows) {
+    const box = document.getElementById('msgThread'); if (!box) return;
+    box.textContent = '';
+    if (!rows.length) { const d = document.createElement('div'); d.className = 'msg-empty'; d.textContent = 'Aucun message pour l\'instant. Posez votre question ci-dessous.'; box.appendChild(d); return; }
+    for (const r of rows) {
+        const b = document.createElement('div'); b.className = 'msg-b ' + (r.sender === 'client' ? 'msg-me' : 'msg-them');
+        b.appendChild(document.createTextNode(String(r.body == null ? '' : r.body)));
+        const sm = document.createElement('small'); sm.textContent = (r.sender === 'client' ? 'Vous' : 'Équipe FacturaPro') + ' · ' + msgDateTime(r.created_at);
+        b.appendChild(sm); box.appendChild(b);
+    }
+    box.scrollTop = box.scrollHeight;
+}
+async function loadSupportThread(markRead) {
+    if (!supportAvailable()) {
+        const box = document.getElementById('msgThread'); if (box) { box.textContent = ''; const d = document.createElement('div'); d.className = 'msg-empty'; d.textContent = 'La messagerie est disponible avec un compte connecté.'; box.appendChild(d); }
+        const f = document.getElementById('msgForm'); if (f) f.style.display = 'none';
+        return;
+    }
+    const f = document.getElementById('msgForm'); if (f) f.style.display = '';
+    try {
+        const { data, error } = await supaClient.rpc('support_my_messages');
+        if (error) { const box = document.getElementById('msgThread'); if (box) { box.textContent = ''; const d = document.createElement('div'); d.className = 'msg-empty'; d.textContent = supportErrorText(error); box.appendChild(d); } return; }
+        const rows = Array.isArray(data) ? data : [];
+        renderSupportRows(rows);
+        if (markRead !== false && rows.some(r => r.sender === 'admin' && !r.is_read)) { await supaClient.rpc('support_mark_read'); setMessagesBadge(0); }
+        else if (markRead === false) refreshSupportBadge();
+    } catch (e) { console.warn('messagerie', e); }
+}
+function openSupportMessages() { loadSupportThread(true); updateMsgCount(); }
+async function sendSupportMessage(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (_supportBusy) return false;
+    const t = document.getElementById('msgInput'); const body = (t && t.value || '').trim();
+    if (!body) { showToast('Écrivez un message avant d\'envoyer.', 'warning'); return false; }
+    if (!supportAvailable()) { showToast('La messagerie est disponible avec un compte connecté.', 'warning'); return false; }
+    _supportBusy = true; const btn = document.getElementById('msgSendBtn'); if (btn) btn.disabled = true;
+    try {
+        const { error } = await supaClient.rpc('support_send', { p_body: body });
+        if (error) { showToast(supportErrorText(error), 'error'); }
+        else { t.value = ''; updateMsgCount(); await loadSupportThread(true); showToast('Message envoyé ✓', 'success'); }
+    } catch (e) { showToast(supportErrorText(e), 'error'); }
+    finally { _supportBusy = false; if (btn) btn.disabled = false; }
+    return false;
+}
+
 // ============================================
 // MODAL UTILS
 // ============================================
@@ -13302,6 +13418,7 @@ function closeModalIfBg(event, id) {
 // ============================================
 function renderAll() {
     SessionPolicy.start();
+    try { startSupportPolling(); } catch (e) { console.warn('messagerie', e); }
     renderDashboard();
     populateClientSelect();
     updateTrialUI();

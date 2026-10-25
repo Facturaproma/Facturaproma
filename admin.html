@@ -584,6 +584,23 @@
             .card { overflow-x: auto; }
             .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
         }
+    
+.am-wrap { display:grid; grid-template-columns:minmax(240px,320px) 1fr; gap:14px; align-items:start; }
+@media (max-width: 800px) { .am-wrap { grid-template-columns:1fr; } }
+.am-list { background:var(--card, #fff); border:1px solid var(--line, #e2ded3); border-radius:12px; overflow:hidden; }
+.am-item { display:block; width:100%; text-align:left; padding:10px 12px; border:0; border-bottom:1px solid var(--line, #eee); background:transparent; cursor:pointer; font:inherit; }
+.am-item:hover, .am-item.on { background:#f4f2ec; }
+.am-item .am-top { display:flex; justify-content:space-between; gap:8px; font-weight:600; font-size:13px; }
+.am-item .am-sub { font-size:12px; color:var(--ink-mute, #6b7280); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.am-unread { background:var(--danger, #c84a4a); color:#fff; border-radius:100px; padding:1px 7px; font-size:11px; }
+.am-conv { background:var(--card, #fff); border:1px solid var(--line, #e2ded3); border-radius:12px; }
+.am-msgs { display:flex; flex-direction:column; gap:8px; padding:14px; min-height:220px; max-height:52vh; overflow-y:auto; }
+.am-b { max-width:82%; padding:8px 11px; border-radius:11px; font-size:13.5px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+.am-b small { display:block; margin-top:3px; font-size:11px; opacity:.65; }
+.am-client { align-self:flex-start; background:#f1efe8; }
+.am-admin { align-self:flex-end; background:var(--ink, #1b2a49); color:#fff; }
+.am-form { padding:10px; border-top:1px solid var(--line, #eee); display:flex; flex-direction:column; gap:8px; }
+.am-form textarea { width:100%; min-height:70px; font:inherit; padding:9px; border:1px solid var(--line, #d9d4c7); border-radius:8px; box-sizing:border-box; resize:vertical; }
     .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
 .fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
 .fp-pg:disabled { opacity:.4; cursor:default; }
@@ -662,6 +679,10 @@
         
         <a class="nav-item active" data-page="dashboard" onclick="navTo('dashboard')">
             📊 Dashboard
+        </a>
+        <a class="nav-item" data-page="messages" onclick="navTo('messages')">
+            💬 Messages
+            <span id="badgeMessages" style="display:none; margin-left:auto; background:var(--danger); color:white; padding:2px 8px; border-radius:100px; font-size:10px; font-weight:700;">0</span>
         </a>
         <a class="nav-item" data-page="requests" onclick="navTo('requests')">
             📥 Demandes
@@ -783,6 +804,27 @@
         </section>
 
         <!-- REQUESTS -->
+        <section class="page" id="page-messages">
+            <div class="topbar">
+                <h1>💬 Messages</h1>
+                <div class="actions"><button class="btn btn-secondary btn-sm" onclick="renderAdminMessages()">🔄 Rafraîchir</button></div>
+            </div>
+            <div class="alert"><strong>Messagerie avec les sociétés</strong> — un fil par compte, texte seulement. Les messages non lus remontent en premier. Pas de notification instantanée : rafraîchissement toutes les 90 s.</div>
+            <div class="am-wrap">
+                <div class="am-list" id="amList" aria-label="Conversations"></div>
+                <div class="am-conv" id="amConv">
+                    <div class="am-msgs" id="amMsgs"><div style="margin:auto;color:var(--ink-mute);">Choisissez une conversation.</div></div>
+                    <form class="am-form" id="amForm" style="display:none" onsubmit="return sendAdminReply(event)">
+                        <textarea id="amInput" maxlength="2000" placeholder="Votre réponse…"></textarea>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--ink-mute);">
+                            <span id="amWho"></span>
+                            <button type="submit" class="btn btn-primary btn-sm" id="amSend">Répondre</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-requests">
             <div class="topbar">
                 <h1>📥 Demandes d'abonnement</h1>
@@ -2743,6 +2785,7 @@ async function cancelMyPayment(id) {
 async function loadAllData() {
     if (isStaffMode()) return loadStaffData();
     showToast('Chargement...', 'info');
+    refreshAdminMsgBadge();
     
     // Load codes
     try {
@@ -6433,6 +6476,96 @@ function exportReportCSV() {
     showToast('Rapport CSV téléchargé ✓', 'success');
 }
 
+
+// ============================================
+// MESSAGERIE (sql/29) : fils par compte, réponses de l'administration. Rendu en textContent (jamais en HTML).
+// ============================================
+let adminMsgThreads = [], adminMsgCurrent = null, adminMsgBusy = false;
+function adminMsgError(err) {
+    const m = String((err && err.message) || err || '');
+    if ((err && (err.code === 'PGRST202' || err.code === '42883')) || /admin_support_/.test(m)) return 'Messagerie non installée sur cette base (sql/29).';
+    if (/MESSAGE_VIDE/.test(m)) return 'Écrivez une réponse avant d\'envoyer.';
+    if (/MESSAGE_TROP_LONG/.test(m)) return 'Réponse trop longue (2 000 caractères maximum).';
+    if (/COMPTE_INTROUVABLE/.test(m)) return 'Ce compte n\'existe plus.';
+    if (/forbidden/.test(m)) return 'Accès refusé.';
+    return 'Opération impossible pour le moment.';
+}
+function setAdminMsgBadge(n) {
+    const b = document.getElementById('badgeMessages'); if (!b) return;
+    b.textContent = n > 99 ? '99+' : String(n); b.style.display = n > 0 ? 'inline-block' : 'none';
+}
+async function refreshAdminMsgBadge() {
+    try { const { data, error } = await supaClient.rpc('admin_support_unread_total'); if (!error && Number.isInteger(data)) setAdminMsgBadge(data); } catch (e) { /* indicateur seulement */ }
+}
+function amMsgDate(v) {
+    const d = new Date(v); if (isNaN(d.getTime())) return '';
+    const p2 = (n) => String(n).padStart(2, '0');
+    return formatDate(d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+}
+async function renderAdminMessages() {
+    const list = document.getElementById('amList'); if (!list) return;
+    try {
+        const { data, error } = await supaClient.rpc('admin_support_threads');
+        if (error) { list.textContent = adminMsgError(error); return; }
+        adminMsgThreads = Array.isArray(data) ? data : [];
+    } catch (e) { list.textContent = adminMsgError(e); return; }
+    list.textContent = '';
+    if (!adminMsgThreads.length) { const d = document.createElement('div'); d.style.cssText = 'padding:16px;color:var(--ink-mute);font-size:13px;'; d.textContent = 'Aucune conversation.'; list.appendChild(d); }
+    for (const t of adminMsgThreads) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'am-item' + (t.user_id === adminMsgCurrent ? ' on' : ''); b.dataset.uid = t.user_id;
+        const top = document.createElement('div'); top.className = 'am-top';
+        const nm = document.createElement('span'); nm.textContent = t.company_name || t.email || '—'; top.appendChild(nm);
+        if (t.unread > 0) { const u = document.createElement('span'); u.className = 'am-unread'; u.textContent = String(t.unread); top.appendChild(u); }
+        const em = document.createElement('div'); em.className = 'am-sub'; em.textContent = t.company_name ? t.email : '';
+        const lb = document.createElement('div'); lb.className = 'am-sub'; lb.textContent = (t.last_sender === 'admin' ? 'Vous : ' : '') + String(t.last_body || '');
+        b.appendChild(top); if (t.company_name) b.appendChild(em); b.appendChild(lb);
+        b.onclick = () => openAdminThread(t.user_id);
+        list.appendChild(b);
+    }
+    setAdminMsgBadge(adminMsgThreads.reduce((n, t) => n + (t.unread || 0), 0));
+    if (adminMsgCurrent) openAdminThread(adminMsgCurrent, true);
+}
+async function openAdminThread(uid, keepScroll) {
+    adminMsgCurrent = uid;
+    const box = document.getElementById('amMsgs'); if (!box) return;
+    let rows = [];
+    try {
+        const { data, error } = await supaClient.rpc('admin_support_messages', { p_user: uid });
+        if (error) { box.textContent = adminMsgError(error); return; }
+        rows = Array.isArray(data) ? data : [];
+    } catch (e) { box.textContent = adminMsgError(e); return; }
+    box.textContent = '';
+    for (const r of rows) {
+        const b = document.createElement('div'); b.className = 'am-b ' + (r.sender === 'client' ? 'am-client' : 'am-admin');
+        b.appendChild(document.createTextNode(String(r.body == null ? '' : r.body)));
+        const sm = document.createElement('small'); sm.textContent = (r.sender === 'client' ? (r.sender_email || 'Client') : 'Vous (' + (r.sender_email || 'admin') + ')') + ' · ' + amMsgDate(r.created_at);
+        b.appendChild(sm); box.appendChild(b);
+    }
+    if (!keepScroll) box.scrollTop = box.scrollHeight;
+    const t = adminMsgThreads.find(x => x.user_id === uid);
+    const form = document.getElementById('amForm'); if (form) form.style.display = '';
+    const who = document.getElementById('amWho'); if (who) who.textContent = 'À : ' + ((t && (t.company_name ? t.company_name + ' · ' : '') + t.email) || '');
+    document.querySelectorAll('#amList .am-item').forEach(el => el.classList.toggle('on', el.dataset.uid === uid));
+    if (t && t.unread > 0) {
+        try { await supaClient.rpc('admin_support_mark_read', { p_user: uid }); t.unread = 0; setAdminMsgBadge(adminMsgThreads.reduce((n, x) => n + (x.unread || 0), 0)); const it = document.querySelector('#amList .am-item[data-uid="' + uid + '"] .am-unread'); if (it) it.remove(); } catch (e) { /* non bloquant */ }
+    }
+}
+async function sendAdminReply(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (adminMsgBusy || !adminMsgCurrent) return false;
+    const t = document.getElementById('amInput'); const body = (t && t.value || '').trim();
+    if (!body) { showToast('Écrivez une réponse avant d\'envoyer.', 'warning'); return false; }
+    adminMsgBusy = true; const btn = document.getElementById('amSend'); if (btn) btn.disabled = true;
+    try {
+        const { error } = await supaClient.rpc('admin_support_reply', { p_user: adminMsgCurrent, p_body: body });
+        if (error) showToast(adminMsgError(error), 'error');
+        else { t.value = ''; showToast('Réponse envoyée ✓', 'success'); await renderAdminMessages(); }
+    } catch (e) { showToast(adminMsgError(e), 'error'); }
+    finally { adminMsgBusy = false; if (btn) btn.disabled = false; }
+    return false;
+}
+setInterval(() => { if (typeof currentAdmin !== 'undefined' && currentAdmin && !currentAdmin.isStaff && !document.hidden) { if (document.getElementById('page-messages')?.classList.contains('active')) renderAdminMessages(); else refreshAdminMsgBadge(); } }, 90000);
+
 function isStaffMode() { return !!(currentAdmin && currentAdmin.isStaff); }
 
 // Profil assistant : on ne montre que la saisie des paiements
@@ -6460,6 +6593,7 @@ function navTo(page) {
     if (page === 'tiers') { renderTiers(); renderPlans(); }
     if (page === 'users') renderUsers();
     if (page === 'audit') renderAudit();
+    if (page === 'messages') renderAdminMessages();
     if (page === 'myinvoicing') initMyInvoicing();
     if (page === 'treasury') initTreasury();
 }
