@@ -358,6 +358,10 @@
             white-space: normal; min-width: 150px;
         }
         table.tbl-act thead th:last-child { background: var(--surface-soft); }
+        /* Liste clients : défilement horizontal dans la carte au lieu de couper les colonnes (ex. « EMAI ») sur téléphone */
+        #clientsList { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        #clientsList th, #clientsList td { white-space: nowrap; }
+        #clientsList td:last-child { white-space: normal; }
         table.tbl-act td:last-child { display: table-cell; }
         /* Écran Paiements : une ligne = facture + situation d'encaissement (payé / reste), lisible sans défilement horizontal */
         table.tbl-pay td { vertical-align: top; }
@@ -2742,7 +2746,24 @@
 
         /* Hidden helper */
         .hidden { display: none !important; }
-    </style>
+    
+.msg-wrap { display:flex; flex-direction:column; gap:0; max-width:760px; }
+.msg-thread { display:flex; flex-direction:column; gap:10px; padding:16px; min-height:240px; max-height:56vh; overflow-y:auto; background:var(--card, #fff); border:1px solid var(--line, #e2ded3); border-radius:12px 12px 0 0; }
+.msg-b { max-width:82%; padding:9px 12px; border-radius:12px; font-size:14px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+.msg-b small { display:block; margin-top:4px; font-size:11px; opacity:.65; }
+.msg-me { align-self:flex-end; background:var(--ink, #1b2a49); color:#fff; border-bottom-right-radius:3px; }
+.msg-them { align-self:flex-start; background:#f1efe8; color:var(--ink, #1b2a49); border-bottom-left-radius:3px; }
+.msg-empty { margin:auto; text-align:center; color:var(--ink-mute, #6b7280); font-size:14px; }
+.msg-form { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--line, #e2ded3); border-top:0; border-radius:0 0 12px 12px; background:var(--card, #fff); }
+.msg-form textarea { width:100%; min-height:72px; resize:vertical; font:inherit; font-size:15px; padding:10px; border:1px solid var(--line, #d9d4c7); border-radius:8px; box-sizing:border-box; }
+.msg-foot { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; color:var(--ink-mute, #6b7280); }
+    .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
+.fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
+.fp-pg:disabled { opacity:.4; cursor:default; }
+.fp-pg-on { background:var(--ink, #1b2a49); color:#fff; border-color:var(--ink, #1b2a49); font-weight:700; }
+.fp-gap { color:var(--ink-mute, #6b7280); padding:0 2px; }
+.fp-info { width:100%; text-align:center; font-size:12px; color:var(--ink-mute, #6b7280); }
+</style>
 </head>
 <body>
 
@@ -3085,6 +3106,10 @@
             </button>
             <button class="nav-item" data-page="team" onclick="navTo('team')" id="navTeam" style="display:none">
                 <span class="nav-icon">👥</span> <span data-i18n="nav.team">Mon équipe</span>
+            </button>
+            <button class="nav-item" data-page="messages" onclick="navTo('messages')" id="navMessages">
+                <span class="nav-icon">💬</span> <span>Messages</span>
+                <span class="nav-badge" id="badgeMessages" style="background: var(--danger); color: white; display:none;">0</span>
             </button>
             <button class="nav-item" data-page="license" onclick="navTo('license')">
                 <span class="nav-icon">💎</span> <span data-i18n="nav.license">Licence</span>
@@ -4333,6 +4358,25 @@
         </section>
 
         <!-- ============ LICENSE PAGE ============ -->
+        <section class="page" id="page-messages">
+            <div class="topbar">
+                <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <h1>💬 Messages</h1>
+            </div>
+            <div class="msg-wrap">
+                <div class="msg-thread" id="msgThread" aria-live="polite"></div>
+                <form class="msg-form" id="msgForm" onsubmit="return sendSupportMessage(event)">
+                    <label for="msgInput" style="font-size:13px;font-weight:600;">Écrire à l'équipe FacturaPro</label>
+                    <textarea id="msgInput" maxlength="2000" placeholder="Votre question ou votre demande…" oninput="updateMsgCount()"></textarea>
+                    <div class="msg-foot">
+                        <span><span id="msgCount">0</span> / 2000 · Texte seulement. N'écrivez jamais votre mot de passe.</span>
+                        <button type="submit" class="btn btn-primary btn-sm" id="msgSendBtn">Envoyer</button>
+                    </div>
+                </form>
+                <p style="font-size:12px;color:var(--ink-mute);margin-top:10px;">Les messages sont conservés tant que votre compte existe et ne sont lus que par l'équipe FacturaPro.</p>
+            </div>
+        </section>
+
         <section class="page" id="page-license">
             <div class="topbar">
                 <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
@@ -6692,6 +6736,42 @@ function addDaysISO(days) {
     return d.toISOString().split('T')[0];
 }
 
+// ---- Pagination des listes (10 par page, onglets 1 2 3…) --------------------
+const FP_PAGE_SIZE = 10;
+const _fpPagers = {};
+// rows : liste complète (déjà filtrée/triée) ; sig : empreinte des filtres (change → retour page 1) ; renderFn : redessine la liste
+function fpPaginate(key, rows, sig, renderFn) {
+    const st = _fpPagers[key] || (_fpPagers[key] = { page: 1, sig: '' });
+    if (st.sig !== sig) { st.sig = sig; st.page = 1; }
+    st.fn = renderFn;
+    const total = rows.length;
+    const pages = Math.max(1, Math.ceil(total / FP_PAGE_SIZE));
+    if (st.page > pages) st.page = pages;
+    if (st.page < 1) st.page = 1;
+    const from = (st.page - 1) * FP_PAGE_SIZE;
+    const items = rows.slice(from, from + FP_PAGE_SIZE);
+    let html = '';
+    if (pages > 1) {
+        const nums = [];
+        for (let n = 1; n <= pages; n++) if (n === 1 || n === pages || Math.abs(n - st.page) <= 1) nums.push(n);
+        let tabs = '', prev = 0;
+        for (const n of nums) {
+            if (prev && n - prev > 1) tabs += '<span class="fp-gap">…</span>';
+            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto('${key}',${n})">${n}</button>`;
+            prev = n;
+        }
+        html = `<div class="fp-pager" role="navigation" aria-label="Pages">
+            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page + 1})" aria-label="Page suivante">›</button>
+            <span class="fp-info">${from + 1}–${from + items.length} sur ${total}</span></div>`;
+    }
+    return { items, html, page: st.page, pages, total, from };
+}
+function fpGoto(key, n) {
+    const st = _fpPagers[key]; if (!st || !st.fn) return;
+    st.page = Math.max(1, Math.floor(Number(n)) || 1);
+    st.fn();
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text || '';
@@ -7455,6 +7535,7 @@ function navTo(page) {
     if (page === 'team') { navTo('dashboard'); return; }
     if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
+    if (page === 'messages') openSupportMessages();
     if (page === 'invoice-editor') { renderComplianceBox(); applyEditorLock(); }
     
     // Close mobile sidebar
@@ -7752,10 +7833,12 @@ function renderInvoices() {
             </tr>`;
     };
     const group = (label, n) => `<tr class="inv-group"><td colspan="3">${label} <span>(${n})</span></td></tr>`;
-    const body = (drafts.length && registered.length ? group('Brouillons — non enregistrés, modifiables', drafts.length) : '')
-        + drafts.map(row).join('')
-        + (drafts.length && registered.length ? group('Factures enregistrées — verrouillées', registered.length) : '')
-        + registered.map(row).join('');
+    const pg = fpPaginate('invoices', [...drafts, ...registered], search + '|' + filter, renderInvoices);
+    const pgDrafts = pg.items.filter(i => invoiceListKind(i) === 'draft'), pgReg = pg.items.filter(i => invoiceListKind(i) !== 'draft');
+    const body = (drafts.length && registered.length && pgDrafts.length ? group('Brouillons — non enregistrés, modifiables', drafts.length) : '')
+        + pgDrafts.map(row).join('')
+        + (drafts.length && registered.length && pgReg.length ? group('Factures enregistrées — verrouillées', registered.length) : '')
+        + pgReg.map(row).join('');
     
     el.innerHTML = `
         <table class="tbl-act tbl-inv">
@@ -7767,7 +7850,7 @@ function renderInvoices() {
                 </tr>
             </thead>
             <tbody>${body}</tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function newInvoice() {
@@ -7796,6 +7879,13 @@ function newInvoice() {
     document.getElementById('editorCompany').textContent = `Émis par ${company.name || 'votre entreprise'}`;
     
     navTo('invoice-editor');
+}
+
+// Nouvelle facture avec le client déjà choisi (parcours du premier client)
+function newInvoiceForClient(clientId) {
+    newInvoice();
+    const sel = document.getElementById('editorClient');
+    if (sel && (Storage.get('clients', []) || []).some(c => c.id === clientId)) sel.value = clientId;
 }
 
 // Facture émise = lecture seule (le serveur refuse aussi toute modification : sql/14)
@@ -8438,7 +8528,9 @@ function renderQuotes() {
                (q.clientName || '').toLowerCase().includes(search);
     });
     
-    const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sortedAll = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const pg = fpPaginate('quotes', sortedAll, search, renderQuotes);
+    const sorted = pg.items;
     
     const el = document.getElementById('quotesList');
     if (sorted.length === 0) {
@@ -8484,7 +8576,7 @@ function renderQuotes() {
                     </tr>
                 `).join('')}
             </tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function newQuote() {
@@ -8625,6 +8717,7 @@ function renderClients() {
                (c.email || '').toLowerCase().includes(search);
     });
     
+    const pg = fpPaginate('clients', filtered, search, renderClients);
     const el = document.getElementById('clientsList');
     if (filtered.length === 0) {
         el.innerHTML = `
@@ -8637,7 +8730,13 @@ function renderClients() {
         return;
     }
     
-    el.innerHTML = `
+    // Premier client enregistré, aucune facture : l'étape suivante est proposée tout de suite (client déjà choisi)
+    const nextStep = (clients.length > 0 && invoices.length === 0 && !search)
+        ? `<div id="clientsNextStep" style="margin:0 0 14px; padding:12px 14px; background:rgba(27,58,107,0.08); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+               <span style="flex:1; min-width:180px;">✓ Client prêt. Étape suivante : créez sa première facture.</span>
+               <button class="btn btn-primary btn-sm" onclick="newInvoiceForClient('${escapeHtml(clients[clients.length - 1].id)}')">Créer la facture →</button>
+           </div>` : '';
+    el.innerHTML = nextStep + `
         <table class="tbl-act">
             <thead>
                 <tr>
@@ -8651,7 +8750,7 @@ function renderClients() {
                 </tr>
             </thead>
             <tbody>
-                ${filtered.map(c => {
+                ${pg.items.map(c => {
                     const clientInvoices = invoices.filter(i => i.clientId === c.id);
                     const _allPay = Storage.get('payments', []) || [];
                     const totalCA = clientInvoices.filter(i => i.type !== 'credit').reduce((s, i) => s + invoicePaidAmount(i, _allPay), 0);
@@ -8671,7 +8770,7 @@ function renderClients() {
                     `;
                 }).join('')}
             </tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function populateClientSelect() {
@@ -8776,6 +8875,7 @@ function renderProducts() {
                (p.category || '').toLowerCase().includes(search);
     });
     
+    const pg = fpPaginate('products', filtered, search, renderProducts);
     const el = document.getElementById('productsList');
     if (filtered.length === 0) {
         el.innerHTML = `
@@ -8802,7 +8902,7 @@ function renderProducts() {
                 </tr>
             </thead>
             <tbody>
-                ${filtered.map(p => {
+                ${pg.items.map(p => {
                     const ttc = p.price * (1 + (p.tva || 0) / 100);
                     return `
                         <tr>
@@ -8823,7 +8923,7 @@ function renderProducts() {
                     `;
                 }).join('')}
             </tbody>
-        </table>`;
+        </table>${pg.html}`;
 }
 
 function newProduct() {
@@ -12370,7 +12470,7 @@ function renderPayments() {
     if (filter === 'overdue') filtered = filtered.filter(i => i.status === 'overdue' && sit(i).remaining > 0);
     if (filter === 'paid') filtered = filtered.filter(i => sit(i).state === 'paid');
     
-    const sorted = [...filtered].sort((a, b) => {
+    const sortedAll = [...filtered].sort((a, b) => {
         // Overdue first, then by due date
         if (a.status === 'overdue' && b.status !== 'overdue') return -1;
         if (a.status !== 'overdue' && b.status === 'overdue') return 1;
@@ -12378,7 +12478,9 @@ function renderPayments() {
     });
     
     const listEl = document.getElementById('paymentsList');
-    if (sorted.length === 0) {
+    const pgDue = fpPaginate('payDue', sortedAll, filter, renderPayments);
+    const sorted = pgDue.items;
+    if (sortedAll.length === 0) {
         listEl.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">💳</div>
@@ -12415,13 +12517,15 @@ function renderPayments() {
                         `;
                     }).join('')}
                 </tbody>
-            </table>`;
+            </table>${pgDue.html}`;
     }
     
     // History list
     const historyEl = document.getElementById('paymentsHistoryList');
-    const sortedPayments = [...payments].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
-    if (sortedPayments.length === 0) {
+    const sortedPaymentsAll = [...payments].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const pgHist = fpPaginate('payHist', sortedPaymentsAll, String(sortedPaymentsAll.length), renderPayments);
+    const sortedPayments = pgHist.items;
+    if (sortedPaymentsAll.length === 0) {
         historyEl.innerHTML = `
             <div class="empty-state" style="padding: 32px;">
                 <p>Aucun paiement enregistré</p>
@@ -12462,7 +12566,7 @@ function renderPayments() {
                         `;
                     }).join('')}
                 </tbody>
-            </table>`;
+            </table>${pgHist.html}`;
     }
 }
 
@@ -12855,382 +12959,332 @@ function drawStampOnPdf(pdf, company, xRight, y, boxW, boxH) {
     } catch (err) { console.warn('Could not add stamp to PDF:', err); return 0; }
 }
 
+// ============================================
+// DESIGN COMMUN DES DOCUMENTS PDF (facture, avoir, devis, reçu de paiement)
+// Blanc, peu d'encre : texte et filets (pas d'aplats), lisible en noir et blanc. Couleurs = réglages « Style des documents » de l'abonné.
+// Aucun calcul financier ici : les montants viennent des données du document et de paymentSituation().
+// ============================================
+const PDF_INK = [30, 36, 48], PDF_MUTE = [108, 115, 128], PDF_LINE = [208, 213, 221], PDF_TINT = [246, 247, 249];
+const PDF_STATUS_LABELS = { ae: 'Auto-Entrepreneur', freelance: 'Profession libérale', sarl: 'SARL', autre: 'Société' };
+
+function pdfTheme(company) {
+    const st = getDocStyle(company);
+    return { st, primary: st.primary, accent: st.accent, sober: st.template === 'sobre', company: company || {} };
+}
+function pdfLabel(pdf, T, text, x, y, opts) {      // petite étiquette en capitales
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7); pdf.setTextColor(...PDF_MUTE);
+    pdf.text(String(text).toUpperCase(), x, y, opts);
+}
+// Choisit la plus grande taille pour laquelle le texte tient en maxLines[i] lignes ; au pire, tronque avec « … » (jamais en silence).
+function pdfFit(pdf, text, width, sizes, maxLines) {
+    let lines = [];
+    for (let i = 0; i < sizes.length; i++) {
+        pdf.setFontSize(sizes[i]); lines = pdf.splitTextToSize(String(text), width);
+        if (lines.length <= maxLines[i]) return { size: sizes[i], lines };
+    }
+    const m = maxLines[maxLines.length - 1], size = sizes[sizes.length - 1];
+    if (lines.length > m) { lines = lines.slice(0, m); lines[m - 1] = lines[m - 1].replace(/\s*\S{0,3}$/, '') + '…'; }
+    return { size, lines };
+}
+function pdfLegalLine(company) {
+    const a = [];
+    if (company.ice) a.push(`ICE ${company.ice}`);
+    if (company.if) a.push(`IF ${company.if}`);
+    if (company.rc) a.push(`RC ${company.rc}`);
+    if (company.cnss) a.push(`CNSS ${company.cnss}`);
+    if (company.patente) a.push(`Patente ${company.patente}`);
+    return a.join('  ·  ');
+}
+// En-tête de première page. Retourne le y suivant.
+function pdfHeader(pdf, T, o) {
+    const c = T.company;
+    if (!T.sober) { pdf.setFillColor(...T.primary); pdf.rect(0, 0, 210, 3, 'F'); }
+    let textX = 15;
+    if (c.logo && isUserLicensed()) {
+        try {
+            const pr = pdf.getImageProperties(c.logo); const k = Math.min(26 / pr.width, 20 / pr.height);
+            const w = pr.width * k, h = pr.height * k;
+            pdf.addImage(c.logo, pr.fileType || 'PNG', 15, 11 + (20 - h) / 2, w, h); textX = 15 + w + 5;
+        } catch (err) { console.warn('Could not add logo to PDF:', err); }
+    }
+    // Vendeur (gauche)
+    const leftW = Math.max(40, 108 - textX);
+    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...PDF_INK);
+    const nm = pdfFit(pdf, c.name || 'Mon Entreprise', leftW, [14, 12, 10], [2, 3, 3]);
+    pdf.setFontSize(nm.size);
+    let y = 16; pdf.text(nm.lines, textX, y); y += nm.lines.length * (nm.size * 0.42);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...PDF_MUTE);
+    const stLabel = PDF_STATUS_LABELS[c.status] || '';
+    if (stLabel) { pdf.text(stLabel, textX, y); y += 4; }
+    let addr = c.address || ''; if (c.city && !addr.includes(c.city)) addr += (addr ? ', ' : '') + c.city;
+    if (addr) { const al = pdf.splitTextToSize(addr, leftW).slice(0, 2); pdf.text(al, textX, y); y += al.length * 3.8; }
+    if (T.st.headerNote) { pdf.setFont('helvetica', 'italic'); const hn = pdf.splitTextToSize(String(T.st.headerNote), leftW).slice(0, 1); pdf.text(hn, textX, y); y += 3.8; }
+    // Titre (droite)
+    let size = 22; pdf.setFont('helvetica', 'bold');
+    while (size > 14 && (pdf.setFontSize(size), pdf.getTextWidth(o.title)) > 84) size -= 1;
+    pdf.setFontSize(size); pdf.setTextColor(...T.primary); pdf.text(o.title, 195, 20, { align: 'right' });
+    pdf.setFontSize(11); pdf.setTextColor(...PDF_INK); pdf.text(String(o.number || ''), 195, 27.5, { align: 'right' });
+    if (o.tag) {
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
+        const tw = pdf.getTextWidth(o.tag) + 6;
+        pdf.setDrawColor(...(o.tagStrong ? PDF_INK : PDF_MUTE)); pdf.setLineWidth(o.tagStrong ? 0.5 : 0.25);
+        pdf.roundedRect(195 - tw, 31, tw, 6, 1, 1, 'S');
+        pdf.setTextColor(...(o.tagStrong ? PDF_INK : PDF_MUTE)); pdf.text(o.tag, 195 - tw / 2, 35.1, { align: 'center' });
+    }
+    // Filet de séparation
+    y = Math.max(y, 40) + 3;
+    pdf.setDrawColor(...(T.sober ? PDF_LINE : T.accent)); pdf.setLineWidth(T.sober ? 0.3 : 0.7); pdf.line(15, y, 195, y);
+    y += 5;
+    const legal = pdfLegalLine(c), contact = [c.phone ? `Tél ${c.phone}` : '', c.email || '', c.website || ''].filter(Boolean).join('  ·  ');
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(...PDF_MUTE);
+    for (const t of [legal, contact]) { if (t) { const ls = pdf.splitTextToSize(t, 180).slice(0, 2); pdf.text(ls, 15, y); y += ls.length * 3.6 + 0.8; } }
+    return y + 4;
+}
+// Bloc « parties » : à gauche le client / payeur, à droite une liste étiquette–valeur. Retourne le y suivant.
+function pdfParties(pdf, T, y, o) {
+    pdfLabel(pdf, T, o.partyLabel, 15, y);
+    let ly = y + 5.5;
+    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...PDF_INK);
+    const nf = pdfFit(pdf, o.name || '—', 92, [11.5, 10, 9], [2, 3, 5]);
+    pdf.setFontSize(nf.size); pdf.text(nf.lines, 15, ly); ly += nf.lines.length * (nf.size * 0.43) + 1;
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(...PDF_MUTE);
+    for (const line of (o.lines || [])) { if (!line) continue; const ls = pdf.splitTextToSize(String(line), 92).slice(0, 5); pdf.text(ls, 15, ly); ly += ls.length * 4; }
+    // Colonne droite : étiquette (gauche) / valeur (droite)
+    let ry = y;
+    for (const [k, v, strong] of (o.meta || [])) {
+        if (v === undefined || v === null || v === '') continue;
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(...PDF_MUTE); pdf.text(k, 122, ry + 0.5);
+        pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...PDF_INK); pdf.setFontSize(9);
+        const vl = pdf.splitTextToSize(String(v), 46).slice(0, 2); pdf.text(vl, 195, ry + 0.5, { align: 'right' }); ry += Math.max(5.4, vl.length * 4.4 + 1);
+    }
+    return Math.max(ly, ry) + 5;
+}
+// Passe finale : en-tête courant (pages 2+), pied de page, numéros, filigranes. Appelée une seule fois, après tout le contenu.
+function pdfFinish(pdf, T, o) {
+    const c = T.company, n = pdf.getNumberOfPages(), licensed = isUserLicensed();
+    const legal = [c.name, pdfLegalLine(c)].filter(Boolean).join('  ·  ');
+    for (let i = 1; i <= n; i++) {
+        pdf.setPage(i);
+        if (i > 1) {
+            pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...PDF_INK);
+            pdf.text(pdf.splitTextToSize(String(c.name || 'Mon Entreprise'), 90)[0], 15, 13);
+            pdf.setTextColor(...T.primary); pdf.text(`${o.title}  ${o.number || ''}`, 195, 13, { align: 'right' });
+            pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.3); pdf.line(15, 16.5, 195, 16.5);
+        }
+        pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.3); pdf.line(15, 283, 195, 283);
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(...PDF_MUTE);
+        pdf.text(pdf.splitTextToSize(legal, 150)[0] || '', 15, 287);
+        pdf.text(`Page ${i} / ${n}`, 195, 287, { align: 'right' });
+        if (T.st.footerNote) {
+            pdf.setFontSize(7.5); pdf.setFont('helvetica', 'italic');
+            const fl = pdf.splitTextToSize(String(T.st.footerNote), 180).slice(0, 2); pdf.text(fl, 105, fl.length > 1 ? 291 : 292.5, { align: 'center' });
+        }
+        if (!licensed) {
+            pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity: 0.06 })); pdf.setTextColor(27, 58, 107);
+            pdf.setFontSize(70); pdf.setFont('helvetica', 'bold'); pdf.text('FACTURAPRO', 105, 160, { align: 'center', angle: -30 }); pdf.restoreGraphicsState();
+            pdf.setFontSize(7); pdf.setTextColor(170, 170, 170); pdf.setFont('helvetica', 'italic');
+            pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 295.5, { align: 'center' });
+        }
+    }
+}
+// Saut de page si le bloc suivant (hauteur h) ne tient pas. Retourne le nouveau y.
+function pdfEnsure(pdf, y, h) {
+    if (y + h > 278) { pdf.addPage(); return 24; }
+    return y;
+}
+// Paragraphe avec saut de page ligne à ligne (textes longs). Retourne le y suivant.
+function pdfParagraph(pdf, y, text, x, w, lineH, maxLines) {
+    let lines = pdf.splitTextToSize(String(text), w);
+    if (maxLines) lines = lines.slice(0, maxLines);
+    for (const ln of lines) { y = pdfEnsure(pdf, y, lineH); pdf.text(ln, x, y); y += lineH; }
+    return y;
+}
+// Bloc totaux. rows = [[label, valeur, style]] style : 'sub' | 'bold'. Retourne le y suivant.
+function pdfTotals(pdf, T, y, rows, ttc) {
+    const x0 = 118, x1 = 195;
+    const need = rows.length * 6 + 18 + (ttc.after ? ttc.after.length * 6.5 : 0);
+    y = pdfEnsure(pdf, y, need);
+    pdf.setFontSize(9.5);
+    for (const [k, v, st] of rows) {
+        pdf.setFont('helvetica', st === 'bold' ? 'bold' : 'normal'); pdf.setTextColor(...(st === 'sub' ? PDF_MUTE : PDF_INK));
+        pdf.text(k, x0, y); pdf.setFont('helvetica', 'bold'); pdf.text(v, x1, y, { align: 'right' }); y += 6;
+    }
+    y += 1;
+    pdf.setFillColor(...PDF_TINT); pdf.setDrawColor(...T.primary); pdf.setLineWidth(0.6);
+    pdf.roundedRect(x0 - 3, y - 5.4, x1 - x0 + 6, 11, 1.2, 1.2, 'FD');
+    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...PDF_INK); pdf.setFontSize(9.5); pdf.text(ttc.label, x0, y + 1.3);
+    pdf.setFontSize(14); pdf.text(ttc.value, x1, y + 1.7, { align: 'right' });
+    y += 11;
+    for (const [k, v, strong] of (ttc.after || [])) {
+        pdf.setFont('helvetica', strong ? 'bold' : 'normal'); pdf.setFontSize(strong ? 11 : 9.5); pdf.setTextColor(...PDF_INK);
+        pdf.text(k, x0, y); pdf.setFont('helvetica', 'bold'); pdf.text(v, x1, y, { align: 'right' }); y += strong ? 7 : 6;
+    }
+    return y + 4;
+}
+// Mention d'un encadré (fond teinté léger, bordure fine)
+function pdfNoteBox(pdf, y, text, opts) {
+    const o = opts || {};
+    pdf.setFont('helvetica', o.italic === false ? 'normal' : 'italic'); pdf.setFontSize(8);
+    const lines = pdf.splitTextToSize(String(text), 172);
+    const h = lines.length * 3.9 + 5;
+    y = pdfEnsure(pdf, y, h);
+    pdf.setFillColor(...PDF_TINT); pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.25); pdf.roundedRect(15, y, 180, h, 1, 1, 'FD');
+    pdf.setTextColor(...(o.color || PDF_INK)); pdf.text(lines, 19, y + 5);
+    return y + h + 4;
+}
+function pdfSectionTitle(pdf, T, y, text) {
+    y = pdfEnsure(pdf, y, 14);
+    pdfLabel(pdf, T, text, 15, y); return y + 4.5;
+}
+
 async function generatePDF(id, type, opts) {
     const collection = Storage.get(type === 'invoice' ? 'invoices' : 'quotes', []);
     const doc_data = (opts && opts.sample) || collection.find(d => d.id === id);
     if (!doc_data) return;
-    
     const company = Storage.get('company', {});
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
     if (ARABIC_RE.test(JSON.stringify([doc_data, company]))) {
         try { await enableArabicPdf(pdf); }
-        catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée, vérifiez votre connexion). Le PDF sera généré sans lui.', 'error'); }
+        catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée, vérifiez votre connexion). Le PDF sera généré sans lui.', 'warning'); }
     }
-    
+    const T = pdfTheme(company);
     const isInvoice = type === 'invoice';
     const isCredit = doc_data.type === 'credit' || (doc_data.totalTTC || 0) < 0;
-    let docTitle;
-    if (isCredit) docTitle = 'AVOIR';
-    else if (isInvoice) docTitle = 'FACTURE';
-    else docTitle = 'DEVIS';
-    
-    // Colors
-    const dStyle = getDocStyle(company);
-    const primaryColor = dStyle.primary;
-    const accentColor = dStyle.accent;
-    const sober = dStyle.template === 'sobre';
-    const hdrText = sober ? primaryColor : [255, 255, 255];     // texte du bandeau
-    const hdrSub = sober ? [90, 98, 115] : [220, 220, 220];
-    const grayLight = [240, 237, 230];
-    const grayDark = [74, 84, 104];
-    
-    // === HEADER ===
-    if (!sober) {
-        pdf.setFillColor(...primaryColor);
-        pdf.rect(0, 0, 210, 38, 'F');
-    }
-    
-    // Accent line
-    pdf.setFillColor(...accentColor);
-    pdf.rect(0, 38, 210, 1.5, 'F');
-    
-    // Logo (only for licensed users with logo uploaded)
-    const isLicensedForLogo = isUserLicensed();
-    let companyTextX = 15; // Position du texte (déplacé si logo)
-    
-    if (company.logo && isLicensedForLogo) {
-        try {
-            // Logo en haut à gauche, dimensions 25x25mm
-            pdf.addImage(company.logo, 'PNG', 12, 7, 24, 24);
-            companyTextX = 42; // Décaler texte à droite du logo
-        } catch (err) {
-            console.warn('Could not add logo to PDF:', err);
-        }
-    }
-    
-    // Company name
-    pdf.setTextColor(...hdrText);
-    pdf.setFontSize(22);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(company.name || 'Mon Entreprise', companyTextX, 18);
-    
-    // Status
-    const statusLabels = {
-        ae: 'Auto-Entrepreneur',
-        freelance: 'Profession libérale',
-        sarl: 'SARL',
-        autre: 'Société'
-    };
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...accentColor);
-    pdf.text(statusLabels[company.status] || '', companyTextX, 25);
-    
-    // Address line
-    pdf.setTextColor(...hdrSub);
-    pdf.setFontSize(8);
-    let addressLine = '';
-    if (company.address) addressLine += company.address;
-    if (company.city && !addressLine.includes(company.city)) addressLine += (addressLine ? ', ' : '') + company.city;
-    if (addressLine) pdf.text(addressLine, 15, 31);
-    // Texte d'en-tête personnalisé (slogan, activité…)
-    if (dStyle.headerNote) { pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.text(String(dStyle.headerNote).slice(0, 90), 15, 35.5); pdf.setFont('helvetica', 'normal'); }
-    
-    // Doc title (right)
-    pdf.setTextColor(...hdrText);
-    pdf.setFontSize(28);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(docTitle, 195, 22, { align: 'right' });
-    
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...accentColor);
-    pdf.text(isDraftNumber(doc_data.number) ? 'BROUILLON' : doc_data.number, 195, 30, { align: 'right' });
-    
-    // === COMPANY INFO BOX ===
-    let yPos = 48;
-    pdf.setTextColor(...grayDark);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-    
-    const companyInfo = [];
-    if (company.ice) companyInfo.push(`ICE : ${company.ice}`);
-    if (company.if) companyInfo.push(`IF : ${company.if}`);
-    if (company.rc) companyInfo.push(`RC : ${company.rc}`);
-    if (company.cnss) companyInfo.push(`CNSS : ${company.cnss}`);
-    if (company.patente) companyInfo.push(`Patente : ${company.patente}`);
-    
-    if (company.phone) companyInfo.push(`Tél : ${company.phone}`);
-    if (company.email) companyInfo.push(`Email : ${company.email}`);
-    
-    pdf.text(companyInfo.join('   ·   '), 15, yPos);
-    yPos += 8;
-    
-    // === DATES ===
-    pdf.setFontSize(9);
-    pdf.setTextColor(...grayDark);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Date d\'émission', 15, yPos);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(formatDate(doc_data.date), 50, yPos);
-    
-    if (doc_data.dueDate) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(isInvoice ? 'Échéance' : 'Validité', 100, yPos);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(formatDate(doc_data.dueDate), 130, yPos);
-    }
-    yPos += 12;
-    
-    // === CLIENT BOX ===
-    pdf.setFillColor(...grayLight);
-    pdf.roundedRect(15, yPos, 90, 32, 2, 2, 'F');
-    
-    pdf.setTextColor(...primaryColor);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('FACTURÉ À', 19, yPos + 5);
-    
-    pdf.setTextColor(...grayDark);
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(doc_data.clientName || '—', 19, yPos + 11);
-    
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-    let clientY = yPos + 16;
-    if (doc_data.clientICE) {
-        pdf.text(`ICE : ${doc_data.clientICE}`, 19, clientY);
-        clientY += 4;
-    }
-    if (doc_data.clientAddress) {
-        const addrLines = pdf.splitTextToSize(doc_data.clientAddress, 80);
-        pdf.text(addrLines, 19, clientY);
-    }
-    
-    yPos += 40;
-    
-    // === ITEMS TABLE ===
-    const hasDiscount = doc_data.items.some(it => (it.discount || 0) > 0);
-    const tableData = doc_data.items.map(item => {
-        const row = [
-            item.description,
-            item.quantity.toString(),
-            formatCurrencyForPDF(item.price, false)
-        ];
-        if (hasDiscount) row.push((item.discount || 0) > 0 ? item.discount + '%' : '');
-        row.push(item.tva + '%', formatCurrencyForPDF(item.totalHT, false));
+    const isDraft = isDraftNumber(doc_data.number);
+    const allInvoices = (opts && opts.sample) ? [doc_data] : (Storage.get('invoices', []) || []);
+    const allPayments = (opts && opts.sample) ? [] : (Storage.get('payments', []) || []);
+    const title = isCredit ? 'AVOIR' : (isInvoice ? 'FACTURE' : 'DEVIS');
+    const shown = (opts && opts.sample) ? doc_data.number : (isDraft ? 'BROUILLON' : doc_data.number);
+    const situation = (isInvoice && !isCredit && !isDraft) ? paymentSituation(doc_data, allPayments, allInvoices) : null;
+    let tag = '', tagStrong = false;
+    if (!isInvoice) tag = 'PROPOSITION COMMERCIALE';
+    else if (isDraft) tag = 'BROUILLON · NON ENREGISTRÉE';
+    else if (isCredit) tag = doc_data.relatedInvoiceNumber ? 'SUR FACTURE ' + doc_data.relatedInvoiceNumber : 'NOTE DE CRÉDIT';
+    else if (situation && situation.state === 'credited') { tag = 'ANNULÉE PAR AVOIR'; tagStrong = true; }
+    else if (situation && situation.state === 'paid') { tag = 'SOLDÉE'; tagStrong = true; }
+    else if (situation && situation.state === 'partial') tag = 'PAIEMENT PARTIEL';
+    const o = { title, number: shown, tag, tagStrong };
+
+    let y = pdfHeader(pdf, T, o);
+    // Client (recherche par identifiant uniquement : jamais par nom, pour ne jamais mélanger deux clients)
+    const client = (opts && opts.sample) ? null : (Storage.get('clients', []) || []).find(c => c.id === doc_data.clientId);
+    const terms = doc_data.paymentTerms;
+    const termsLabel = (isInvoice && !isCredit && terms !== undefined && terms !== null && terms !== '')
+        ? (terms === 'immediate' || terms === '0' || terms === 0 ? 'Paiement immédiat' : (/^\d+$/.test(String(terms)) ? `${terms} jours` : '')) : '';
+    y = pdfParties(pdf, T, y, {
+        partyLabel: isInvoice ? (isCredit ? 'Avoir établi pour' : 'Facturé à') : 'Destinataire',
+        name: doc_data.clientName,
+        lines: [doc_data.clientICE ? `ICE : ${doc_data.clientICE}` : '', client && client.if ? `IF : ${client.if}` : '', doc_data.clientAddress,
+                client && client.phone ? `Tél : ${client.phone}` : '', client && client.email ? client.email : ''],
+        meta: [
+            ['Date d\'émission', formatDate(doc_data.date)],
+            [isInvoice ? 'Échéance' : 'Valable jusqu\'au', doc_data.dueDate ? formatDate(doc_data.dueDate) : ''],
+            ['Conditions', termsLabel],
+            [isCredit && doc_data.relatedInvoiceNumber ? 'Facture d\'origine' : '', isCredit ? doc_data.relatedInvoiceNumber : '']
+        ].filter(r => r[0])
+    });
+
+    // === LIGNES ===
+    const items = Array.isArray(doc_data.items) ? doc_data.items : [];
+    const hasDiscount = items.some(it => (it.discount || 0) > 0);
+    const body = items.map(item => {
+        const row = [String(item.description == null ? '' : item.description), String(item.quantity == null ? '' : item.quantity), formatCurrencyForPDF(item.price != null ? item.price : item.unitPrice, false)];
+        if (hasDiscount) row.push((item.discount || 0) > 0 ? item.discount + ' %' : '');
+        row.push((item.tva != null ? item.tva : 0) + ' %', formatCurrencyForPDF(item.totalHT, false));
         return row;
     });
-    
+    const head = hasDiscount ? ['Désignation', 'Qté', 'P.U. HT', 'Remise', 'TVA', 'Total HT'] : ['Désignation', 'Qté', 'P.U. HT', 'TVA', 'Total HT'];
+    const colStyles = hasDiscount
+        ? { 0: { cellWidth: 'auto' }, 1: { cellWidth: 16, halign: 'center' }, 2: { cellWidth: 28, halign: 'right' }, 3: { cellWidth: 18, halign: 'center' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } }
+        : { 0: { cellWidth: 'auto' }, 1: { cellWidth: 18, halign: 'center' }, 2: { cellWidth: 32, halign: 'right' }, 3: { cellWidth: 18, halign: 'center' }, 4: { cellWidth: 32, halign: 'right', fontStyle: 'bold' } };
     pdf.autoTable({
-        startY: yPos,
-        head: [hasDiscount ? ['Désignation', 'Qté', 'P.U. HT', 'Remise', 'TVA', 'Total HT'] : ['Désignation', 'Qté', 'P.U. HT', 'TVA', 'Total HT']],
-        body: tableData,
-        theme: 'plain',
-        headStyles: {
-            fillColor: primaryColor,
-            textColor: [255, 255, 255],
-            fontSize: 10,
-            fontStyle: 'bold',
-            cellPadding: 5,
-            halign: 'left',
-            font: 'helvetica'
-        },
-        bodyStyles: {
-            fontSize: 10,
-            cellPadding: 5,
-            textColor: grayDark,
-            font: 'helvetica',
-            lineWidth: 0,
-            lineColor: [220, 220, 220]
-        },
-        alternateRowStyles: {
-            fillColor: [250, 248, 243]
-        },
-        columnStyles: hasDiscount ? {
-            0: { cellWidth: 62, fontStyle: 'normal' },
-            1: { cellWidth: 16, halign: 'center' },
-            2: { cellWidth: 28, halign: 'right' },
-            3: { cellWidth: 18, halign: 'center' },
-            4: { cellWidth: 16, halign: 'center' },
-            5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
-        } : {
-            0: { cellWidth: 80, fontStyle: 'normal' },
-            1: { cellWidth: 18, halign: 'center' },
-            2: { cellWidth: 32, halign: 'right' },
-            3: { cellWidth: 18, halign: 'center' },
-            4: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
-        },
-        margin: { left: 15, right: 15 },
-        styles: {
-            overflow: 'linebreak'
+        startY: y, head: [head], body, theme: 'plain',
+        margin: { left: 15, right: 15, top: 24, bottom: 20 },
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: { top: 3, bottom: 3, left: 2.5, right: 2.5 }, textColor: PDF_INK, overflow: 'linebreak', lineWidth: 0 },
+        headStyles: { fillColor: PDF_TINT, textColor: T.primary, fontStyle: 'bold', fontSize: 8 },
+        columnStyles: colStyles, showHead: 'everyPage', rowPageBreak: 'avoid',
+        didParseCell: (d) => { if (d.section === 'head') { const cs = colStyles[d.column.index]; if (cs && cs.halign) d.cell.styles.halign = cs.halign; } },
+        didDrawCell: (d) => {      // filets fins sous chaque ligne ; filet plus marqué sous l'en-tête
+            const c = d.cell;
+            pdf.setDrawColor(...(d.section === 'head' ? T.primary : PDF_LINE)); pdf.setLineWidth(d.section === 'head' ? 0.5 : 0.2);
+            pdf.line(c.x, c.y + c.height, c.x + c.width, c.y + c.height);
         }
     });
-    
-    yPos = pdf.lastAutoTable.finalY + 10;
-    
-    // === TOTALS ===
-    const totalsX = 120;
-    pdf.setFontSize(11);
-    pdf.setTextColor(...grayDark);
-    
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('Sous-total HT', totalsX, yPos);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(formatCurrencyForPDF(doc_data.totalHT), 195, yPos, { align: 'right' });
-    yPos += 7;
-    
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('TVA', totalsX, yPos);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(formatCurrencyForPDF(doc_data.totalTVA), 195, yPos, { align: 'right' });
-    yPos += 5;
-    
-    // Line separator
-    pdf.setDrawColor(...primaryColor);
-    pdf.setLineWidth(0.5);
-    pdf.line(totalsX, yPos, 195, yPos);
-    yPos += 7;
-    
-    // Grand total - bandeau plus visible
-    pdf.setFillColor(...primaryColor);
-    pdf.roundedRect(totalsX - 2, yPos - 6, 79, 12, 1.5, 1.5, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(12);
-    pdf.text('Total TTC', totalsX + 2, yPos + 1);
-    pdf.setTextColor(...accentColor);
-    pdf.setFontSize(13);
-    pdf.text(formatCurrencyForPDF(doc_data.totalTTC), 193, yPos + 1, { align: 'right' });
-    yPos += 18;
-    
+    y = pdf.lastAutoTable.finalY + 8;
+
+    // === TOTAUX (valeurs du document ; TVA ventilée par taux seulement si la somme des lignes égale le total) ===
+    const rows = [['Sous-total HT', formatCurrencyForPDF(doc_data.totalHT)]];
+    const byRate = {};
+    items.forEach(it => { if (it.totalTVA != null) byRate[it.tva] = money2((byRate[it.tva] || 0) + it.totalTVA); });
+    const rates = Object.keys(byRate);
+    const sumRates = money2(rates.reduce((s, r) => s + byRate[r], 0));
+    if (rates.length > 1 && Math.abs(sumRates - money2(doc_data.totalTVA)) < 0.011) rates.sort((a, b) => a - b).forEach(r => rows.push([`TVA ${r} %`, formatCurrencyForPDF(byRate[r])]));
+    else rows.push(['TVA', formatCurrencyForPDF(doc_data.totalTVA)]);
+    const ttc = { label: isCredit ? 'TOTAL AVOIR TTC' : 'TOTAL TTC', value: formatCurrencyForPDF(doc_data.totalTTC), after: [] };
+    if (situation && (situation.state === 'partial' || situation.state === 'paid' || situation.state === 'none') && situation.paid > 0) {
+        ttc.after.push(['Déjà réglé', '- ' + formatCurrencyForPDF(situation.paid)]);
+        ttc.after.push(['Reste à payer', formatCurrencyForPDF(situation.remaining), true]);
+    } else if (situation && situation.state === 'none' && situation.remaining > 0) {
+        ttc.after.push(['Reste à payer', formatCurrencyForPDF(situation.remaining), true]);
+    }
+    y = pdfTotals(pdf, T, y, rows, ttc);
+
     // Montant en toutes lettres (usage courant sur les factures marocaines ; une obligation légale n'est pas établie ici)
     {
         const lbl = isCredit ? 'Arrêté le présent avoir à la somme de : ' : isInvoice ? 'Arrêtée la présente facture à la somme de : ' : 'Arrêté le présent devis à la somme de : ';
-        pdf.setTextColor(...grayDark);
-        pdf.setFont('helvetica', 'italic');
-        pdf.setFontSize(8.5);
-        const wl = pdf.splitTextToSize(lbl + amountInWordsFr(doc_data.totalTTC) + '.', 180);
-        pdf.text(wl, 15, yPos);
-        yPos += wl.length * 4 + 4;
+        y = pdfEnsure(pdf, y, 14);
+        pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8.5); pdf.setTextColor(...PDF_INK);
+        y = pdfParagraph(pdf, y, lbl + amountInWordsFr(doc_data.totalTTC) + '.', 15, 180, 4);
+        y += 4;
     }
 
-    // === LEGAL MENTIONS (TVA selon statut) ===
+    // === MENTIONS (inchangées : à faire valider par un comptable) ===
     const hasTva = (doc_data.totalTVA || 0) > 0;
-    
-    if (company.status === 'ae' && !hasTva) {
-        // AE sans TVA = mention exonération
-        pdf.setFillColor(255, 248, 230);
-        pdf.roundedRect(15, yPos, 180, 12, 1, 1, 'F');
-        pdf.setTextColor(...grayDark);
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'italic');
-        pdf.text('TVA non applicable - Article 6 du CGI (Statut Auto-Entrepreneur)', 19, yPos + 7);
-        yPos += 16;
-    } else if (company.status === 'ae' && hasTva) {
-        // AE avec TVA = avertissement (cas anormal)
-        pdf.setFillColor(255, 245, 230);
-        pdf.roundedRect(15, yPos, 180, 12, 1, 1, 'F');
-        pdf.setTextColor(180, 100, 20);
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'italic');
-        pdf.text('Attention : TVA appliquée. Vérifiez votre statut fiscal.', 19, yPos + 7);
-        yPos += 16;
-    }
-    
-    // === NOTES ===
+    if (company.status === 'ae' && !hasTva) y = pdfNoteBox(pdf, y, 'TVA non applicable - Article 6 du CGI (Statut Auto-Entrepreneur)');
+    else if (company.status === 'ae' && hasTva) y = pdfNoteBox(pdf, y, 'Attention : TVA appliquée. Vérifiez votre statut fiscal.', { color: [150, 80, 10] });
+
+    // === CONDITIONS / NOTES ===
     if (doc_data.notes) {
-        pdf.setTextColor(...primaryColor);
-        pdf.setFontSize(9);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Conditions / Notes', 15, yPos);
-        yPos += 5;
-        pdf.setTextColor(...grayDark);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(9);
-        const noteLines = pdf.splitTextToSize(doc_data.notes, 180);
-        pdf.text(noteLines, 15, yPos);
-        yPos += noteLines.length * 4 + 5;
-    }
-    
-    // === CACHET ET SIGNATURE (abonnés) : bas de page, à droite, au-dessus du pied de page (270 mm) ===
-    if (company.stamp && isUserLicensed()) {
-        const STAMP_W = 55, STAMP_H = 30, need = STAMP_H + 8;
-        if (yPos + need > 266) { pdf.addPage(); yPos = 20; }
-        drawStampOnPdf(pdf, company, 195, Math.min(yPos, 266 - need), STAMP_W, STAMP_H);
+        y = pdfSectionTitle(pdf, T, y, isInvoice ? 'Conditions / Notes' : 'Conditions et modalités');
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...PDF_INK);
+        y = pdfParagraph(pdf, y + 1, doc_data.notes, 15, 180, 4.2);
+        y += 4;
     }
 
-    // === BANK INFO (Footer) ===
+    // === COORDONNÉES BANCAIRES (factures et devis) ===
     if (company.rib || company.bank) {
-        const footerY = 270;
-        pdf.setFillColor(...grayLight);
-        pdf.rect(0, footerY, 210, 20, 'F');
-        
-        pdf.setTextColor(...primaryColor);
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('COORDONNÉES BANCAIRES', 15, footerY + 6);
-        
-        pdf.setTextColor(...grayDark);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(8);
-        const bankInfo = [];
-        if (company.bank) bankInfo.push(`Banque : ${company.bank}`);
-        if (company.rib) bankInfo.push(`RIB : ${company.rib}`);
-        if (company.swift) bankInfo.push(`SWIFT : ${company.swift}`);
-        pdf.text(bankInfo.join('   ·   '), 15, footerY + 11);
-        
-        // Mention « généré par FacturaPro » : voir le pied de page filigrane (essai uniquement)
-    }
-    
-    // Pied de page personnalisé (mentions libres), abonnés uniquement
-    if (dStyle.footerNote) {
-        pdf.setFontSize(7.5);
-        pdf.setTextColor(120, 128, 145);
-        pdf.setFont('helvetica', 'normal');
-        const fl = pdf.splitTextToSize(String(dStyle.footerNote), 180).slice(0, 2);
-        pdf.text(fl, 105, fl.length > 1 ? 291 : 293, { align: 'center' });
+        const bank = [];
+        if (company.bank) bank.push(`Banque : ${company.bank}`);
+        if (company.rib) bank.push(`RIB : ${company.rib}`);
+        if (company.swift) bank.push(`SWIFT : ${company.swift}`);
+        y = pdfSectionTitle(pdf, T, y, isInvoice ? 'Règlement par virement' : 'Coordonnées bancaires');
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...PDF_INK);
+        y = pdfParagraph(pdf, y + 1, bank.join('   ·   '), 15, 180, 4.4) + 3;
     }
 
-    // Add watermark for non-licensed users (trial, expired, etc.)
-    const isLicensed = isUserLicensed();
-    
-    if (!isLicensed) {
-        // Diagonal watermark across page (plus discret)
-        pdf.saveGraphicsState();
-        pdf.setGState(new pdf.GState({ opacity: 0.06 }));
-        pdf.setTextColor(27, 58, 107);
-        pdf.setFontSize(70);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('FACTURAPRO', 105, 160, { 
-            align: 'center', 
-            angle: -30
-        });
-        pdf.restoreGraphicsState();
-        
-        // Footer watermark text (more discreet, on every page)
-        pdf.setFontSize(8);
-        pdf.setTextColor(180, 180, 180);
-        pdf.setFont('helvetica', 'italic');
-        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 290, {
-            align: 'center'
-        });
+    // === ACCEPTATION (devis) et CACHET ===
+    const hasStamp = !!(company.stamp && isUserLicensed());
+    if (!isInvoice || hasStamp) {
+        y = pdfEnsure(pdf, y, 40);
+        if (!isInvoice) {
+            pdfLabel(pdf, T, 'Bon pour accord', 15, y);
+            pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(...PDF_MUTE);
+            pdf.text('Date, nom, signature du client', 15, y + 3.8);
+            pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.3); pdf.roundedRect(15, y + 6, 85, 26, 1, 1, 'S');
+        }
+        if (hasStamp) drawStampOnPdf(pdf, company, 195, y, 55, 30);
+        y += 36;
     }
-    
+
+    pdfFinish(pdf, T, o);
     if (opts && opts.sample) drawSampleWatermark(pdf);
-    const pdfFileName = (opts && opts.sample) ? 'EXEMPLE-facture.pdf' : `${isDraftNumber(doc_data.number) ? 'brouillon-' + todayISO() : doc_data.number}.pdf`;
+    const pdfFileName = (opts && opts.sample) ? 'EXEMPLE-facture.pdf' : `${isDraft ? 'brouillon-' + todayISO() : doc_data.number}.pdf`;
     // Partage direct (WhatsApp, e-mail…) : on renvoie le fichier sans le télécharger
     if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: pdfFileName };
     pdf.save(pdfFileName);
-    
-    // Show upgrade message for trial users
-    if (licenseInfo.type === 'trial') {
-        showToast('✓ PDF généré (avec watermark essai). Activez votre licence pour des PDF sans watermark.', 'warning');
-    } else {
-        showToast('PDF téléchargé ✓', 'success');
-    }
+    if (licenseInfo.type === 'trial') showToast('✓ PDF généré (avec watermark essai). Activez votre licence pour des PDF sans watermark.', 'warning');
+    else showToast('PDF téléchargé ✓', 'success');
 }
 
 // ============================================
@@ -13252,7 +13306,12 @@ async function generatePaymentReceiptPDF(paymentId, opts) {
     const payments = sample ? [sample.payment] : (Storage.get('payments', []) || []);
     const p = payments.find(x => x.id === paymentId);
     if (!p) { showToast('Paiement introuvable', 'error'); return; }
-    const invoice = sample ? sample.invoice : (Storage.get('invoices', []) || []).find(i => i.id === p.invoiceId);
+    // Jamais de reçu pour un paiement refusé, annulé ou non confirmé (le statut n'existe pas encore dans les données : garde-fou pour la suite)
+    const okStatus = ['confirmed', 'confirme', 'confirmé', 'received', 'recu', 'reçu', 'recorded', 'enregistre', 'enregistré', 'paid', 'ok'];
+    if (p.status && !okStatus.includes(String(p.status).toLowerCase())) { showToast('Reçu impossible : ce paiement n\'est pas confirmé (statut « ' + p.status + ' »).', 'error'); return; }
+    if (!(Number(p.amount) > 0)) { showToast('Reçu impossible : montant du paiement invalide.', 'error'); return; }
+    const allInvoices = sample ? [sample.invoice] : (Storage.get('invoices', []) || []);
+    const invoice = sample ? sample.invoice : allInvoices.find(i => i.id === p.invoiceId);
     if (!invoice) { showToast('Facture du paiement introuvable', 'error'); return; }
     const company = Storage.get('company', {});
     const { jsPDF } = window.jspdf;
@@ -13261,118 +13320,158 @@ async function generatePaymentReceiptPDF(paymentId, opts) {
         try { await enableArabicPdf(pdf); }
         catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée). Le PDF sera généré sans lui.', 'warning'); }
     }
-    const dStyle = getDocStyle(company);
-    const primaryColor = dStyle.primary, accentColor = dStyle.accent;
-    const sober = dStyle.template === 'sobre';
-    const hdrText = sober ? primaryColor : [255, 255, 255];
-    const hdrSub = sober ? [90, 98, 115] : [220, 220, 220];
-    const grayDark = [74, 84, 104], grayLight = [240, 237, 230];
+    const T = pdfTheme(company);
     const number = paymentReceiptNumber(p, invoice, payments);
     const { paidThrough } = paymentReceiptRank(p, payments);
     const total = money2(invoice.totalTTC || 0);
+    const amount = money2(p.amount);
+    const before = money2(paidThrough - amount);
     const remaining = Math.max(0, money2(total - paidThrough));
+    // Les soldes ne sont affichés que s'ils sont fiables : facture annulée par un avoir ou montant nul = pas de soldes
+    const balancesReliable = !isCancelledByCredit(invoice, allInvoices) && invoice.status !== 'cancelled' && total > 0;
+    const partial = balancesReliable && remaining > 0;
+    const o = { title: 'REÇU DE PAIEMENT', number, tag: balancesReliable ? (partial ? 'PAIEMENT PARTIEL' : 'PAIEMENT SOLDÉ') : 'PAIEMENT ENREGISTRÉ', tagStrong: balancesReliable && !partial };
 
-    // === EN-TÊTE (même présentation que les factures) ===
-    if (!sober) { pdf.setFillColor(...primaryColor); pdf.rect(0, 0, 210, 38, 'F'); }
-    pdf.setFillColor(...accentColor); pdf.rect(0, 38, 210, 1.5, 'F');
-    let textX = 15;
-    if (company.logo && isUserLicensed()) {
-        try { pdf.addImage(company.logo, 'PNG', 12, 7, 24, 24); textX = 42; } catch (err) { console.warn('Could not add logo to PDF:', err); }
-    }
-    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
-    pdf.text(company.name || 'Mon Entreprise', textX, 18);
-    const statusLabels = { ae: 'Auto-Entrepreneur', freelance: 'Profession libérale', sarl: 'SARL', autre: 'Société' };
-    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
-    pdf.text(statusLabels[company.status] || '', textX, 25);
-    pdf.setTextColor(...hdrSub); pdf.setFontSize(8);
-    let addr = ''; if (company.address) addr += company.address;
-    if (company.city && !addr.includes(company.city)) addr += (addr ? ', ' : '') + company.city;
-    if (addr) pdf.text(addr, 15, 31);
-    if (dStyle.headerNote) { pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.text(String(dStyle.headerNote).slice(0, 90), 15, 35.5); pdf.setFont('helvetica', 'normal'); }
-    pdf.setTextColor(...hdrText); pdf.setFontSize(22); pdf.setFont('helvetica', 'bold');
-    pdf.text('REÇU DE PAIEMENT', 195, 22, { align: 'right' });
-    pdf.setFontSize(10); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...accentColor);
-    pdf.text(number, 195, 30, { align: 'right' });
-
-    // === IDENTITÉ DE L'ENTREPRISE ===
-    let y = 48;
-    pdf.setTextColor(...grayDark); pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
-    const info = [];
-    if (company.ice) info.push(`ICE : ${company.ice}`);
-    if (company.if) info.push(`IF : ${company.if}`);
-    if (company.rc) info.push(`RC : ${company.rc}`);
-    if (company.phone) info.push(`Tél : ${company.phone}`);
-    if (company.email) info.push(company.email);
-    if (info.length) { pdf.text(info.join('   ·   '), 15, y); y += 10; } else { y += 4; }
-
-    // === REÇU DE ===
+    let y = pdfHeader(pdf, T, o);
     const client = sample ? sample.client : (Storage.get('clients', []) || []).find(c => c.id === invoice.clientId);
-    pdf.setTextColor(...primaryColor); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
-    pdf.text('REÇU DE', 15, y); y += 6;
-    pdf.setTextColor(...grayDark); pdf.setFontSize(12);
-    pdf.text(String(invoice.clientName || (client && client.name) || 'Client'), 15, y); y += 5;
-    pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal');
-    if (client && client.ice) { pdf.text(`ICE : ${client.ice}`, 15, y); y += 4.5; }
-    y += 6;
+    const methodLabels = { virement: 'Virement bancaire', cheque: 'Chèque', especes: 'Espèces', cmi: 'Carte bancaire (CMI)', effet: 'Effet', autre: 'Autre' };
+    y = pdfParties(pdf, T, y, {
+        partyLabel: 'Reçu de',
+        name: invoice.clientName || (client && client.name) || 'Client',
+        lines: [client && client.ice ? `ICE : ${client.ice}` : '', client && client.address ? client.address : '', `Encaissé par : ${company.name || 'Mon Entreprise'}`],
+        meta: [
+            ['Date du paiement', formatDate(p.date)],
+            ['Mode', methodLabels[p.method] || String(p.method || '')],
+            ['Référence', p.reference ? String(p.reference) : ''],
+            ['Facture', isDraftNumber(invoice.number) ? 'BROUILLON' : invoice.number]
+        ]
+    });
 
-    // === MONTANT REÇU (bandeau) ===
-    pdf.setFillColor(...primaryColor); pdf.roundedRect(15, y, 180, 20, 2, 2, 'F');
-    pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11);
-    pdf.text('Montant reçu', 21, y + 8);
-    pdf.setTextColor(...accentColor); pdf.setFontSize(18);
-    pdf.text(formatCurrencyForPDF(p.amount), 189, y + 13, { align: 'right' });
+    // === MONTANT REÇU ===
+    y = pdfEnsure(pdf, y, 30);
+    pdf.setFillColor(...PDF_TINT); pdf.setDrawColor(...T.primary); pdf.setLineWidth(0.7); pdf.roundedRect(15, y, 180, 22, 1.5, 1.5, 'FD');
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...PDF_INK); pdf.text('MONTANT REÇU', 21, y + 9);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...PDF_MUTE);
+    pdf.text(partial ? 'Paiement partiel' : (balancesReliable ? 'Paiement soldant la facture' : 'Paiement enregistré'), 21, y + 15);
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(20); pdf.setTextColor(...PDF_INK); pdf.text(formatCurrencyForPDF(amount), 189, y + 14.5, { align: 'right' });
     y += 30;
 
-    // === DÉTAIL ===
-    const methodLabels = { virement: 'Virement bancaire', cheque: 'Chèque', especes: 'Espèces', cmi: 'Carte bancaire (CMI)', effet: 'Effet', autre: 'Autre' };
-    const rows = [
-        ['Date du paiement', formatDate(p.date)],
-        ['Mode de paiement', methodLabels[p.method] || String(p.method || '—')],
-        ['Référence', String(p.reference || '—')],
-        ['Facture concernée', `${isDraftNumber(invoice.number) ? 'BROUILLON' : invoice.number} du ${formatDate(invoice.date)}`],
-        ['Total de la facture (TTC)', formatCurrencyForPDF(total)],
-        ['Total payé à ce jour (ce versement inclus)', formatCurrencyForPDF(paidThrough)],
-        [remaining > 0 ? 'Reste dû' : 'Situation', remaining > 0 ? formatCurrencyForPDF(remaining) : 'Facture soldée']
-    ];
-    pdf.setFontSize(10);
-    rows.forEach((r, i) => {
-        if (i % 2 === 0) { pdf.setFillColor(...grayLight); pdf.rect(15, y - 5, 180, 8, 'F'); }
-        pdf.setTextColor(...grayDark); pdf.setFont('helvetica', 'normal'); pdf.text(r[0], 18, y);
-        pdf.setFont('helvetica', 'bold'); pdf.text(r[1], 192, y, { align: 'right' });
-        y += 8;
-    });
-    if (p.notes) {
-        y += 4; pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...primaryColor); pdf.text('Notes', 15, y); y += 5;
-        pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...grayDark);
-        const nl = pdf.splitTextToSize(String(p.notes), 180).slice(0, 4); pdf.text(nl, 15, y); y += nl.length * 4 + 4;
+    // === DÉTAIL (facture concernée et soldes) ===
+    const detail = [['Facture concernée', `${isDraftNumber(invoice.number) ? 'BROUILLON' : invoice.number} du ${formatDate(invoice.date)}`], ['Total de la facture (TTC)', formatCurrencyForPDF(total)]];
+    if (balancesReliable) {
+        detail.push(['Solde avant ce paiement', formatCurrencyForPDF(Math.max(0, money2(total - before)))]);
+        detail.push(['Montant de ce paiement', '- ' + formatCurrencyForPDF(amount)]);
+        detail.push(['Total payé à ce jour (ce paiement inclus)', formatCurrencyForPDF(paidThrough)]);
+        detail.push([remaining > 0 ? 'Reste dû après ce paiement' : 'Situation', remaining > 0 ? formatCurrencyForPDF(remaining) : 'Facture soldée']);
+    } else {
+        detail.push(['Soldes', 'Non affichés : facture annulée ou montant indisponible']);
     }
-    y += 6;
-    pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(120, 128, 145);
-    const mention = pdf.splitTextToSize('Justificatif d\'encaissement, non fiscal. Il ne remplace pas la facture ci-dessus. Établi le ' + formatDate(todayISO()) + '.', 180);
-    pdf.text(mention, 15, y); y += mention.length * 4 + 8;
+    pdf.autoTable({
+        startY: y, body: detail, theme: 'plain', margin: { left: 15, right: 15, top: 24, bottom: 20 },
+        styles: { font: 'helvetica', fontSize: 9.5, cellPadding: { top: 3, bottom: 3, left: 2.5, right: 2.5 }, textColor: PDF_INK, overflow: 'linebreak', lineWidth: 0 },
+        columnStyles: { 0: { cellWidth: 80, textColor: PDF_MUTE }, 1: { halign: 'right', fontStyle: 'bold' } }, rowPageBreak: 'avoid',
+        didDrawCell: (d) => { const c = d.cell; pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.2); pdf.line(c.x, c.y + c.height, c.x + c.width, c.y + c.height); }
+    });
+    y = pdf.lastAutoTable.finalY + 6;
+    if (p.notes) {
+        y = pdfSectionTitle(pdf, T, y, 'Notes');
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...PDF_INK);
+        y = pdfParagraph(pdf, y + 1, p.notes, 15, 180, 4.2, 6) + 3;
+    }
+    y = pdfNoteBox(pdf, y, 'Ce reçu atteste uniquement le paiement effectivement enregistré à la date indiquée. Justificatif d\'encaissement, non fiscal : il ne remplace pas la facture. Établi le ' + formatDate(todayISO()) + '.');
 
     // === CACHET ET SIGNATURE (abonnés) ===
     if (company.stamp && isUserLicensed()) {
-        const need = 38;
-        if (y + need > 285) { pdf.addPage(); y = 20; }
+        y = pdfEnsure(pdf, y, 38);
         drawStampOnPdf(pdf, company, 195, y, 55, 30);
     }
-    if (dStyle.footerNote) {
-        pdf.setFontSize(7.5); pdf.setTextColor(120, 128, 145); pdf.setFont('helvetica', 'normal');
-        const fl = pdf.splitTextToSize(String(dStyle.footerNote), 180).slice(0, 2);
-        pdf.text(fl, 105, fl.length > 1 ? 291 : 293, { align: 'center' });
-    }
-    if (!isUserLicensed()) {
-        pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity: 0.06 })); pdf.setTextColor(27, 58, 107); pdf.setFontSize(70); pdf.setFont('helvetica', 'bold');
-        pdf.text('FACTURAPRO', 105, 160, { align: 'center', angle: -30 }); pdf.restoreGraphicsState();
-        pdf.setFontSize(8); pdf.setTextColor(180, 180, 180); pdf.setFont('helvetica', 'italic');
-        pdf.text('Document généré avec FacturaPro (version d\'essai) - facturaproma.github.io/Facturaproma', 105, 290, { align: 'center' });
-    }
+    pdfFinish(pdf, T, o);
     if (sample) drawSampleWatermark(pdf);
-    const fileName = sample ? 'EXEMPLE-recu.pdf' : number.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') + '.pdf';
+    const fileName = sample ? 'EXEMPLE-recu.pdf' : number.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') + '.pdf';
     if (opts && opts.asBlob) return { blob: pdf.output('blob'), filename: fileName };
     pdf.save(fileName);
     showToast('Reçu téléchargé ✓', 'success');
+}
+
+
+// ============================================
+// MESSAGERIE (société ↔ équipe FacturaPro) : sql/29. Texte seulement, rendu en textContent (jamais en HTML).
+// Pas de notification instantanée : le badge se met à jour toutes les 90 s et à l'ouverture de la page.
+// ============================================
+let _supportPoll = null, _supportBusy = false;
+function supportAvailable() { return typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof supaClient !== 'undefined' && supaClient && Storage._currentUserId; }
+function supportErrorText(err) {
+    const m = String((err && err.message) || err || '');
+    if (/MESSAGE_VIDE/.test(m)) return 'Écrivez un message avant d\'envoyer.';
+    if (/MESSAGE_TROP_LONG/.test(m)) return 'Message trop long (2 000 caractères maximum).';
+    if (/TROP_DE_MESSAGES/.test(m)) return 'Trop de messages envoyés : réessayez dans une heure.';
+    if (/FIL_PLEIN/.test(m)) return 'La conversation est pleine. Contactez-nous par e-mail ou WhatsApp.';
+    if ((err && (err.code === 'PGRST202' || err.code === '42883')) || /support_/.test(m)) return 'La messagerie n\'est pas encore activée sur ce compte.';
+    if (/NON_AUTHENTIFIE|JWT/.test(m)) return 'Session expirée : reconnectez-vous.';
+    return 'Envoi impossible pour le moment. Vérifiez votre connexion et réessayez.';
+}
+function msgDateTime(v) {
+    const d = new Date(v); if (isNaN(d.getTime())) return '';
+    const p2 = (n) => String(n).padStart(2, '0');
+    return formatDate(d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+}
+function updateMsgCount() { const t = document.getElementById('msgInput'), c = document.getElementById('msgCount'); if (t && c) c.textContent = String(t.value.length); }
+function setMessagesBadge(n) {
+    const b = document.getElementById('badgeMessages'); if (!b) return;
+    b.textContent = n > 99 ? '99+' : String(n); b.style.display = n > 0 ? '' : 'none';
+}
+async function refreshSupportBadge() {
+    if (!supportAvailable() || document.hidden) return;
+    try { const { data, error } = await supaClient.rpc('support_unread_count'); if (!error && Number.isInteger(data)) setMessagesBadge(data); } catch (e) { /* silencieux : simple indicateur */ }
+}
+function startSupportPolling() {
+    if (_supportPoll || !supportAvailable()) return;
+    refreshSupportBadge();
+    _supportPoll = setInterval(() => { if (document.getElementById('page-messages')?.classList.contains('active')) loadSupportThread(false); else refreshSupportBadge(); }, 90000);
+}
+function renderSupportRows(rows) {
+    const box = document.getElementById('msgThread'); if (!box) return;
+    box.textContent = '';
+    if (!rows.length) { const d = document.createElement('div'); d.className = 'msg-empty'; d.textContent = 'Aucun message pour l\'instant. Posez votre question ci-dessous.'; box.appendChild(d); return; }
+    for (const r of rows) {
+        const b = document.createElement('div'); b.className = 'msg-b ' + (r.sender === 'client' ? 'msg-me' : 'msg-them');
+        b.appendChild(document.createTextNode(String(r.body == null ? '' : r.body)));
+        const sm = document.createElement('small'); sm.textContent = (r.sender === 'client' ? 'Vous' : 'Équipe FacturaPro') + ' · ' + msgDateTime(r.created_at);
+        b.appendChild(sm); box.appendChild(b);
+    }
+    box.scrollTop = box.scrollHeight;
+}
+async function loadSupportThread(markRead) {
+    if (!supportAvailable()) {
+        const box = document.getElementById('msgThread'); if (box) { box.textContent = ''; const d = document.createElement('div'); d.className = 'msg-empty'; d.textContent = 'La messagerie est disponible avec un compte connecté.'; box.appendChild(d); }
+        const f = document.getElementById('msgForm'); if (f) f.style.display = 'none';
+        return;
+    }
+    const f = document.getElementById('msgForm'); if (f) f.style.display = '';
+    try {
+        const { data, error } = await supaClient.rpc('support_my_messages');
+        if (error) { const box = document.getElementById('msgThread'); if (box) { box.textContent = ''; const d = document.createElement('div'); d.className = 'msg-empty'; d.textContent = supportErrorText(error); box.appendChild(d); } return; }
+        const rows = Array.isArray(data) ? data : [];
+        renderSupportRows(rows);
+        if (markRead !== false && rows.some(r => r.sender === 'admin' && !r.is_read)) { await supaClient.rpc('support_mark_read'); setMessagesBadge(0); }
+        else if (markRead === false) refreshSupportBadge();
+    } catch (e) { console.warn('messagerie', e); }
+}
+function openSupportMessages() { loadSupportThread(true); updateMsgCount(); }
+async function sendSupportMessage(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (_supportBusy) return false;
+    const t = document.getElementById('msgInput'); const body = (t && t.value || '').trim();
+    if (!body) { showToast('Écrivez un message avant d\'envoyer.', 'warning'); return false; }
+    if (!supportAvailable()) { showToast('La messagerie est disponible avec un compte connecté.', 'warning'); return false; }
+    _supportBusy = true; const btn = document.getElementById('msgSendBtn'); if (btn) btn.disabled = true;
+    try {
+        const { error } = await supaClient.rpc('support_send', { p_body: body });
+        if (error) { showToast(supportErrorText(error), 'error'); }
+        else { t.value = ''; updateMsgCount(); await loadSupportThread(true); showToast('Message envoyé ✓', 'success'); }
+    } catch (e) { showToast(supportErrorText(e), 'error'); }
+    finally { _supportBusy = false; if (btn) btn.disabled = false; }
+    return false;
 }
 
 // ============================================
@@ -13391,6 +13490,7 @@ function closeModalIfBg(event, id) {
 // ============================================
 function renderAll() {
     SessionPolicy.start();
+    try { startSupportPolling(); } catch (e) { console.warn('messagerie', e); }
     renderDashboard();
     populateClientSelect();
     updateTrialUI();
