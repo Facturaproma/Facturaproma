@@ -53,17 +53,18 @@ ok('CSV : formule neutralisée (=cmd -> \'=cmd)', csv.includes("'=cmd") && !/;=c
 ok('CSV : totaux et mention non officielle', csv.includes('Total collecté') && csv.includes('Total déductible') && csv.includes('Estimation non officielle'));
 ok('CSV : séparateur ; et guillemets', api.csvText('a;b"c') === '"a;b""c"');
 
-// CNSS auto-entrepreneur : AMO fixe par tranche (décret 2.21.928 + barème CGI 73-II-B-6°) + retraite = AMO × 1,57
+// CNSS auto-entrepreneur : AMO fixe par tranche (décret 2.21.928 + barème CGI 73-II-B-6°) ; la retraite (AMO × 1,57) n'est pas ajoutée tant que includePension est faux
 const ae = (ca, act) => api.aeCnssQuarter(ca, act || 'services');
-ok('AE : CA 0 → impôt 0, T1, AMO 300 + retraite 471 = 771 DH (dû même sans CA)', (() => { const r = ae(0); return r.ir === 0 && r.tranche === 1 && r.amo === 300 && r.retraite === 471 && r.cnss === 771 && r.total === 771; })());
+ok('AE : CA 0 → impôt 0, T1, AMO 300 = cotisation 300 DH (dû même sans CA), retraite non incluse', (() => { const r = ae(0); return r.ir === 0 && r.tranche === 1 && r.amo === 300 && r.cnss === 300 && r.total === 300 && r.includePension === false; })());
 ok('AE services : CA 10 000 → impôt 100, impôt annuel 400 (< 500) : T1', (() => { const r = ae(10000); return r.ir === 100 && r.annualIr === 400 && r.tranche === 1 && r.amo === 300; })());
 ok('AE : frontière T1/T2 — impôt annuel 496 → T1, 500 → T2', ae(12400).tranche === 1 && ae(12500).tranche === 2);
 ok('AE : T2 inclut 1 000, T3 commence à 1 001 (impôt annuel)', ae(25000).tranche === 2 && ae(25100).tranche === 3);
-ok('AE commerce : CA 100 000 → impôt 500 (0,5 %), annuel 2 000, T3, AMO 570, retraite 894,90', (() => { const r = ae(100000, 'commerce'); return r.ir === 500 && r.annualIr === 2000 && r.tranche === 3 && r.amo === 570 && r.retraite === 894.9 && r.cnss === 1464.9; })());
-ok('AE services : CA 112 000 → impôt 1 120, annuel 4 480, T4, AMO 720', (() => { const r = ae(112000); return r.ir === 1120 && r.tranche === 4 && r.amo === 720 && r.retraite === 1130.4 && r.cnss === 1850.4 && r.total === 2970.4; })());
+ok('AE commerce : CA 100 000 → impôt 500 (0,5 %), annuel 2 000, T3, cotisation 570, total 1 070', (() => { const r = ae(100000, 'commerce'); return r.ir === 500 && r.annualIr === 2000 && r.tranche === 3 && r.cnss === 570 && r.total === 1070; })());
+ok('AE services : CA 112 000 → impôt 1 120, annuel 4 480, T4, cotisation 720, total 1 840', (() => { const r = ae(112000); return r.ir === 1120 && r.tranche === 4 && r.cnss === 720 && r.total === 1840; })());
 ok('AE : T7 inclut 50 000 (impôt annuel), T8 au-delà', ae(1250000).tranche === 7 && ae(1250100).tranche === 8 && ae(1500000).amo === 3600);
+ok('AE : retraite calculée (AMO × 1,57) mais ajoutée seulement si includePension', (() => { const g = JSON.parse(JSON.stringify(api.FISCAL_RULES.aeCnss)); g.includePension = true; const on = api.aeCnssQuarter(0, 'services', g), off = ae(0); return on.retraite === 471 && on.cnss === 771 && off.retraite === 471 && off.cnss === 300; })());
 ok('AE : grille = 8 montants croissants, 6 bornes croissantes, coefficient retraite 1,57', (() => { const g = api.FISCAL_RULES.aeCnss; return g.amoAmounts.length === 8 && g.annualIrUpperBounds.length === 6 && g.amoAmounts.every((v, i, a) => !i || v > a[i - 1]) && g.annualIrUpperBounds.every((v, i, a) => !i || v > a[i - 1]) && g.pensionCoef === 1.57; })());
-ok('AE : valeurs négatives ou invalides traitées comme 0', ae(-50).amo === 300 && ae('abc').cnss === 771);
+ok('AE : valeurs négatives ou invalides traitées comme 0', ae(-50).amo === 300 && ae('abc').cnss === 300);
 // CNSS
 ok('CNSS : taux salarié 6,74 % et employeur 21,09 % sous le plafond', (() => { const r = api.cnssForEmployee(5000); return r.emp === 337 && r.er === 1054.5; })());
 ok('CNSS : plafond 6 000 sur les prestations, AMO/allocations/formation sans plafond', (() => { const r = api.cnssForEmployee(10000); return r.emp === 494.8 && r.er === 1749.8; })());

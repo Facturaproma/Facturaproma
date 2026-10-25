@@ -3925,7 +3925,7 @@
             <div class="calc-grid">
                 <div class="calc-card">
                     <h3>Cotisation Auto-Entrepreneur</h3>
-                    <p class="subtitle">AMO fixe par trimestre selon la tranche de votre impôt (T1 à T8), plus la retraite (AMO × 1,57)</p>
+                    <p class="subtitle">Cotisation AMO fixe par trimestre, selon la tranche de votre impôt (T1 à T8)</p>
 
                     <div class="form-group">
                         <label>Chiffre d'affaires encaissé du trimestre</label>
@@ -3957,20 +3957,20 @@
                             <span>AMO (assurance maladie)</span>
                             <span id="cnssAmo">300,00 DH</span>
                         </div>
-                        <div class="calc-line">
+                        <div class="calc-line" id="cnssRetraiteLine" style="display: none;">
                             <span>Retraite (AMO × 1,57)</span>
-                            <span id="cnssRetraite">471,00 DH</span>
+                            <span id="cnssRetraite">0,00 DH</span>
                         </div>
                         <div class="calc-line total">
                             <span>Cotisation CNSS du trimestre</span>
-                            <span id="cnssTotal">771,00 DH</span>
+                            <span id="cnssTotal">300,00 DH</span>
                         </div>
                         <div class="calc-line">
                             <span>Total à payer (impôt + CNSS)</span>
-                            <span id="cnssAllAE">771,00 DH</span>
+                            <span id="cnssAllAE">300,00 DH</span>
                         </div>
                     </div>
-                    <p class="subtitle" style="margin-top: 10px;">La cotisation est due même sans chiffre d'affaires (minimum T1), avant la fin du mois suivant chaque trimestre (ou chaque mois si vous avez choisi le paiement mensuel). Paiement avec l'impôt, sur <a href="https://ae.gov.ma" target="_blank" rel="noopener noreferrer">ae.gov.ma</a> ou en agence Al Barid Bank.</p>
+                    <p class="subtitle" style="margin-top: 10px;">Le portail des auto-entrepreneurs ne prélève que l'impôt et cette cotisation AMO : la retraite n'y est pas incluse. La cotisation est due même sans chiffre d'affaires (minimum T1), avant la fin du mois suivant chaque trimestre (ou chaque mois si vous avez choisi le paiement mensuel). Paiement avec l'impôt, sur <a href="https://ae.gov.ma" target="_blank" rel="noopener noreferrer">ae.gov.ma</a> ou en agence Al Barid Bank.</p>
                 </div>
 
                 <div class="calc-card">
@@ -9056,6 +9056,7 @@ function calculateCNSS() {
     document.getElementById('cnssTranche').textContent = 'T' + q.tranche;
     document.getElementById('cnssAmo').textContent = formatCurrency(q.amo);
     document.getElementById('cnssRetraite').textContent = formatCurrency(q.retraite);
+    document.getElementById('cnssRetraiteLine').style.display = q.includePension ? '' : 'none';
     document.getElementById('cnssTotal').textContent = formatCurrency(q.cnss);
     document.getElementById('cnssAllAE').textContent = formatCurrency(q.total);
 
@@ -9121,6 +9122,9 @@ const FISCAL_RULES = {
     aeCnss: {
         irRates: { services: 0.01, commerce: 0.005 },          // impôt libératoire sur le CA encaissé
         pensionCoef: 1.57,                                      // retraite = AMO × 1,57 (décret 2.21.928, art. 4)
+        // La retraite est prévue par le décret mais, d'après le propriétaire, le portail de paiement des auto-entrepreneurs n'affiche et ne prélève
+        // que l'impôt + le droit complémentaire (AMO) : par défaut elle n'est PAS ajoutée au total. Passer à true si la CNSS/DGI confirme son prélèvement.
+        includePension: false,
         // T1 si impôt annuel projeté < 500 ; T2 de 500 à 1 000 ; T3 jusqu'à 2 500 ; T4 5 000 ; T5 10 000 ; T6 25 000 ; T7 50 000 ; T8 au-delà
         annualIrUpperBounds: [1000, 2500, 5000, 10000, 25000, 50000],   // bornes hautes incluses de T2 à T7
         t1BelowAnnualIr: 500,
@@ -9214,8 +9218,8 @@ function aeCnssQuarter(ca, activity, rules) {
     const ir = fiscalR2(v * rate), annualIr = fiscalR2(ir * 4);
     let idx = 0;
     if (annualIr >= r.t1BelowAnnualIr) { const k = r.annualIrUpperBounds.findIndex(b => annualIr <= b); idx = k < 0 ? r.amoAmounts.length - 1 : k + 1; }
-    const amo = r.amoAmounts[idx], retraite = fiscalR2(amo * r.pensionCoef), cnss = fiscalR2(amo + retraite);
-    return { ca: v, rate, ir, annualIr, tranche: idx + 1, amo, retraite, cnss, total: fiscalR2(ir + cnss) };
+    const amo = r.amoAmounts[idx], retraite = fiscalR2(amo * r.pensionCoef), cnss = fiscalR2(amo + (r.includePension ? retraite : 0));
+    return { ca: v, rate, ir, annualIr, tranche: idx + 1, amo, retraite, includePension: !!r.includePension, cnss, total: fiscalR2(ir + cnss) };
 }
 function cnssForEmployee(gross, rules) {
     const r = rules || FISCAL_RULES.cnss, g = Math.max(0, fiscalNum(gross)), capped = Math.min(g, r.ceilingDH);
