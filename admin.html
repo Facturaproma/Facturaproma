@@ -2514,8 +2514,8 @@ function showAdminLoginSuccess(msg) {
     document.getElementById('adminLoginError').style.display = 'none';
 }
 
-// ── Double authentification TOTP (Supabase MFA). Obligatoire pour tout compte admin / assistant :
-//    1re connexion → activation (QR code), ensuite → code à 6 chiffres. Le serveur (sql/31) refuse les droits admin
+// ── Double authentification TOTP (Supabase MFA). Obligatoire pour le PROPRIÉTAIRE (compte master) ; facultative pour les autres :
+//    1re connexion du propriétaire → activation (QR code), ensuite → code à 6 chiffres ; un autre compte qui l'a activée se voit demander le code. Le serveur (sql/31) refuse les droits admin
 //    à une session sans code dès qu'un facteur est vérifié ; cet écran n'est donc pas la seule barrière.
 let _mfa = null;
 function mfaShowErr(m) { const e = document.getElementById('mfaError'); e.textContent = m; e.style.display = m ? 'block' : 'none'; }
@@ -2561,7 +2561,7 @@ async function adminMfaStep(mayEnroll) {
     if (fErr) throw fErr;
     const verified = (fl.totp || []).find(f => f.status === 'verified');
     if (verified) return mfaAsk(verified.id, false);
-    if (!mayEnroll) return false; // simple client : pas d'activation, l'accès sera refusé plus bas
+    if (!mayEnroll) return false; // pas d'activation imposée (client, admin non propriétaire, assistant) : on continue avec le mot de passe seul
     // Aucun facteur vérifié : activation obligatoire. On retire d'abord les tentatives abandonnées.
     for (const f of (fl.all || []).filter(f => f.status !== 'verified' && f.factor_type === 'totp')) { try { await supaClient.auth.mfa.unenroll({ factorId: f.id }); } catch (e) {} }
     const { data: en, error: eErr } = await supaClient.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'FacturaPro admin ' + new Date().toISOString().slice(0, 10) });
@@ -2597,8 +2597,10 @@ async function adminLogin() {
 
         // Double authentification AVANT toute lecture de droits : sans code, le serveur ne reconnaît pas l'administrateur
         const ident0 = await supaClient.rpc('admin_whoami');
-        const maybeAdmin = ident0 && ident0.data && (ident0.data.is_admin || ident0.data.is_staff);
-        try { await adminMfaStep(!!maybeAdmin); }
+        // Activation OBLIGATOIRE pour le propriétaire (compte master) seulement ; les autres admins / assistants gardent l'accès par mot de passe,
+        // et si l'un d'eux a activé la 2FA de lui-même, le code lui est demandé.
+        const mustEnroll = !!(ident0 && ident0.data && ident0.data.is_master);
+        try { await adminMfaStep(mustEnroll); }
         catch (mfaErr) {
             await supaClient.auth.signOut();
             if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
@@ -2813,7 +2815,7 @@ async function submitChangeAdminPassword() {
         }
 
         // La ré-authentification par mot de passe ramène la session au niveau « mot de passe seul » : redemander le code
-        try { await adminMfaStep(true); } catch (mfaErr) { showErr(mfaErr.message === 'mfa_cancel' ? 'Changement annulé : la session a été rétrogradée, reconnectez-vous.' : mfaErr.message); btn.disabled = false; btn.textContent = '🔑 Changer le mot de passe'; return; }
+        try { await adminMfaStep(!!(currentAdmin && currentAdmin.isMaster)); } catch (mfaErr) { showErr(mfaErr.message === 'mfa_cancel' ? 'Changement annulé : la session a été rétrogradée, reconnectez-vous.' : mfaErr.message); btn.disabled = false; btn.textContent = '🔑 Changer le mot de passe'; return; }
         const { error: updErr } = await supaClient.auth.updateUser({ password: newPwd });
         if (updErr) throw updErr;
 
@@ -7049,8 +7051,11 @@ function showToast(msg, type = 'info') {
         if (!session) return;
         // Session sans code de double authentification : retour à l'écran de connexion (le code sera demandé)
         const { data: lvl } = await supaClient.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (!lvl || lvl.currentLevel !== 'aal2') { try { await supaClient.auth.signOut(); } catch {} AdminSession.clear(); return; }
+        const needsCode = !lvl || (lvl.currentLevel !== 'aal2' && lvl.nextLevel === 'aal2');   // 2FA activée mais code non saisi dans cette session
+        if (needsCode) { try { await supaClient.auth.signOut(); } catch {} AdminSession.clear(); return; }
         const who = await fetchAdminIdentity();
+        // Propriétaire sans 2FA validée dans cette session : retour à la connexion (activation / code obligatoires)
+        if (who && who.is_master && (!lvl || lvl.currentLevel !== 'aal2')) { try { await supaClient.auth.signOut(); } catch {} AdminSession.clear(); return; }
         if (!who || !(who.is_admin || who.is_staff)) return;
         currentAdmin = { email: who.email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
         const expired = AdminSession.check();
