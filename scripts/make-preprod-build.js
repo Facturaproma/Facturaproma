@@ -28,6 +28,8 @@ if (fjs.includes(T.prodRef)) die('la référence de PRODUCTION est encore prése
 fs.writeFileSync(path.join(out, 'facture.js'), fjs);
 fs.copyFileSync(path.join(ROOT, 'facture.html'), path.join(out, 'facture.html'));
 for (const f of ['docstore.js', 'manifest.json']) fs.copyFileSync(path.join(ROOT, f), path.join(out, f));
+fs.mkdirSync(path.join(out, 'vendor'), { recursive: true });
+for (const f of fs.readdirSync(path.join(ROOT, 'vendor'))) fs.copyFileSync(path.join(ROOT, 'vendor', f), path.join(out, 'vendor', f));
 for (const d of ['fonts']) if (fs.existsSync(path.join(ROOT, d))) fs.cpSync(path.join(ROOT, d), path.join(out, d), { recursive: true });
 for (const f of fs.readdirSync(ROOT)) if (/^(icon-|favicon)/.test(f)) fs.copyFileSync(path.join(ROOT, f), path.join(out, f));
 console.log(`Build de préproduction écrit dans ${path.relative(ROOT, out) || out} (cible ${T.preprodRef}). Service worker NON copié : le build n'est pas une application installable.`);
