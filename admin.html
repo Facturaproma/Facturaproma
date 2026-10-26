@@ -616,6 +616,26 @@
 <body>
 
 <!-- ============ LOGIN SCREEN ============ -->
+<!-- ============ DOUBLE AUTHENTIFICATION (TOTP) ============ -->
+<div id="mfaOverlay" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(20,20,20,0.6); align-items:center; justify-content:center; padding:16px;">
+    <div class="login-card" style="max-height:92vh; overflow:auto;">
+        <h1 id="mfaTitle">🔐 Vérification en deux étapes</h1>
+        <p class="subtitle" id="mfaSub"></p>
+        <div id="mfaError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px;"></div>
+        <div id="mfaEnroll" style="display:none; text-align:center; margin-bottom:12px;">
+            <img id="mfaQr" alt="QR code à scanner" width="180" height="180" style="background:#fff; padding:6px; border-radius:8px; max-width:100%;">
+            <div style="font-size:12px; color:var(--ink-mute); margin-top:8px;">Pas de caméra ? Saisissez cette clé dans l'application :</div>
+            <code id="mfaSecret" style="display:block; font-size:13px; word-break:break-all; user-select:all; margin-top:4px;"></code>
+        </div>
+        <div class="form-group">
+            <label>Code à 6 chiffres</label>
+            <input type="text" id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px; text-align:center; font-size:20px;">
+        </div>
+        <button class="btn btn-primary btn-block" id="mfaBtn" onclick="mfaSubmit()">Valider</button>
+        <div style="text-align:center; margin-top:14px; font-size:13px;"><a onclick="mfaCancel()" style="color:var(--primary); cursor:pointer; font-weight:600;">Annuler et se déconnecter</a></div>
+    </div>
+</div>
+
 <div id="loginScreen">
     <div class="login-card">
         <h1>🔐 Admin FacturaPro</h1>
@@ -2494,6 +2514,64 @@ function showAdminLoginSuccess(msg) {
     document.getElementById('adminLoginError').style.display = 'none';
 }
 
+// ── Double authentification TOTP (Supabase MFA). Obligatoire pour tout compte admin / assistant :
+//    1re connexion → activation (QR code), ensuite → code à 6 chiffres. Le serveur (sql/31) refuse les droits admin
+//    à une session sans code dès qu'un facteur est vérifié ; cet écran n'est donc pas la seule barrière.
+let _mfa = null;
+function mfaShowErr(m) { const e = document.getElementById('mfaError'); e.textContent = m; e.style.display = m ? 'block' : 'none'; }
+function mfaCancel() {
+    const r = _mfa; _mfa = null;
+    document.getElementById('mfaOverlay').style.display = 'none';
+    if (r) r.reject(new Error('mfa_cancel'));
+}
+async function mfaSubmit() {
+    if (!_mfa) return;
+    const code = document.getElementById('mfaCode').value.replace(/\s/g, '');
+    if (!/^\d{6}$/.test(code)) { mfaShowErr('Le code comporte 6 chiffres'); return; }
+    const btn = document.getElementById('mfaBtn'); btn.disabled = true;
+    try {
+        const { error } = await supaClient.auth.mfa.challengeAndVerify({ factorId: _mfa.factorId, code });
+        if (error) { mfaShowErr('Code incorrect ou expiré. Réessayez avec le code actuel de l\'application.'); document.getElementById('mfaCode').value = ''; return; }
+        const r = _mfa; _mfa = null;
+        document.getElementById('mfaOverlay').style.display = 'none';
+        r.resolve(true);
+    } catch (e) { mfaShowErr('Erreur : ' + (e.message || e)); }
+    finally { btn.disabled = false; }
+}
+document.getElementById('mfaCode')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') mfaSubmit(); });
+function mfaAsk(factorId, enroll) {
+    return new Promise((resolve, reject) => {
+        _mfa = { factorId, resolve, reject };
+        document.getElementById('mfaTitle').textContent = enroll ? '🔐 Activer la double authentification' : '🔐 Vérification en deux étapes';
+        document.getElementById('mfaSub').textContent = enroll
+            ? '1) Installez une application d\'authentification (Google Authenticator, Microsoft Authenticator, Aegis…). 2) Scannez le QR code. 3) Saisissez le code à 6 chiffres affiché.'
+            : 'Saisissez le code à 6 chiffres de votre application d\'authentification.';
+        mfaShowErr(''); document.getElementById('mfaCode').value = '';
+        if (!enroll) document.getElementById('mfaEnroll').style.display = 'none';
+        document.getElementById('mfaOverlay').style.display = 'flex';
+        setTimeout(() => document.getElementById('mfaCode').focus(), 50);
+    });
+}
+// Rend la session « aal2 ». Retourne true si OK ; lève une erreur si annulé / impossible (la connexion est alors refusée).
+async function adminMfaStep(mayEnroll) {
+    const { data: lvl, error: lErr } = await supaClient.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (lErr) throw lErr;
+    if (lvl.currentLevel === 'aal2') return true;
+    const { data: fl, error: fErr } = await supaClient.auth.mfa.listFactors();
+    if (fErr) throw fErr;
+    const verified = (fl.totp || []).find(f => f.status === 'verified');
+    if (verified) return mfaAsk(verified.id, false);
+    if (!mayEnroll) return false; // simple client : pas d'activation, l'accès sera refusé plus bas
+    // Aucun facteur vérifié : activation obligatoire. On retire d'abord les tentatives abandonnées.
+    for (const f of (fl.all || []).filter(f => f.status !== 'verified' && f.factor_type === 'totp')) { try { await supaClient.auth.mfa.unenroll({ factorId: f.id }); } catch (e) {} }
+    const { data: en, error: eErr } = await supaClient.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'FacturaPro admin ' + new Date().toISOString().slice(0, 10) });
+    if (eErr) throw new Error('Impossible d\'activer la double authentification (' + eErr.message + '). Vérifiez Supabase → Authentication → Multi-factor : TOTP doit être activé.');
+    document.getElementById('mfaQr').src = en.totp.qr_code;
+    document.getElementById('mfaSecret').textContent = en.totp.secret;
+    document.getElementById('mfaEnroll').style.display = 'block';
+    return mfaAsk(en.id, true);
+}
+
 async function adminLogin() {
     const email = document.getElementById('adminEmail').value.trim().toLowerCase();
     const pwd = document.getElementById('adminPassword').value;
@@ -2514,6 +2592,17 @@ async function adminLogin() {
         if (authErr) {
             if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
             showAdminLoginError('Email ou mot de passe incorrect');
+            return;
+        }
+
+        // Double authentification AVANT toute lecture de droits : sans code, le serveur ne reconnaît pas l'administrateur
+        const ident0 = await supaClient.rpc('admin_whoami');
+        const maybeAdmin = ident0 && ident0.data && (ident0.data.is_admin || ident0.data.is_staff);
+        try { await adminMfaStep(!!maybeAdmin); }
+        catch (mfaErr) {
+            await supaClient.auth.signOut();
+            if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
+            showAdminLoginError(mfaErr.message === 'mfa_cancel' ? 'Connexion annulée' : mfaErr.message);
             return;
         }
 
@@ -2723,6 +2812,8 @@ async function submitChangeAdminPassword() {
             return;
         }
 
+        // La ré-authentification par mot de passe ramène la session au niveau « mot de passe seul » : redemander le code
+        try { await adminMfaStep(true); } catch (mfaErr) { showErr(mfaErr.message === 'mfa_cancel' ? 'Changement annulé : la session a été rétrogradée, reconnectez-vous.' : mfaErr.message); btn.disabled = false; btn.textContent = '🔑 Changer le mot de passe'; return; }
         const { error: updErr } = await supaClient.auth.updateUser({ password: newPwd });
         if (updErr) throw updErr;
 
@@ -6956,6 +7047,9 @@ function showToast(msg, type = 'info') {
         }
         const { data: { session } } = await supaClient.auth.getSession();
         if (!session) return;
+        // Session sans code de double authentification : retour à l'écran de connexion (le code sera demandé)
+        const { data: lvl } = await supaClient.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (!lvl || lvl.currentLevel !== 'aal2') { try { await supaClient.auth.signOut(); } catch {} AdminSession.clear(); return; }
         const who = await fetchAdminIdentity();
         if (!who || !(who.is_admin || who.is_staff)) return;
         currentAdmin = { email: who.email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };

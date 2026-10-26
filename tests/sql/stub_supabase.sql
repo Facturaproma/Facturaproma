@@ -13,6 +13,7 @@ CREATE TABLE auth.users (
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
   $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS
-  $$ SELECT jsonb_build_object('email', current_setting('request.jwt.claim.email', true)) $$;
+  $$ SELECT jsonb_build_object('email', current_setting('request.jwt.claim.email', true), 'aal', coalesce(nullif(current_setting('request.jwt.claim.aal', true), ''), 'aal1')) $$;
+CREATE TABLE auth.mfa_factors (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, status text NOT NULL DEFAULT 'unverified', factor_type text DEFAULT 'totp');
 GRANT USAGE ON SCHEMA public, auth TO anon, authenticated;
 GRANT SELECT ON auth.users TO authenticated;
