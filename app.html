@@ -3305,6 +3305,7 @@
                 <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
                 <h1>Factures</h1>
                 <div class="topbar-actions">
+                    <button class="btn btn-secondary" onclick="openRecurringList()">🔁 Récurrentes</button>
                     <button class="btn btn-primary" onclick="newInvoice()">+ Nouvelle facture</button>
                 </div>
             </div>
@@ -7881,6 +7882,7 @@ function renderInvoices() {
                <details class="inv-more" onclick="event.stopPropagation()"><summary class="btn btn-ghost btn-sm" title="Autres actions">⋯ Plus</summary>
                    <button class="btn btn-ghost btn-sm" onclick="sendDocWhatsApp('${i.id}', 'invoice')" style="color: #25D366;">💬 WhatsApp</button>
                    <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice('${i.id}')">📋 Dupliquer</button>
+                   ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="makeInvoiceRecurring('${i.id}')">🔁 Rendre récurrente</button>` : ''}
                    ${!isCredit && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice('${i.id}')" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
                </details>`;
         return `
@@ -8042,6 +8044,155 @@ function duplicateInvoice(id) {
     updateTotals();
     navTo('invoice-editor');
     showToast('Facture dupliquée', 'success');
+}
+
+// ============================================
+// FACTURES RÉCURRENTES (abonnements, loyers, contrats mensuels)
+// Un modèle est enregistré à partir d'une facture ; à chaque échéance l'application crée un BROUILLON (jamais une facture émise :
+// le numéro officiel et l'émission restent une action volontaire). Le brouillon porte un identifiant déterministe
+// (modèle + date) : deux appareils ou deux ouvertures de l'application ne créent jamais deux fois le même brouillon.
+// ============================================
+const RECURRING_FREQ = { monthly: { label: 'Chaque mois', months: 1 }, quarterly: { label: 'Chaque trimestre', months: 3 }, yearly: { label: 'Chaque année', months: 12 } };
+
+// Date + n mois en gardant le jour d'ancrage, ramené à la fin du mois si le mois est plus court (31 janv. -> 28 févr. -> 31 mars). Pure : testable.
+function recurringAddMonths(iso, months, anchorDay) {
+    const m0 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m0) return null;
+    const total = (+m0[1]) * 12 + (+m0[2] - 1) + months;
+    const y = Math.floor(total / 12), mo = total % 12;
+    const last = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+    const day = Math.min(anchorDay || +m0[3], last);
+    return `${y}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+function recurringNextDate(tpl, fromIso) {
+    const f = RECURRING_FREQ[tpl.frequency] || RECURRING_FREQ.monthly;
+    return recurringAddMonths(fromIso, f.months, tpl.anchorDay);
+}
+function recurringAddDays(iso, days) {
+    const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+}
+// Brouillon d'une échéance (pure : testable)
+function buildRecurringDraft(tpl, dateIso, nowIso) {
+    const terms = tpl.paymentTerms || '30';
+    const days = terms === 'immediate' ? 0 : (parseInt(terms, 10) || 30);
+    return {
+        id: `rec-${tpl.id}-${dateIso}`,
+        number: draftNumber(), type: 'invoice', status: 'draft',
+        date: dateIso, dueDate: recurringAddDays(dateIso, days), paymentTerms: terms,
+        clientId: tpl.clientId, clientName: tpl.clientName, clientICE: tpl.clientICE, clientAddress: tpl.clientAddress,
+        items: JSON.parse(JSON.stringify(tpl.items || [])),
+        totalHT: tpl.totalHT, totalTVA: tpl.totalTVA, totalTTC: tpl.totalTTC,
+        notes: tpl.notes || '', recurringId: tpl.id,
+        createdAt: nowIso, updatedAt: nowIso
+    };
+}
+// Crée les brouillons échus. Retourne le nombre de brouillons créés. Au plus 12 échéances rattrapées par modèle et par passage.
+function generateDueRecurring(todayIso) {
+    const tpls = Storage.get('recurring', []) || [];
+    if (!tpls.length) return 0;
+    const invoices = Storage.get('invoices', []) || [];
+    const ids = new Set(invoices.map(i => i && i.id));
+    const nowIso = new Date().toISOString();
+    let created = 0, changed = false;
+    tpls.forEach(tpl => {
+        if (!tpl || tpl.active === false || !tpl.nextDate) return;
+        let guard = 0;
+        while (tpl.nextDate <= todayIso && guard++ < 12) {
+            const draft = buildRecurringDraft(tpl, tpl.nextDate, nowIso);
+            if (!ids.has(draft.id)) { invoices.push(draft); ids.add(draft.id); created++; }
+            tpl.lastGenerated = tpl.nextDate;
+            const nx = recurringNextDate(tpl, tpl.nextDate);
+            if (!nx) { tpl.active = false; break; }
+            tpl.nextDate = nx; changed = true;
+        }
+    });
+    if (created) Storage.set('invoices', invoices);
+    if (changed) Storage.set('recurring', tpls);
+    return created;
+}
+function runRecurringOnStart() {
+    try {
+        const n = generateDueRecurring(todayISO());
+        if (n) showToast(`${n} facture(s) récurrente(s) créée(s) en brouillon : vérifiez puis envoyez`, 'success');
+    } catch (e) { console.warn('récurrentes', e); }
+}
+
+function makeInvoiceRecurring(invoiceId) {
+    const inv = (Storage.get('invoices', []) || []).find(i => i.id === invoiceId);
+    if (!inv || inv.type === 'credit') return;
+    const first = recurringAddMonths(todayISO(), 1);
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay active'; modal.style.zIndex = '5000';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 460px;" onclick="event.stopPropagation()">
+            <h2>🔁 Facture récurrente</h2>
+            <p>Client : <strong>${escapeHtml(inv.clientName || '—')}</strong> · ${formatCurrency(inv.totalTTC)} TTC</p>
+            <div class="form-group"><label>Fréquence</label>
+                <select id="recFreq">${Object.keys(RECURRING_FREQ).map(k => `<option value="${k}">${RECURRING_FREQ[k].label}</option>`).join('')}</select></div>
+            <div class="form-group"><label>Première facture le</label>
+                <input type="date" id="recFirst" value="${first}"></div>
+            <p class="subtitle">À chaque date, un <strong>brouillon</strong> est créé avec les mêmes lignes. Rien n'est envoyé ni numéroté automatiquement : vous vérifiez puis vous envoyez.</p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Annuler</button>
+                <button class="btn btn-primary" onclick="saveRecurring('${inv.id}')">Enregistrer</button>
+            </div>
+        </div>`;
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+}
+function saveRecurring(invoiceId) {
+    const inv = (Storage.get('invoices', []) || []).find(i => i.id === invoiceId);
+    if (!inv) return;
+    const freq = document.getElementById('recFreq').value;
+    const first = document.getElementById('recFirst').value;
+    if (!RECURRING_FREQ[freq] || !/^\d{4}-\d{2}-\d{2}$/.test(first)) { showToast('Choisissez une fréquence et une date valide', 'error'); return; }
+    const tpls = Storage.get('recurring', []) || [];
+    tpls.push({
+        id: uuid(), sourceNumber: isDraftNumber(inv.number) ? '' : inv.number, frequency: freq, nextDate: first, anchorDay: +first.slice(8, 10), active: true,
+        clientId: inv.clientId, clientName: inv.clientName, clientICE: inv.clientICE, clientAddress: inv.clientAddress,
+        items: JSON.parse(JSON.stringify(inv.items || [])), totalHT: inv.totalHT, totalTVA: inv.totalTVA, totalTTC: inv.totalTTC,
+        paymentTerms: inv.paymentTerms || '30', notes: inv.notes || '', createdAt: new Date().toISOString()
+    });
+    Storage.set('recurring', tpls);
+    document.querySelector('.modal-overlay.active')?.remove();
+    runRecurringOnStart();
+    if (document.getElementById('page-invoices')?.classList.contains('active')) renderInvoices();
+    showToast('Facture récurrente enregistrée ✓', 'success');
+}
+function toggleRecurring(id) {
+    const tpls = Storage.get('recurring', []) || [];
+    const t = tpls.find(x => x.id === id); if (!t) return;
+    t.active = t.active === false;
+    Storage.set('recurring', tpls);
+    openRecurringList();
+}
+function deleteRecurring(id) {
+    if (!confirm('Supprimer cette récurrence ? Les brouillons déjà créés sont conservés.')) return;
+    Storage.set('recurring', (Storage.get('recurring', []) || []).filter(x => x.id !== id));
+    openRecurringList();
+}
+function openRecurringList() {
+    document.querySelectorAll('.modal-overlay.rec-list').forEach(m => m.remove());
+    const tpls = Storage.get('recurring', []) || [];
+    const rows = tpls.length ? tpls.map(t => `
+        <tr>
+            <td><strong>${escapeHtml(t.clientName || '—')}</strong><br><span class="inv-dates">${formatCurrency(t.totalTTC)} · ${(RECURRING_FREQ[t.frequency] || {}).label || ''}</span></td>
+            <td>${t.active === false ? '<span class="inv-dates">En pause</span>' : `Prochaine : <strong>${formatDate(t.nextDate)}</strong>`}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="toggleRecurring('${t.id}')">${t.active === false ? '▶️ Reprendre' : '⏸ Pause'}</button>
+                <button class="btn btn-ghost btn-sm" onclick="deleteRecurring('${t.id}')" style="color: var(--danger);">🗑</button></td>
+        </tr>`).join('')
+        : '<tr><td colspan="3"><div class="empty-state"><h3>Aucune facture récurrente</h3><p>Dans la liste des factures, ouvrez « ⋯ Plus » puis « 🔁 Rendre récurrente ».</p></div></td></tr>';
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay active rec-list'; modal.style.zIndex = '5000';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 560px;" onclick="event.stopPropagation()">
+            <h2>🔁 Factures récurrentes</h2>
+            <table class="tbl-act"><tbody>${rows}</tbody></table>
+            <div class="modal-actions"><button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Fermer</button></div>
+        </div>`;
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
 }
 
 function deleteInvoice(id) {
@@ -13735,6 +13886,7 @@ function closeModalIfBg(event, id) {
 function renderAll() {
     SessionPolicy.start();
     try { startSupportPolling(); } catch (e) { console.warn('messagerie', e); }
+    runRecurringOnStart();
     renderDashboard();
     populateClientSelect();
     updateTrialUI();
@@ -13760,7 +13912,7 @@ function blockedByLicense() {
 (function guardWriteActions() {
     ['newInvoice','newQuote','newClient','newProduct','editInvoice','duplicateInvoice',
      'convertQuoteToInvoice','createCreditFromInvoice','recordPayment','recordPaymentForInvoice',
-     'saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
+     'makeInvoiceRecurring','saveRecurring','toggleRecurring','deleteRecurring','saveInvoice','persistEditor','convertEditingQuote','saveClient','saveProduct','savePayment','saveCompany','saveReminderTemplates',
      'deleteInvoice','deleteQuote','deleteClient','deleteProduct','handleLogoUpload','removeLogo','handleStampUpload','removeStamp',
      'importTechnicalBackup','saveAeCnssSettings','resetAeCnssSettings','saveCnssEmpSettings','resetCnssEmpSettings','generateInvitationCode','cancelInvitation','removeTeamMember'
     ].forEach(function (name) {
