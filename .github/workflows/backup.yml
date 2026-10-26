@@ -1,7 +1,7 @@
 name: Sauvegarde Supabase (chiffrée)
 
 # Sauvegarde hebdomadaire de la base, CHIFFRÉE avant d'être déposée comme
-# "artifact" GitHub (conservé 90 jours). Ce dépôt est public : sans chiffrement,
+# "artifact" GitHub (conservé 14 jours). Ce dépôt est public : sans chiffrement,
 # les données clients seraient lisibles par n'importe qui. Ne jamais retirer l'étape de chiffrement.
 #
 # Secrets à créer (Settings > Secrets and variables > Actions > New repository secret) :
@@ -99,5 +99,5 @@ jobs:
         with:
           name: sauvegarde-supabase
           path: "*.gpg"
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: error
