@@ -7879,6 +7879,7 @@ function renderInvoices() {
                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Voir la facture">👁 Voir</button>
                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥 PDF</button>
                <details class="inv-more" onclick="event.stopPropagation()"><summary class="btn btn-ghost btn-sm" title="Autres actions">⋯ Plus</summary>
+                   ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="openClientLink('${i.id}')">🔗 Lien client</button>` : ''}
                    <button class="btn btn-ghost btn-sm" onclick="sendDocWhatsApp('${i.id}', 'invoice')" style="color: #25D366;">💬 WhatsApp</button>
                    <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice('${i.id}')">📋 Dupliquer</button>
                    ${!isCredit && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice('${i.id}')" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
@@ -13747,6 +13748,109 @@ function renderAll() {
         window._licInterval = setInterval(() => License.refresh(), 5 * 60000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) License.refresh(); });
     }
+}
+
+// ============================================
+// LIEN CLIENT : consultation d'une facture par un lien (sans compte pour le client). Voir sql/30_lien_client_facture.sql et facture.html.
+// L'application envoie une COPIE (instantané) des seules informations déjà présentes sur le PDF ; le serveur ne lit jamais les données de la société.
+// ============================================
+// Instantané d'une facture enregistrée (pure : testable). Liste fermée de champs : rien d'autre n'est envoyé.
+function buildShareSnapshot(inv, company, payments, invoices) {
+    const co = company || {};
+    const ps = paymentSituation(inv, payments || [], invoices || []);
+    let state = ps.state === 'partial' ? 'partial' : (ps.state === 'paid' || ps.state === 'credited') ? 'paid' : 'none';
+    if (state !== 'paid') { const w = getInvoiceWithStatus(inv); if (w && w.status === 'overdue') state = 'overdue'; }
+    const t = (v, n) => String(v == null ? '' : v).slice(0, n);
+    return {
+        v: 1,
+        asOf: new Date().toISOString(),
+        company: { name: t(co.name, 120), ice: t(co.ice, 40), if: t(co.if, 40), rc: t(co.rc, 40), address: t(co.address, 200), city: t(co.city, 80), phone: t(co.phone, 40), email: t(co.email, 120), rib: t(co.rib, 60), bank: t(co.bank, 120) },
+        doc: { number: t(inv.number, 60), date: t(inv.date, 10), dueDate: t(inv.dueDate, 10), notes: t(inv.notes, 1000) },
+        client: { name: t(inv.clientName, 150), ice: t(inv.clientICE, 40), address: t(inv.clientAddress, 250) },
+        items: (inv.items || []).slice(0, 300).map(it => ({ description: t(it.description, 300), quantity: Number(it.quantity) || 0, unitPrice: Number(it.unitPrice) || 0, tva: Number(it.tva) || 0, totalTTC: Number(it.totalTTC) || 0 })),
+        totals: { ht: Number(inv.totalHT) || 0, tva: Number(inv.totalTVA) || 0, ttc: Number(inv.totalTTC) || 0 },
+        payment: { state, paid: ps.paid || 0, remaining: ps.remaining || 0 }
+    };
+}
+// Lien public (pure : testable) : facture.html est servie à côté de app.html
+function shareUrlFor(token, baseHref) {
+    const u = new URL('facture.html', baseHref || location.href);
+    u.search = ''; u.hash = '';
+    u.searchParams.set('t', token);
+    return u.toString();
+}
+const SHARE_ERRORS = { TROP_DE_LIENS: 'Trop de liens actifs (500 maximum). Désactivez-en quelques-uns.', INSTANTANE_TROP_GROS: 'Facture trop volumineuse pour être partagée.', NON_AUTHENTIFIE: 'Reconnectez-vous puis réessayez.' };
+function shareErrorMessage(error) {
+    const m = String((error && (error.message || error.hint)) || '');
+    for (const k of Object.keys(SHARE_ERRORS)) if (m.includes(k)) return SHARE_ERRORS[k];
+    if (/share_invoice|PGRST202|schema cache|does not exist/i.test(m)) return 'Le lien client n\'est pas encore activé sur ce serveur.';
+    return 'Impossible de créer le lien pour le moment. Réessayez.';
+}
+
+async function openClientLink(invoiceId) {
+    const invoices = Storage.get('invoices', []) || [];
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (!inv) return;
+    if (invoiceListKind(inv) !== 'issued') { showToast('Seule une facture enregistrée peut être partagée (pas un brouillon ni un avoir).', 'error'); return; }
+    if (!USE_SUPABASE || typeof supaClient === 'undefined' || !supaClient) { showToast('Le lien client nécessite le compte en ligne.', 'error'); return; }
+    let token = '', expires = '', views = 0, lastViewed = null;
+    try {
+        const snap = buildShareSnapshot(inv, Storage.get('company', {}), Storage.get('payments', []) || [], invoices);
+        const { data, error } = await supaClient.rpc('share_invoice', { p_invoice_id: String(inv.id), p_snapshot: snap, p_days: 60 });
+        if (error) throw error;
+        token = data && data.token; expires = data && data.expires_at;
+        if (!/^[0-9a-f]{64}$/.test(token || '')) throw new Error('réponse invalide');
+        const r = await supaClient.rpc('my_invoice_shares');
+        const mine = (r && r.data || []).find(x => x.invoice_id === String(inv.id));
+        if (mine) { views = mine.views || 0; lastViewed = mine.last_viewed_at; }
+    } catch (e) { showToast(shareErrorMessage(e), 'error'); return; }
+
+    const url = shareUrlFor(token);
+    const client = (Storage.get('clients', []) || []).find(c => c.id === inv.clientId);
+    const company = Storage.get('company', {});
+    const msg = `Bonjour,\n\nVous pouvez consulter votre facture ${inv.number} (${formatCurrency(inv.totalTTC)}) en ligne :\n${url}\n\nCordialement,\n${company.name || ''}`;
+    let phone = ((client && client.phone) || '').replace(/\D/g, ''); if (/^0[5-7]\d{8}$/.test(phone)) phone = '212' + phone.slice(1);
+    const wa = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+    const seen = views ? `Consulté ${views} fois${lastViewed ? ` · dernière fois le ${formatDate(String(lastViewed).slice(0, 10))}` : ''}` : 'Pas encore consulté';
+    document.querySelectorAll('.modal-overlay.share-link').forEach(m => m.remove());
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay active share-link'; modal.style.zIndex = '5000';
+    // Texte inséré via escapeHtml (nœuds texte uniquement) ; valeurs sensibles (lien, message) posées par JavaScript, jamais dans un attribut HTML
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 560px;" onclick="event.stopPropagation()">
+            <h2>🔗 Lien client</h2>
+            <p>Facture <strong>${escapeHtml(inv.number)}</strong> · ${escapeHtml(inv.clientName || '')}</p>
+            <div class="form-group"><label>Lien à envoyer au client</label>
+                <input type="text" id="shareUrl" readonly onclick="this.select()"></div>
+            <p class="subtitle">${escapeHtml(seen)} · valable jusqu'au ${escapeHtml(formatDate(String(expires || '').slice(0, 10)))}</p>
+            <p class="subtitle">Le client voit les lignes, les totaux, le reste à payer et votre RIB, sans créer de compte. C'est une copie à jour au moment de l'ouverture de cette fenêtre : rouvrez-la après un paiement pour actualiser.</p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" data-act="close">Fermer</button>
+                <button class="btn btn-ghost" style="color: var(--danger);" data-act="revoke">🚫 Désactiver</button>
+                <button class="btn btn-secondary" data-act="copy">📋 Copier</button>
+                <button class="btn btn-primary" data-act="wa">💬 WhatsApp</button>
+            </div>
+        </div>`;
+    modal.querySelector('#shareUrl').value = url;
+    modal.querySelector('[data-act="close"]').addEventListener('click', () => modal.remove());
+    modal.querySelector('[data-act="revoke"]').addEventListener('click', () => revokeClientLink(String(inv.id)));
+    modal.querySelector('[data-act="copy"]').addEventListener('click', copyClientLink);
+    modal.querySelector('[data-act="wa"]').addEventListener('click', () => window.open(wa, '_blank'));
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+}
+function copyClientLink() {
+    const v = document.getElementById('shareUrl').value;
+    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => showToast('Lien copié ✓', 'success'), () => { document.getElementById('shareUrl').select(); showToast('Sélectionnez le lien puis copiez-le', ''); });
+}
+async function revokeClientLink(invoiceId) {
+    if (!confirm('Désactiver ce lien ? Le client ne pourra plus consulter la facture avec ce lien.')) return;
+    try {
+        const { error } = await supaClient.rpc('revoke_invoice_share', { p_invoice_id: String(invoiceId) });
+        if (error) throw error;
+        document.querySelectorAll('.modal-overlay.share-link').forEach(m => m.remove());
+        showToast('Lien désactivé ✓', 'success');
+    } catch (e) { showToast(shareErrorMessage(e), 'error'); }
 }
 
 // ============================================

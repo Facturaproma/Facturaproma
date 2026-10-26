@@ -16,12 +16,14 @@ SELECT pg_temp.ok('fonctions SECURITY DEFINER avec search_path fixé',
   (SELECT string_agg(p.proname, ',') FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
    WHERE n.nspname='public' AND p.prosecdef AND NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig,'{}')) c WHERE c LIKE 'search_path=%')));
 
--- 3. Aucune fonction SECURITY DEFINER n'est exécutable par un visiteur non connecté (anon)
-SELECT pg_temp.ok('aucune fonction SECURITY DEFINER exécutable par anon',
+-- 3. Aucune fonction SECURITY DEFINER n'est exécutable par un visiteur non connecté (anon), SAUF la liste blanche ci-dessous.
+--    Liste blanche REVUE (une seule entrée) : get_shared_invoice(text) — lien client public d'une facture (sql/30) : jeton de 256 bits obligatoire,
+--    renvoie uniquement l'instantané d'un lien valide, même réponse pour inconnu/expiré/révoqué. Toute autre entrée doit être refusée.
+SELECT pg_temp.ok('aucune fonction SECURITY DEFINER exécutable par anon (hors liste blanche : get_shared_invoice)',
   NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-              WHERE n.nspname='public' AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE')),
+              WHERE n.nspname='public' AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE') AND p.proname <> 'get_shared_invoice'),
   (SELECT string_agg(p.proname, ',') FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-   WHERE n.nspname='public' AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE')));
+   WHERE n.nspname='public' AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE') AND p.proname <> 'get_shared_invoice'));
 
 -- 4. Les fonctions de déclencheur ne sont pas appelables directement par les utilisateurs
 SELECT pg_temp.ok('fonctions de déclencheur non exécutables par authenticated',
