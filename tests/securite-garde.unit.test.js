@@ -49,4 +49,9 @@ ok('sw.js : fichiers vendor mis en cache, version du cache incrémentée', /vend
 }
 // 5. Mot de passe à la création : 8 caractères minimum (la connexion des comptes existants n'est pas bloquée)
 ok('inscription et changement de mot de passe : 8 caractères minimum', /password\.length < 8/.test(app) && /newPwd\.length < 8/.test(app) && /minlength="8"/.test(app));
+// 6. Double authentification admin : écran + règle serveur
+ok('admin.html : connexion passe par adminMfaStep avant la lecture des droits, session aal1 non restaurée, code redemandé après ré-authentification',
+  /await adminMfaStep\(!!maybeAdmin\)/.test(admin) && /currentLevel !== 'aal2'/.test(admin) && /await adminMfaStep\(true\);[^\n]*\n\s*const \{ error: updErr \}/.test(admin));
+{ const m = rd('sql/31_admin_2fa.sql');
+  ok('sql/31 : is_admin, is_master et is_staff exigent aal2 dès qu\'un facteur est vérifié (fp_mfa_ok)', ['is_admin', 'is_master', 'is_staff'].every((f) => new RegExp('FUNCTION public\\.' + f + '\\(\\)[\\s\\S]*?public\\.fp_mfa_ok\\(u\\.id\\)').test(m)) && /'verified'/.test(m) && /'aal2'/.test(m)); }
 process.exit(bad ? 1 : 0);
