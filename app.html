@@ -2,6 +2,10 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <!-- Anti-clickjacking : GitHub Pages ne peut pas envoyer X-Frame-Options. La page reste invisible tant qu'elle n'est pas la fenêtre principale ;
+         si un site tiers l'affiche dans un cadre, elle tente de se rouvrir en plein écran, sinon reste vide (aucun clic détourné possible). -->
+    <style id="fp-antiframe">html{display:none!important}</style>
+    <script>try{if(window.top===window.self){document.getElementById('fp-antiframe').remove();}else{window.top.location=window.self.location;}}catch(e){}</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FacturaPro — Facturation Maroc</title>
     <meta name="description" content="Logiciel de facturation pour auto-entrepreneurs, freelances et petites entreprises au Maroc : factures, devis, paiements et PDF en français et en arabe.">
@@ -21,11 +25,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
     
     <!-- jsPDF for PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="vendor/jspdf.umd.min.js"></script>
+    <script src="vendor/jspdf.plugin.autotable.min.js"></script>
     
     <!-- Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha256-7jvo3hkrl8sdc9HpXWuCux9rZYwPl8TvdX/DMZlu09M=" crossorigin="anonymous"></script>
     <!-- Nouveau stockage « une ligne par document » : PRÉPARATION, préproduction + comptes de test + mode décidé par le serveur (voir docstore.js). Absent/en échec => comportement historique inchangé. -->
     <script src="docstore.js"></script>
     
@@ -2874,7 +2878,7 @@
             </div>
             <div class="form-group">
                 <label>Mot de passe</label>
-                <input type="password" id="signupPassword" placeholder="Au moins 6 caractères" required minlength="6" autocomplete="new-password">
+                <input type="password" id="signupPassword" placeholder="Au moins 8 caractères" required minlength="8" autocomplete="new-password">
                 <div class="password-hint">Minimum 6 caractères</div>
             </div>
             <div class="form-group">
@@ -5270,7 +5274,7 @@
 
         <div class="form-group">
             <label>Nouveau mot de passe</label>
-            <input type="password" id="cpwNew" placeholder="Au moins 6 caractères" autocomplete="new-password">
+            <input type="password" id="cpwNew" placeholder="Au moins 8 caractères" autocomplete="new-password">
             <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">
                 Minimum 6 caractères. Évitez les mots de passe trop simples.
             </div>
@@ -6147,8 +6151,8 @@ const Auth = {
     
     async signup(email, password) {
         email = email.trim().toLowerCase();
-        if (password.length < 6) {
-            throw new Error('Le mot de passe doit faire au moins 6 caractères');
+        if (password.length < 8) {
+            throw new Error('Le mot de passe doit faire au moins 8 caractères');
         }
         
         if (USE_SUPABASE) {
@@ -6815,11 +6819,11 @@ function fpPaginate(key, rows, sig, renderFn) {
         let tabs = '', prev = 0;
         for (const n of nums) {
             if (prev && n - prev > 1) tabs += '<span class="fp-gap">…</span>';
-            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto('${key}',${n})">${n}</button>`;
+            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto(${jsArg(key)},${n})">${n}</button>`;
             prev = n;
         }
         html = `<div class="fp-pager" role="navigation" aria-label="Pages">
-            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page + 1})" aria-label="Page suivante">›</button>
+            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto(${jsArg(key)},${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto(${jsArg(key)},${st.page + 1})" aria-label="Page suivante">›</button>
             <span class="fp-info">${from + 1}–${from + items.length} sur ${total}</span></div>`;
     }
     return { items, html, page: st.page, pages, total, from };
@@ -6830,10 +6834,15 @@ function fpGoto(key, n) {
     st.fn();
 }
 
+// Échappement HTML sûr dans le texte ET dans les attributs (value="…", title="…") : & < > " ' sont tous neutralisés.
+// (Avant : div.innerHTML laissait passer " et ', ce qui permettait de sortir d'un attribut — injection stockée, OWASP A03.)
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text || '';
-    return div.innerHTML;
+    return String(text == null || text === false ? '' : text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// Argument texte d'un gestionnaire en ligne : onclick="fn(${jsArg(valeur)})". Tout caractère hors [A-Za-z0-9_.:@ -] est écrit en \xNN / \uNNNN :
+// la chaîne ne contient ni apostrophe, ni guillemet, ni < > & — impossible d'en sortir. Les identifiants ordinaires restent lisibles ('f1').
+function jsArg(v) {
+    return "'" + String(v == null ? '' : v).replace(/[^A-Za-z0-9_.:@ -]/g, (c) => { const n = c.charCodeAt(0); return n < 256 ? '\\x' + ('0' + n.toString(16)).slice(-2) : '\\u' + ('000' + n.toString(16)).slice(-4); }) + "'";
 }
 
 function showToast(message, type = '') {
@@ -7133,8 +7142,8 @@ async function handleSignup(event) {
         return;
     }
     
-    if (password.length < 6) {
-        showAuthError('Le mot de passe doit faire au moins 6 caractères');
+    if (password.length < 8) {
+        showAuthError('Le mot de passe doit faire au moins 8 caractères');
         return;
     }
     
@@ -7264,8 +7273,8 @@ async function submitChangePassword() {
         return;
     }
     
-    if (newPwd.length < 6) {
-        showCpwError('Le nouveau mot de passe doit faire au moins 6 caractères');
+    if (newPwd.length < 8) {
+        showCpwError('Le nouveau mot de passe doit faire au moins 8 caractères');
         return;
     }
     
@@ -7689,7 +7698,7 @@ function renderActionCenter(invoices) {
                         <div style="font-size:12px; color:var(--ink-mute);">${escapeHtml(dn(i.number))} · ${i.overdueDays || 0} j de retard</div>
                     </div>
                     <strong>${formatCurrency(invoiceRemaining(i, pays))}</strong>
-                    <button class="btn btn-secondary btn-sm" onclick="quickRelance('${i.id}')" title="Relancer par WhatsApp" style="color:#25D366;">💬 Relancer</button>
+                    <button class="btn btn-secondary btn-sm" onclick="quickRelance(${jsArg(i.id)})" title="Relancer par WhatsApp" style="color:#25D366;">💬 Relancer</button>
                 </div>`).join('')}
             ${overdue.length > 5 ? `<div style="padding-top:8px;"><button class="btn btn-ghost btn-sm" onclick="navTo('reminders')">Voir les ${overdue.length} relances →</button></div>` : ''}
         </div>`;
@@ -7775,7 +7784,7 @@ function renderDashboard() {
                 </thead>
                 <tbody>
                     ${recent.map(i => `
-                        <tr onclick="editInvoice('${i.id}')">
+                        <tr onclick="editInvoice(${jsArg(i.id)})">
                             <td><strong>${escapeHtml(dn(i.number))}</strong></td>
                             <td>${escapeHtml(i.clientName || '—')}</td>
                             <td>${formatDate(i.date)}</td>
@@ -7873,21 +7882,21 @@ function renderInvoices() {
         const payLine = ps.state === 'partial' ? `<span class="inv-pay">Payé ${formatCurrency(ps.paid)} · <strong>reste ${formatCurrency(ps.remaining)}</strong></span>`
             : ps.state === 'none' ? `<span class="inv-pay inv-pay-none">Aucun paiement · reste ${formatCurrency(ps.remaining)}</span>` : '';
         const actions = isDraft
-            ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')">✏️ Modifier</button>
-               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice('${i.id}')" title="Supprimer ce brouillon" style="color: var(--danger);">🗑 Supprimer</button>`
-            : `${ps.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); recordPaymentForInvoice('${i.id}')" title="Enregistrer un paiement">${ps.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
-               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${i.id}')" title="Voir la facture">👁 Voir</button>
-               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${i.id}', 'invoice')" title="Télécharger PDF">📥 PDF</button>
+            ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); editInvoice(${jsArg(i.id)})">✏️ Modifier</button>
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteInvoice(${jsArg(i.id)})" title="Supprimer ce brouillon" style="color: var(--danger);">🗑 Supprimer</button>`
+            : `${ps.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); recordPaymentForInvoice(${jsArg(i.id)})" title="Enregistrer un paiement">${ps.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice(${jsArg(i.id)})" title="Voir la facture">👁 Voir</button>
+               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF(${jsArg(i.id)}, 'invoice')" title="Télécharger PDF">📥 PDF</button>
                <details class="inv-more" onclick="event.stopPropagation()"><summary class="btn btn-ghost btn-sm" title="Autres actions">⋯ Plus</summary>
-                   ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="openClientLink('${i.id}')">🔗 Lien client</button>` : ''}
-                   <button class="btn btn-ghost btn-sm" onclick="sendDocWhatsApp('${i.id}', 'invoice')" style="color: #25D366;">💬 WhatsApp</button>
-                   <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice('${i.id}')">📋 Dupliquer</button>
-                   ${!isCredit && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice('${i.id}')" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
+                   ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="openClientLink(${jsArg(i.id)})">🔗 Lien client</button>` : ''}
+                   <button class="btn btn-ghost btn-sm" onclick="sendDocWhatsApp(${jsArg(i.id)}, 'invoice')" style="color: #25D366;">💬 WhatsApp</button>
+                   <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice(${jsArg(i.id)})">📋 Dupliquer</button>
+                   ${!isCredit && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice(${jsArg(i.id)})" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
                </details>`;
         return `
             <tr class="inv-row inv-row-${kind}">
-                <td onclick="editInvoice('${i.id}')">${title}<br><span class="inv-client">${escapeHtml(i.clientName || '—')}</span><br><span class="inv-dates">Émise ${formatDate(i.date)}${i.dueDate && !isCredit ? ` · échéance ${formatDate(i.dueDate)}` : ''}${i.relatedInvoiceNumber ? `<br>↩️ relatif à ${escapeHtml(i.relatedInvoiceNumber)}` : ''}</span></td>
-                <td onclick="editInvoice('${i.id}')">${amount}${statusPill ? `<br>${statusPill}` : ''}${payLine ? `<br>${payLine}` : ''}</td>
+                <td onclick="editInvoice(${jsArg(i.id)})">${title}<br><span class="inv-client">${escapeHtml(i.clientName || '—')}</span><br><span class="inv-dates">Émise ${formatDate(i.date)}${i.dueDate && !isCredit ? ` · échéance ${formatDate(i.dueDate)}` : ''}${i.relatedInvoiceNumber ? `<br>↩️ relatif à ${escapeHtml(i.relatedInvoiceNumber)}` : ''}</span></td>
+                <td onclick="editInvoice(${jsArg(i.id)})">${amount}${statusPill ? `<br>${statusPill}` : ''}${payLine ? `<br>${payLine}` : ''}</td>
                 <td>${actions}</td>
             </tr>`;
     };
@@ -7963,8 +7972,8 @@ function applyEditorLock() {
     ban.innerHTML = `<strong>🔒 ${isCredit ? 'Avoir' : 'Facture'} ${escapeHtml(editingInvoice.number)} émis : non modifiable.</strong><br>`
         + (isCredit ? '' : `Pour corriger une erreur, créez un avoir ; pour refaire une facture proche, utilisez « Dupliquer ». `)
         + `<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">`
-        + (isCredit ? '' : `<button type="button" class="btn btn-secondary btn-sm" onclick="createCreditFromInvoice('${editingInvoice.id}')">↩️ Créer un avoir</button>`)
-        + `<button type="button" class="btn btn-secondary btn-sm" onclick="duplicateInvoice('${editingInvoice.id}')">📋 Dupliquer</button></div>`
+        + (isCredit ? '' : `<button type="button" class="btn btn-secondary btn-sm" onclick="createCreditFromInvoice(${jsArg(editingInvoice.id)})">↩️ Créer un avoir</button>`)
+        + `<button type="button" class="btn btn-secondary btn-sm" onclick="duplicateInvoice(${jsArg(editingInvoice.id)})">📋 Dupliquer</button></div>`
         + (hist ? `<ul style="margin:8px 0 0 18px; font-size:12px;">${hist}</ul>` : '');
     ban.style.display = 'block';
 }
@@ -8172,7 +8181,7 @@ function addItem(data = null) {
         <td>
             <div style="display: flex; gap: 4px; align-items: stretch;">
                 <input type="text" class="item-desc" placeholder="Description ou cliquez sur 📦" value="${escapeHtml(data?.description || '')}" style="flex: 1;">
-                <button type="button" class="btn btn-secondary" onclick="openProductPicker('${rowId}')" title="Sélectionner un produit/service" style="padding: 6px 10px; font-size: 14px;">📦</button>
+                <button type="button" class="btn btn-secondary" onclick="openProductPicker(${jsArg(rowId)})" title="Sélectionner un produit/service" style="padding: 6px 10px; font-size: 14px;">📦</button>
             </div>
         </td>
         <td><input type="number" class="item-qty" min="0.01" step="0.01" value="${data?.quantity || 1}" oninput="updateTotals()"></td>
@@ -8239,7 +8248,7 @@ function renderProductPicker(products) {
         const cat = p.category ? `<span style="background: var(--surface-soft); color: var(--ink-mute); font-size: 10px; padding: 2px 6px; border-radius: 100px; margin-left: 6px;">${escapeHtml(p.category)}</span>` : '';
         
         return `
-            <div onclick="selectProductForItem('${p.id}')" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 8px; background: white;" onmouseover="this.style.borderColor='var(--primary)'; this.style.background='var(--surface-soft)';" onmouseout="this.style.borderColor='var(--border)'; this.style.background='white';">
+            <div onclick="selectProductForItem(${jsArg(p.id)})" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 8px; background: white;" onmouseover="this.style.borderColor='var(--primary)'; this.style.background='var(--surface-soft)';" onmouseout="this.style.borderColor='var(--border)'; this.style.background='white';">
                 <div style="display: flex; justify-content: space-between; align-items: start; gap: 12px;">
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-weight: 600; font-size: 14px;">📦 ${escapeHtml(p.name)}${cat}</div>
@@ -8618,19 +8627,19 @@ function renderQuotes() {
             <tbody>
                 ${sorted.map(q => `
                     <tr>
-                        <td onclick="editQuote('${q.id}')"><strong>${escapeHtml(q.number)}</strong></td>
-                        <td onclick="editQuote('${q.id}')">${escapeHtml(q.clientName || '—')}</td>
-                        <td onclick="editQuote('${q.id}')">${formatDate(q.date)}</td>
-                        <td onclick="editQuote('${q.id}')"><strong>${formatCurrency(q.totalTTC)}</strong></td>
-                        <td onclick="editQuote('${q.id}')"><span class="status-pill status-${q.status}">${statusLabel(q.status)}</span></td>
+                        <td onclick="editQuote(${jsArg(q.id)})"><strong>${escapeHtml(q.number)}</strong></td>
+                        <td onclick="editQuote(${jsArg(q.id)})">${escapeHtml(q.clientName || '—')}</td>
+                        <td onclick="editQuote(${jsArg(q.id)})">${formatDate(q.date)}</td>
+                        <td onclick="editQuote(${jsArg(q.id)})"><strong>${formatCurrency(q.totalTTC)}</strong></td>
+                        <td onclick="editQuote(${jsArg(q.id)})"><span class="status-pill status-${q.status}">${statusLabel(q.status)}</span></td>
                         <td>
                             ${q.convertedTo
-                                ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice('${q.convertedTo}')" title="Voir la facture" style="color: var(--success);">📄 ${escapeHtml(q.convertedInvoiceNumber || 'Facture')}</button>`
-                                : `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); convertQuoteToInvoice('${q.id}')" title="Convertir en facture" style="color: var(--success);">→📄 Facturer</button>`}
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editQuote('${q.id}')" title="Modifier / imprimer">✏️</button>
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF('${q.id}', 'quote')" title="Télécharger PDF">📥</button>
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp('${q.id}', 'quote')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteQuote('${q.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
+                                ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editInvoice(${jsArg(q.convertedTo)})" title="Voir la facture" style="color: var(--success);">📄 ${escapeHtml(q.convertedInvoiceNumber || 'Facture')}</button>`
+                                : `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); convertQuoteToInvoice(${jsArg(q.id)})" title="Convertir en facture" style="color: var(--success);">→📄 Facturer</button>`}
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editQuote(${jsArg(q.id)})" title="Modifier / imprimer">✏️</button>
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); generatePDF(${jsArg(q.id)}, 'quote')" title="Télécharger PDF">📥</button>
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); sendDocWhatsApp(${jsArg(q.id)}, 'quote')" title="Envoyer par WhatsApp" style="color: #25D366;">💬</button>
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); deleteQuote(${jsArg(q.id)})" title="Supprimer" style="color: var(--danger);">🗑</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -8793,7 +8802,7 @@ function renderClients() {
     const nextStep = (clients.length > 0 && invoices.length === 0 && !search)
         ? `<div id="clientsNextStep" style="margin:0 0 14px; padding:12px 14px; background:rgba(27,58,107,0.08); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                <span style="flex:1; min-width:180px;">✓ Client prêt. Étape suivante : créez sa première facture.</span>
-               <button class="btn btn-primary btn-sm" onclick="newInvoiceForClient('${escapeHtml(clients[clients.length - 1].id)}')">Créer la facture →</button>
+               <button class="btn btn-primary btn-sm" onclick="newInvoiceForClient(${jsArg(clients[clients.length - 1].id)})">Créer la facture →</button>
            </div>` : '';
     el.innerHTML = nextStep + `
         <table class="tbl-act">
@@ -8822,8 +8831,8 @@ function renderClients() {
                             <td>${clientInvoices.length}</td>
                             <td><strong>${formatCurrency(totalCA)}</strong></td>
                             <td>
-                                <button class="btn btn-ghost btn-sm" onclick="editClient('${c.id}')" title="Modifier">✏️</button>
-                                <button class="btn btn-ghost btn-sm" onclick="deleteClient('${c.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
+                                <button class="btn btn-ghost btn-sm" onclick="editClient(${jsArg(c.id)})" title="Modifier">✏️</button>
+                                <button class="btn btn-ghost btn-sm" onclick="deleteClient(${jsArg(c.id)})" title="Supprimer" style="color: var(--danger);">🗑</button>
                             </td>
                         </tr>
                     `;
@@ -8975,8 +8984,8 @@ function renderProducts() {
                             <td>${p.tva || 0}%</td>
                             <td>${formatCurrency(ttc)}</td>
                             <td>
-                                <button class="btn btn-ghost btn-sm" onclick="editProduct('${p.id}')" title="Modifier">✏️</button>
-                                <button class="btn btn-ghost btn-sm" onclick="deleteProduct('${p.id}')" title="Supprimer" style="color: var(--danger);">🗑</button>
+                                <button class="btn btn-ghost btn-sm" onclick="editProduct(${jsArg(p.id)})" title="Modifier">✏️</button>
+                                <button class="btn btn-ghost btn-sm" onclick="deleteProduct(${jsArg(p.id)})" title="Supprimer" style="color: var(--danger);">🗑</button>
                             </td>
                         </tr>
                     `;
@@ -9476,7 +9485,7 @@ function renderCnssEmployer() {
     document.getElementById('cnssEmployeesBody').innerHTML = emps.map(e => {
         const c = cnssForEmployee(e.gross); te += c.emp; tr += c.er;
         return `<tr><td>${escapeHtml(e.label)}</td><td>${formatCurrency(fiscalNum(e.gross))}</td><td>${formatCurrency(c.emp)}</td><td>${formatCurrency(c.er)}</td>
-            <td><button class="btn btn-secondary" onclick="deleteCnssEmployee('${escapeHtml(String(e.id))}')">Supprimer</button></td></tr>`;
+            <td><button class="btn btn-secondary" onclick="deleteCnssEmployee(${jsArg(String(e.id))})">Supprimer</button></td></tr>`;
     }).join('') || '<tr><td colspan="5" class="subtitle">Aucun salarié saisi.</td></tr>';
     document.getElementById('cnssEmpTotal').textContent = formatCurrency(fiscalR2(te));
     document.getElementById('cnssErTotal').textContent = formatCurrency(fiscalR2(tr));
@@ -9561,7 +9570,7 @@ function renderVatPurchases() {
     document.getElementById('vatPurchasesBody').innerHTML = list.map(p => `
         <tr><td>${escapeHtml(fiscalDay(p.date))}</td><td>${escapeHtml(p.supplier || '')}<br><small>${escapeHtml(p.ref || '')}</small></td>
         <td>${formatCurrency(fiscalNum(p.ht))}</td><td>${formatCurrency(fiscalNum(p.tva))}</td>
-        <td><button class="btn btn-secondary" onclick="deleteVatPurchase('${escapeHtml(String(p.id))}')">Supprimer</button></td></tr>`).join('')
+        <td><button class="btn btn-secondary" onclick="deleteVatPurchase(${jsArg(String(p.id))})">Supprimer</button></td></tr>`).join('')
         || '<tr><td colspan="5" class="subtitle">Aucun achat saisi.</td></tr>';
 }
 function vpSuggestTva() {
@@ -9780,7 +9789,7 @@ function renderReportInvoices() {
             else statusBadge = `<span class="status-pill">${i.status}</span>`;
             
             const action = (i.status !== 'paid' && i.status !== 'draft' && i.clientName) 
-                ? `<button class="btn btn-success btn-sm" onclick="quickRelance('${i.id}')" title="Relancer client">📱 Relancer</button>`
+                ? `<button class="btn btn-success btn-sm" onclick="quickRelance(${jsArg(i.id)})" title="Relancer client">📱 Relancer</button>`
                 : '—';
             
             return `
@@ -10107,7 +10116,7 @@ function renderReportTopClients() {
                 <td><strong>${formatCurrency(c.totalTTC)}</strong></td>
                 <td>${formatDate(c.lastInvoice)}</td>
                 <td>${badge}</td>
-                <td><button class="btn btn-secondary btn-sm" onclick="contactClient('${escapeHtml(c.name)}', '${c.clientId || ''}')">📱</button></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="contactClient(${jsArg(c.name)}, ${jsArg(c.clientId || '')})">📱</button></td>
             </tr>
         `;
     }).join('');
@@ -10637,7 +10646,7 @@ function renderTeamMembers() {
                     <div style="font-size: 12px; color: var(--ink-mute);">${m.email}</div>
                 </div>
                 <span class="badge" style="background: var(--surface-soft); color: var(--ink);">${roleLabels[m.role] || m.role}</span>
-                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="removeTeamMember('${m.email}')">🗑️</button>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="removeTeamMember(${jsArg(m.email)})">🗑️</button>
             </div>
         `;
     });
@@ -10654,8 +10663,8 @@ function renderTeamMembers() {
                     <div style="font-size: 12px; color: var(--ink-mute);">Invité il y a ${daysSince}j · Code: <code>${inv.code}</code></div>
                 </div>
                 <span class="badge badge-warning">${roleLabels[inv.role] || inv.role}</span>
-                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="resendInvitation('${inv.code}')" title="Renvoyer le code">📱</button>
-                <button class="btn btn-danger" style="font-size: 11px; padding: 4px 10px;" onclick="cancelInvitation('${inv.code}')" title="Annuler l'invitation">✕</button>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="resendInvitation(${jsArg(inv.code)})" title="Renvoyer le code">📱</button>
+                <button class="btn btn-danger" style="font-size: 11px; padding: 4px 10px;" onclick="cancelInvitation(${jsArg(inv.code)})" title="Annuler l'invitation">✕</button>
             </div>
         `;
     });
@@ -12753,11 +12762,11 @@ function renderPayments() {
                             : `<span class="pay-none">Aucun paiement</span> <span class="pay-sep">·</span> <strong class="pay-rest">Reste ${money(st.remaining)}</strong>`;
                         return `
                             <tr>
-                                <td onclick="editInvoice('${inv.id}')"><strong>${escapeHtml(dn(inv.number))}</strong><br><span class="pay-client">${escapeHtml(inv.clientName || '—')}</span><br><span class="pay-due">Échéance ${formatDate(inv.dueDate)}${overdueDays > 0 ? ` <span style="color: var(--danger); font-weight: 700;">· +${overdueDays} j de retard</span>` : ''}</span></td>
-                                <td onclick="editInvoice('${inv.id}')">${line}</td>
+                                <td onclick="editInvoice(${jsArg(inv.id)})"><strong>${escapeHtml(dn(inv.number))}</strong><br><span class="pay-client">${escapeHtml(inv.clientName || '—')}</span><br><span class="pay-due">Échéance ${formatDate(inv.dueDate)}${overdueDays > 0 ? ` <span style="color: var(--danger); font-weight: 700;">· +${overdueDays} j de retard</span>` : ''}</span></td>
+                                <td onclick="editInvoice(${jsArg(inv.id)})">${line}</td>
                                 <td>
-                                    ${st.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice('${inv.id}')">${st.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
-                                    <button class="btn btn-ghost btn-sm" onclick="editInvoice('${inv.id}')" title="Voir la facture">👁</button>
+                                    ${st.remaining > 0 ? `<button class="btn btn-success btn-sm" onclick="recordPaymentForInvoice(${jsArg(inv.id)})">${st.paid > 0 ? '✓ Encaisser le reste' : '✓ Encaisser'}</button>` : ''}
+                                    <button class="btn btn-ghost btn-sm" onclick="editInvoice(${jsArg(inv.id)})" title="Voir la facture">👁</button>
                                 </td>
                             </tr>
                         `;
@@ -12803,9 +12812,9 @@ function renderPayments() {
                         return `
                             <tr>
                                 <td>${formatDate(p.date)}</td>
-                                <td>${inv ? `<a href="#" onclick="editInvoice('${inv.id}'); return false;" style="color: inherit; font-weight: 700; text-decoration: underline dotted;" title="Ouvrir la facture">${escapeHtml(dn(inv.number))}</a>` : '<strong>—</strong>'}</td>
+                                <td>${inv ? `<a href="#" onclick="editInvoice(${jsArg(inv.id)}); return false;" style="color: inherit; font-weight: 700; text-decoration: underline dotted;" title="Ouvrir la facture">${escapeHtml(dn(inv.number))}</a>` : '<strong>—</strong>'}</td>
                                 <td>${escapeHtml(inv?.clientName || '—')}</td>
-                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong><br><button class="btn btn-secondary btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="generatePaymentReceiptPDF('${p.id}')" title="Télécharger le reçu de paiement (PDF)">🧾 Reçu</button>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
+                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong><br><button class="btn btn-secondary btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="generatePaymentReceiptPDF(${jsArg(p.id)})" title="Télécharger le reçu de paiement (PDF)">🧾 Reçu</button>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
                                 <td>${methodLabels[p.method] || p.method}</td>
                                 <td>${escapeHtml(p.reference || '—')}</td>
                             </tr>
@@ -13043,7 +13052,7 @@ function renderReminders() {
                             <td><span style="color: ${levelColor}; font-weight: 600; font-size: 12px;">${levelLabel}</span></td>
                             <td><strong>${formatCurrency(invoiceRemaining(inv, payList))}</strong></td>
                             <td>
-                                <button class="btn btn-primary btn-sm" onclick="generateReminderEmail('${inv.id}', ${level})">📧 Générer email</button>
+                                <button class="btn btn-primary btn-sm" onclick="generateReminderEmail(${jsArg(inv.id)}, ${level})">📧 Générer email</button>
                             </td>
                         </tr>
                     `;

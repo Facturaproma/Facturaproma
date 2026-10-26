@@ -2,6 +2,10 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <!-- Anti-clickjacking : GitHub Pages ne peut pas envoyer X-Frame-Options. La page reste invisible tant qu'elle n'est pas la fenêtre principale ;
+         si un site tiers l'affiche dans un cadre, elle tente de se rouvrir en plein écran, sinon reste vide (aucun clic détourné possible). -->
+    <style id="fp-antiframe">html{display:none!important}</style>
+    <script>try{if(window.top===window.self){document.getElementById('fp-antiframe').remove();}else{window.top.location=window.self.location;}}catch(e){}</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FacturaPro Admin — Gestion Clients & Licences</title>
     
@@ -9,11 +13,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha256-7jvo3hkrl8sdc9HpXWuCux9rZYwPl8TvdX/DMZlu09M=" crossorigin="anonymous"></script>
     
     <!-- jsPDF for PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="vendor/jspdf.umd.min.js"></script>
+    <script src="vendor/jspdf.plugin.autotable.min.js"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -2577,7 +2581,7 @@ function updateAdminSidebar() {
     const el = document.getElementById('currentAdminInfo');
     if (el) {
         el.innerHTML = `
-            <div style="font-size: 12px; font-weight: 700; color: var(--ink);">${currentAdmin.email}</div>
+            <div style="font-size: 12px; font-weight: 700; color: var(--ink);">${esc(currentAdmin.email)}</div>
             <div style="font-size: 10px; color: ${currentAdmin.isMaster ? 'var(--accent)' : 'var(--ink-mute)'}; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-top: 2px;">
                 ${currentAdmin.isStaff ? '🧾 ASSISTANT' : currentAdmin.isMaster ? '👑 MASTER' : '👤 ADMIN'}
             </div>
@@ -2759,7 +2763,7 @@ function renderStaffRequests() {
             <td><strong>${esc(r.client_email)}</strong></td>
             <td>${esc(lbl[r.tier] || r.tier || '')}</td>
             <td>${Number(r.final_price || 0).toLocaleString('fr-FR')} DH</td>
-            <td><button class="btn btn-primary btn-sm" onclick='prefillPayment(${JSON.stringify({ e: r.client_email, t: r.tier, a: r.final_price })})'>Saisir le paiement</button></td>
+            <td><button class="btn btn-primary btn-sm" onclick="prefillPayment(${esc(JSON.stringify({ e: r.client_email, t: r.tier, a: r.final_price }))})">Saisir le paiement</button></td>
         </tr>`).join('') + '</tbody></table>';
 }
 
@@ -2909,11 +2913,11 @@ function fpPaginate(key, rows, sig, renderFn) {
         let tabs = '', prev = 0;
         for (const n of nums) {
             if (prev && n - prev > 1) tabs += '<span class="fp-gap">…</span>';
-            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto('${key}',${n})">${n}</button>`;
+            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto(${jsArg(key)},${n})">${n}</button>`;
             prev = n;
         }
         html = `<div class="fp-pager" role="navigation" aria-label="Pages">
-            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page + 1})" aria-label="Page suivante">›</button>
+            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto(${jsArg(key)},${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto(${jsArg(key)},${st.page + 1})" aria-label="Page suivante">›</button>
             <span class="fp-info">${from + 1}–${from + items.length} sur ${total}</span></div>`;
     }
     return { items, html, page: st.page, pages, total, from };
@@ -2935,6 +2939,18 @@ const fpSig = (rows, extra) => rows.length + '|' + (rows[0] ? (rows[0].id || row
 
 function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// Argument texte d'un gestionnaire en ligne : onclick="fn(${jsArg(valeur)})". Tout caractère hors [A-Za-z0-9_.:@ -] est écrit \xNN / \uNNNN :
+// la chaîne ne contient ni apostrophe, ni guillemet, ni < > & (esc() seul NE suffit PAS dans un gestionnaire : le navigateur décode &#39; avant d'exécuter le JS).
+function jsArg(v) {
+    return "'" + String(v == null ? '' : v).replace(/[^A-Za-z0-9_.:@ -]/g, (c) => { const n = c.charCodeAt(0); return n < 256 ? '\\x' + ('0' + n.toString(16)).slice(-2) : '\\u' + ('000' + n.toString(16)).slice(-4); }) + "'";
+}
+// Cellule CSV sûre : neutralise les formules (=, +, -, @, tabulation) qu'un client pourrait glisser dans son e-mail ou le nom de sa société
+// (injection de formule à l'ouverture dans Excel), double les guillemets, entoure de guillemets si besoin (always=true : toujours).
+function csvCell(v, always) {
+    let s = String(v == null ? '' : v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return (always || /[;,"\n\r]/.test(s)) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
 async function loadAccounts() {
@@ -3071,9 +3087,9 @@ function relanceEmail(uid, kind) {
 function actionRowHTML(a, kind, detail) {
     return `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;">
         <div style="flex:1; min-width:180px;"><strong>${esc(a.email)}</strong><div style="font-size:12px; color:var(--ink-mute);">${detail}</div></div>
-        <button class="btn btn-secondary btn-sm" onclick="relanceWhatsApp('${a.user_id}','${kind}')">💬 WhatsApp</button>
-        <button class="btn btn-secondary btn-sm" onclick="relanceCopy('${a.user_id}','${kind}')">📋 Copier</button>
-        <button class="btn btn-secondary btn-sm" onclick="openLicenseModal('${a.user_id}')">⚙️ Licence</button>
+        <button class="btn btn-secondary btn-sm" onclick="relanceWhatsApp(${jsArg(a.user_id)},${jsArg(kind)})">💬 WhatsApp</button>
+        <button class="btn btn-secondary btn-sm" onclick="relanceCopy(${jsArg(a.user_id)},${jsArg(kind)})">📋 Copier</button>
+        <button class="btn btn-secondary btn-sm" onclick="openLicenseModal(${jsArg(a.user_id)})">⚙️ Licence</button>
     </div>`;
 }
 
@@ -3229,25 +3245,25 @@ const pg_requests = fpPaginate('requests', filtered, fpSig(filtered, (document.g
     tbody.innerHTML = pg_requests.items.map(r => `
         <tr>
             <td>${formatDate(r.created_at)}<br><small style="color: var(--ink-mute);">${formatTime(r.created_at)}</small></td>
-            <td><strong>${r.client_email}</strong></td>
-            <td>${r.company_name || '—'}<br><small style="color: var(--ink-mute);">${r.company_status || ''}</small></td>
+            <td><strong>${esc(r.client_email)}</strong></td>
+            <td>${esc(r.company_name || '—')}<br><small style="color: var(--ink-mute);">${esc(r.company_status || '')}</small></td>
             <td>${tierLabels[r.tier] || r.tier}</td>
             <td><strong>${parseFloat(r.final_price).toLocaleString('fr-FR')} DH</strong>${r.base_price !== r.final_price ? `<br><small style="text-decoration:line-through; color: var(--ink-mute);">${r.base_price} DH</small>` : ''}</td>
-            <td>${r.promo_code ? `<span class="badge badge-trial">${r.promo_code}</span>` : '—'}</td>
+            <td>${r.promo_code ? `<span class="badge badge-trial">${esc(r.promo_code)}</span>` : '—'}</td>
             <td>${statusBadges[r.status] || r.status}${(r.status === 'pending' || r.status === 'contacted') && doubleSubscriptionBlock(r.client_email, r.tier) ? '<br><span class="badge badge-danger" title="Abonnement actif : seule une formule plus longue est possible">⛔ Déjà abonné</span>' : ''}</td>
             <td>
                 ${(r.status === 'pending' || r.status === 'contacted') ? `
-                    <button class="btn ${r.status === 'pending' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="contactRequest('${esc(r.id)}')" title="Envoyer le montant et le RIB par e-mail ou WhatsApp">
+                    <button class="btn ${r.status === 'pending' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="contactRequest(${jsArg(r.id)})" title="Envoyer le montant et le RIB par e-mail ou WhatsApp">
                         ${r.status === 'pending' ? '✉️💬 Contacter' : '✉️💬 Renvoyer RIB'}
                     </button>
-                    <button class="btn ${r.status === 'contacted' ? 'btn-success' : 'btn-secondary'} btn-sm" onclick="processRequest('${esc(r.id)}')" title="Après réception du paiement : génère le code et l'envoie au client">
+                    <button class="btn ${r.status === 'contacted' ? 'btn-success' : 'btn-secondary'} btn-sm" onclick="processRequest(${jsArg(r.id)})" title="Après réception du paiement : génère le code et l'envoie au client">
                         🎁 Générer code
                     </button>
-                    <button class="btn btn-danger btn-sm" onclick="rejectRequest('${esc(r.id)}')" title="Rejeter">
+                    <button class="btn btn-danger btn-sm" onclick="rejectRequest(${jsArg(r.id)})" title="Rejeter">
                         ❌
                     </button>
                 ` : `
-                    <button class="btn btn-secondary btn-sm" onclick="reopenRequest('${esc(r.id)}')">
+                    <button class="btn btn-secondary btn-sm" onclick="reopenRequest(${jsArg(r.id)})">
                         🔄 Rouvrir
                     </button>
                 `}
@@ -3507,9 +3523,9 @@ function renderUsers() {
             if (idle >= 14) activity += `<div style="font-size:11px; color:#8B6F1F;">inactif depuis ${idle} j</div>`;
         }
         const actions = st === 'staff' ? '—' : `
-            <button class="btn btn-secondary btn-sm" onclick="openLicenseModal('${a.user_id}')">⚙️ Licence</button>
-            <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend('${a.user_id}')">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>
-            <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount('${a.user_id}')">🗑️ Supprimer</button>`;
+            <button class="btn btn-secondary btn-sm" onclick="openLicenseModal(${jsArg(a.user_id)})">⚙️ Licence</button>
+            <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend(${jsArg(a.user_id)})">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>
+            <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount(${jsArg(a.user_id)})">🗑️ Supprimer</button>`;
         return `
             <tr>
                 <td><strong>${esc(a.email)}</strong>${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
@@ -3540,7 +3556,7 @@ const pg_usersLegacy = fpPaginate('usersLegacy', filtered, fpSig(filtered, ''), 
         const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
         const badge = hasLicense ? '<span class="badge badge-success">Licence active</span>' : '<span class="badge badge-trial">Essai</span>';
         return `<tr><td><strong>${esc(u.email)}</strong></td><td>${formatDate(u.firstSeen)}</td><td>—</td><td>—</td><td>${totalPaid > 0 ? totalPaid + ' DH payé' : '—'}</td><td>—</td><td>${badge}</td>
-            <td><button class="btn btn-secondary btn-sm" onclick="openActivateModalFor('${esc(u.email)}')">+ Licence</button></td></tr>`;
+            <td><button class="btn btn-secondary btn-sm" onclick="openActivateModalFor(${jsArg(u.email)})">+ Licence</button></td></tr>`;
     }).join('');
 }
 
@@ -3702,7 +3718,7 @@ async function deleteAccount(uid) {
 function exportAccountsCSV() {
     if (!accountsAvailable) { showToast('Données de comptes indisponibles (sql/08)', 'error'); return; }
     const head = ['email', 'inscrit_le', 'derniere_activite', 'offre', 'expire_le', 'statut', 'factures', 'clients'];
-    const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const q = v => csvCell(v, true);
     const lines = [head.join(';')].concat(allAccounts.map(a => [
         a.email, a.created_at ? a.created_at.slice(0, 10) : '', a.last_activity ? a.last_activity.slice(0, 10) : '',
         PLAN_LABEL[acctPlanKey(a)] || a.type, a.expires_at ? a.expires_at.slice(0, 10) : '', acctState(a),
@@ -3748,7 +3764,7 @@ const pg_licenses = fpPaginate('licenses', usedCodes, fpSig(usedCodes, ''), rend
             <td><code>${esc(c.code)}</code></td>
             <td>${status}</td>
             <td>
-                <button class="btn btn-danger btn-sm" onclick="revokeLicense('${c.id}')">🚫 Révoquer</button>
+                <button class="btn btn-danger btn-sm" onclick="revokeLicense(${jsArg(c.id)})">🚫 Révoquer</button>
             </td>
         </tr>`;
     }).join('');
@@ -3805,7 +3821,7 @@ const pg_codes = fpPaginate('codes', allCodes, fpSig(allCodes, ''), renderCodes)
             <tr>
                 <td><code>${c.code}</code></td>
                 <td>${c.type}</td>
-                <td>${c.client_email || '—'}</td>
+                <td>${esc(c.client_email || '—')}</td>
                 <td>${formatDate(c.created_at)}</td>
                 <td>${statusBadge}</td>
             </tr>
@@ -3953,7 +3969,7 @@ function sendByEmail() {
     const subject = 'Votre code de licence FacturaPro';
     const body = `Bonjour,\n\nVoici votre code de licence FacturaPro :\n\n${lastGeneratedCode}\n\nPour l'activer :\n1. Connectez-vous à votre app FacturaPro\n2. Allez dans "Licence"\n3. Entrez le code\n\nMerci pour votre confiance !\n\nL'équipe FacturaPro`;
     
-    window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 // ============================================
@@ -3991,15 +4007,15 @@ const pg_payments = fpPaginate('payments', allPayments, fpSig(allPayments, ''), 
     tbody.innerHTML = pg_payments.items.map(p => `
         <tr>
             <td>${formatDate(p.payment_date)}</td>
-            <td><strong>${p.client_email}</strong></td>
+            <td><strong>${esc(p.client_email)}</strong></td>
             <td><strong style="color: var(--success);">${parseFloat(p.amount).toLocaleString('fr-FR')} DH</strong></td>
             <td><span class="badge badge-trial">${p.type}</span></td>
             <td>${modeIcons[p.payment_mode] || ''} ${p.payment_mode}</td>
             <td style="font-size: 12px; color: var(--ink-mute);">${esc(p.note || '—')}${p.entered_by ? `<div style="font-size:11px;">saisi par ${esc(p.entered_by)}</div>` : ''}</td>
             <td>${isStaffMode()
                 ? ((p.entered_by || '').toLowerCase() === (currentAdmin.email || '').toLowerCase() && Date.now() - new Date(p.created_at).getTime() < 86400000
-                    ? `<button class="btn btn-secondary btn-sm" onclick="cancelMyPayment('${p.id}')" title="Annuler ma saisie">↩️ Annuler</button>` : '')
-                : `<button class="btn btn-secondary btn-sm" onclick="deletePayment('${p.id}')">🗑️</button>`}</td>
+                    ? `<button class="btn btn-secondary btn-sm" onclick="cancelMyPayment(${jsArg(p.id)})" title="Annuler ma saisie">↩️ Annuler</button>` : '')
+                : `<button class="btn btn-secondary btn-sm" onclick="deletePayment(${jsArg(p.id)})">🗑️</button>`}</td>
         </tr>
     `).join('');
 }
@@ -4286,16 +4302,16 @@ function renderTreasuryReconciled() {
     
     tbody.innerHTML = list.map(r => {
         const invoiceLink = r.invoice 
-            ? `<a onclick="downloadFpDoc('${r.invoice.id}')" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${r.invoice.number}</code></a>`
+            ? `<a onclick="downloadFpDoc(${jsArg(r.invoice.id)})" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${esc(r.invoice.number)}</code></a>`
             : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>';
         const receiptLink = r.receipt
-            ? `<a onclick="downloadFpDoc('${r.receipt.id}')" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${r.receipt.number}</code></a>`
+            ? `<a onclick="downloadFpDoc(${jsArg(r.receipt.id)})" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${esc(r.receipt.number)}</code></a>`
             : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>';
         
         return `
             <tr>
-                <td><code style="font-size: 11px;">${r.paymentNumber || '—'}</code></td>
-                <td><strong>${r.client_email}</strong>${r.client_name ? `<br><small style="color: var(--ink-mute);">${r.client_name}</small>` : ''}</td>
+                <td><code style="font-size: 11px;">${esc(r.paymentNumber || '—')}</code></td>
+                <td><strong>${esc(r.client_email)}</strong>${r.client_name ? `<br><small style="color: var(--ink-mute);">${esc(r.client_name)}</small>` : ''}</td>
                 <td>${TIER_LABELS_TR[r.tier] || r.tier}</td>
                 <td>${formatDate(r.date)}</td>
                 <td><strong>${formatCurrency(r.amount)}</strong></td>
@@ -4342,13 +4358,13 @@ function renderTreasuryPending() {
             <tr>
                 <td><code style="font-size: 11px;">${c.code}</code></td>
                 <td>${formatDate(c.created_at)}</td>
-                <td><strong>${c.client_email || '—'}</strong></td>
+                <td><strong>${esc(c.client_email || '—')}</strong></td>
                 <td>${TIER_LABELS_TR[c.type] || c.type}</td>
                 <td><strong>${formatCurrency(amount)}</strong></td>
                 <td><strong style="color: ${days > 7 ? 'var(--danger)' : 'var(--ink)'};">J+${days}</strong></td>
                 <td><span style="color: ${urgenceColor}; font-weight: 600; font-size: 12px;">${urgenceLabel}</span></td>
                 <td>
-                    <button class="btn btn-success btn-sm" onclick="markAsPaid('${c.id}', '${c.client_email}', '${c.type}', ${amount})" title="Marquer payé">✓ Payé</button>
+                    <button class="btn btn-success btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(c.client_email)}, ${jsArg(c.type)}, ${amount})" title="Marquer payé">✓ Payé</button>
                 </td>
             </tr>
         `;
@@ -4375,12 +4391,12 @@ function renderTreasuryOrphan() {
         tbodyP.innerHTML = orphanPayments.map(p => `
             <tr>
                 <td>${formatDate(p.payment_date)}</td>
-                <td><strong>${p.client_email || '—'}</strong></td>
+                <td><strong>${esc(p.client_email || '—')}</strong></td>
                 <td><strong>${formatCurrency(p.amount)}</strong></td>
                 <td>${TIER_LABELS_TR[p.type] || p.type}</td>
                 <td><span style="font-size: 11px;">${p.payment_mode || 'virement'}</span></td>
                 <td>
-                    <button class="btn btn-primary btn-sm" onclick="generateMissingDocs('${p.id}', '${p.client_email}', '${p.type}', ${p.amount})" title="Générer facture/reçu manquant">📄 Régulariser</button>
+                    <button class="btn btn-primary btn-sm" onclick="generateMissingDocs(${jsArg(p.id)}, ${jsArg(p.client_email)}, ${jsArg(p.type)}, ${p.amount})" title="Générer facture/reçu manquant">📄 Régulariser</button>
                 </td>
             </tr>
         `).join('');
@@ -4400,13 +4416,13 @@ function renderTreasuryOrphan() {
             return `
                 <tr>
                     <td>${typeBadge}</td>
-                    <td><code style="font-size: 11px;">${d.number}</code></td>
+                    <td><code style="font-size: 11px;">${esc(d.number)}</code></td>
                     <td>${formatDate(d.created_at)}</td>
-                    <td><strong>${d.client_email || '—'}</strong></td>
+                    <td><strong>${esc(d.client_email || '—')}</strong></td>
                     <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
                     <td>
-                        <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc('${d.id}')">📥</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteFpDoc('${d.id}')">🗑️</button>
+                        <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})">📥</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteFpDoc(${jsArg(d.id)})">🗑️</button>
                     </td>
                 </tr>
             `;
@@ -4508,7 +4524,7 @@ const pg_ledger = fpPaginate('ledger', entries, fpSig(entries, ''), renderTreasu
     tbody.innerHTML = pg_ledger.items.map(e => `
         <tr>
             <td>${formatDate(e.date)}</td>
-            <td><code style="font-size: 11px;">${e.number}</code></td>
+            <td><code style="font-size: 11px;">${esc(e.number)}</code></td>
             <td>${e.type === 'Facture' ? '<span class="badge" style="background: var(--primary); color: white;">📋</span>' : '<span class="badge badge-success">💰</span>'} ${e.type}</td>
             <td><small>${e.client}</small></td>
             <td style="text-align: right; ${e.debit > 0 ? 'color: var(--danger); font-weight: 700;' : 'color: var(--ink-mute);'}">${e.debit > 0 ? formatCurrency(e.debit) : '—'}</td>
@@ -4581,7 +4597,7 @@ function exportTreasuryLedger() {
     const headers = ['Date', 'N° Pièce', 'Type', 'Client', 'HT (DH)', 'TVA (DH)', 'TTC (DH)', 'Débit', 'Crédit'];
     let csv = headers.join(';') + '\n';
     csv += entries.map(e => [e.date, e.number, e.type, e.client, e.ht, e.tva, e.ttc, e.debit, e.credit]
-        .map(c => String(c).includes(';') ? `"${c}"` : c)
+        .map(c => csvCell(c))
         .join(';')
     ).join('\n');
     
@@ -4904,15 +4920,15 @@ const pg_fpdocs = fpPaginate('fpdocs', docs, fpSig(docs, ''), renderFpDocuments)
         return `
             <tr>
                 <td>${typeBadge}</td>
-                <td><code style="font-size: 11px;">${d.number || '—'}</code></td>
+                <td><code style="font-size: 11px;">${esc(d.number || '—')}</code></td>
                 <td>${formatDate(d.created_at)}</td>
-                <td><strong>${d.client_email || '—'}</strong>${d.client_name ? `<br><small style="color: var(--ink-mute);">${d.client_name}</small>` : ''}</td>
+                <td><strong>${esc(d.client_email || '—')}</strong>${d.client_name ? `<br><small style="color: var(--ink-mute);">${esc(d.client_name)}</small>` : ''}</td>
                 <td>${tierLabel}</td>
                 <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
                 <td>
-                    <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc('${d.id}')" title="Télécharger PDF">📥</button>
-                    <button class="btn btn-secondary btn-sm" onclick="sendFpDoc('${d.id}')" title="Envoyer">📱</button>
-                    <button class="btn btn-secondary btn-sm" onclick="deleteFpDoc('${d.id}')" title="Supprimer" style="color: var(--danger);">🗑️</button>
+                    <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})" title="Télécharger PDF">📥</button>
+                    <button class="btn btn-secondary btn-sm" onclick="sendFpDoc(${jsArg(d.id)})" title="Envoyer">📱</button>
+                    <button class="btn btn-secondary btn-sm" onclick="deleteFpDoc(${jsArg(d.id)})" title="Supprimer" style="color: var(--danger);">🗑️</button>
                 </td>
             </tr>
         `;
@@ -5231,7 +5247,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     pdf.text('Document généré par FacturaPro - facturaproma.github.io/Facturaproma', 105, 293, { align: 'center' });
     
     if (downloadDirectly) {
-        pdf.save(`${doc.number}.pdf`);
+        pdf.save(`${esc(doc.number)}.pdf`);
     } else {
         return pdf;
     }
@@ -5252,11 +5268,11 @@ async function sendFpDoc(docId) {
     const docTypeLabel = doc.docType === 'invoice' ? 'facture' : 'reçu';
     const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
     
-    const msg = `Bonjour ${doc.client_name || ''} 🇲🇦,\n\n` +
+    const msg = `Bonjour ${esc(doc.client_name || '')} 🇲🇦,\n\n` +
         `Merci pour votre confiance !\n\n` +
         `📄 Vous trouverez ci-joint votre ${docTypeLabel} pour votre licence FacturaPro ${tierLabels[doc.tier] || ''}.\n\n` +
         `📋 Détails :\n` +
-        `• Référence : ${doc.number}\n` +
+        `• Référence : ${esc(doc.number)}\n` +
         `• Montant : ${formatCurrency(doc.totalTTC || 0)}\n` +
         `• Date : ${formatDate(doc.created_at)}\n\n` +
         `Pour toute question, n'hésitez pas.\n\nCordialement.`;
@@ -5491,10 +5507,7 @@ function exportFpDocuments() {
     ]);
     
     let csv = headers.join(';') + '\n';
-    csv += rows.map(r => r.map(c => {
-        const s = String(c || '');
-        return s.includes(';') ? `"${s}"` : s;
-    }).join(';')).join('\n');
+    csv += rows.map(r => r.map(c => csvCell(c || '')).join(';')).join('\n');
     
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -5576,8 +5589,8 @@ function renderPlans() {
             <td>${esc(planPeriodText(p.duration_days))}</td>
             <td>${p.active ? '<span class="badge badge-success">En vente</span>' : '<span class="badge">Désactivée</span>'}</td>
             <td style="white-space: nowrap;">
-                <button class="btn btn-secondary btn-sm" onclick="editPlan('${esc(p.key)}')">✏️ Modifier</button>
-                <button class="btn btn-secondary btn-sm" onclick="togglePlan('${esc(p.key)}')">${p.active ? '⏸️ Désactiver' : '▶️ Réactiver'}</button>
+                <button class="btn btn-secondary btn-sm" onclick="editPlan(${jsArg(p.key)})">✏️ Modifier</button>
+                <button class="btn btn-secondary btn-sm" onclick="togglePlan(${jsArg(p.key)})">${p.active ? '⏸️ Désactiver' : '▶️ Réactiver'}</button>
             </td>
         </tr>`).join('') : '<tr><td colspan="5" class="empty">Aucune formule personnalisée. Les offres Mensuel, Annuel et Fondateur restent disponibles.</td></tr>';
 }
@@ -6044,11 +6057,11 @@ function renderReports() {
             <tr>
                 <td>${formatDate(c.created_at)}</td>
                 <td><code style="font-size: 11px;">${c.code}</code></td>
-                <td>${c.client_email || '—'}</td>
+                <td>${esc(c.client_email || '—')}</td>
                 <td>${TIER_LABELS[c.type] || c.type}</td>
                 <td><strong>${(TIER_PRICES[c.type] || 0).toLocaleString('fr-FR')} DH</strong></td>
                 <td>${statusBadges[c.status] || c.status}</td>
-                <td style="font-size: 11px; color: var(--ink-mute);">${c.note || '—'}</td>
+                <td style="font-size: 11px; color: var(--ink-mute);">${esc(c.note || '—')}</td>
             </tr>
         `).join('');
     }
@@ -6245,7 +6258,7 @@ function renderFollowUp(pendingCodes) {
         return `
             <tr>
                 <td><code style="font-size: 11px;">${c.code}</code></td>
-                <td><strong>${c.client_email || '—'}</strong></td>
+                <td><strong>${esc(c.client_email || '—')}</strong></td>
                 <td>${TIER_LABELS[c.type] || c.type}</td>
                 <td><strong>${amount.toLocaleString('fr-FR')} DH</strong></td>
                 <td>
@@ -6255,13 +6268,13 @@ function renderFollowUp(pendingCodes) {
                 </td>
                 <td><span style="color: ${relanceColor}; font-weight: 600; font-size: 12px;">${relanceStatus}</span></td>
                 <td>
-                    <button class="btn btn-success btn-sm" onclick="relanceFollowUp('${c.code}', '${c.client_email}', '${c.type}', ${amount})" title="Envoyer relance WhatsApp">
+                    <button class="btn btn-success btn-sm" onclick="relanceFollowUp(${jsArg(c.code)}, ${jsArg(c.client_email)}, ${jsArg(c.type)}, ${amount})" title="Envoyer relance WhatsApp">
                         📱 Relancer
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="markAsPaid('${c.id}', '${c.client_email}', '${c.type}', ${amount})" title="Marquer comme payé">
+                    <button class="btn btn-secondary btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(c.client_email)}, ${jsArg(c.type)}, ${amount})" title="Marquer comme payé">
                         ✓ Payé
                     </button>
-                    <button class="btn btn-danger btn-sm" onclick="cancelCode('${c.id}')" title="Annuler ce code">
+                    <button class="btn btn-danger btn-sm" onclick="cancelCode(${jsArg(c.id)})" title="Annuler ce code">
                         ✕
                     </button>
                 </td>
@@ -6433,7 +6446,7 @@ function renderTopClients(codes, payments) {
         
         return `
             <tr>
-                <td><strong>${c.email}</strong></td>
+                <td><strong>${esc(c.email)}</strong></td>
                 <td>${c.codesGenerated}</td>
                 <td><strong style="color: ${c.amountPaid > 0 ? 'var(--success)' : 'var(--ink-mute)'};">${c.amountPaid.toLocaleString('fr-FR')} DH</strong></td>
                 <td>${formatDate(c.lastAction)}</td>
@@ -6458,11 +6471,11 @@ function exportReportCSV() {
         TIER_PRICES[c.type] || 0,
         c.status,
         c.activated_at ? formatDate(c.activated_at) : '',
-        (c.note || '').replace(/[",]/g, ' ')
+        (c.note || '')
     ]);
     
     let csv = headers.join(',') + '\n';
-    csv += rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+    csv += rows.map(r => r.map(cell => csvCell(cell, true)).join(',')).join('\n');
     
     // Download
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -6653,16 +6666,16 @@ async function renderAdmins() {
         
         return `
             <tr>
-                <td><strong>${a.email}</strong>${isCurrentUser ? ' <span style="color: var(--success); font-size: 11px;">(vous)</span>' : ''}</td>
+                <td><strong>${esc(a.email)}</strong>${isCurrentUser ? ' <span style="color: var(--success); font-size: 11px;">(vous)</span>' : ''}</td>
                 <td>${roleBadge}</td>
                 <td>${formatDate(a.created_at)}</td>
                 <td>${adminLastLogin(a) ? formatDate(adminLastLogin(a)) : '—'}</td>
                 <td>
                     ${canDelete ? `
-                        <button class="btn btn-secondary btn-sm" onclick="resetAdminPassword('${a.email}')" title="Réinitialiser mot de passe">
+                        <button class="btn btn-secondary btn-sm" onclick="resetAdminPassword(${jsArg(a.email)})" title="Réinitialiser mot de passe">
                             🔑 Reset
                         </button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteAdmin('${a.email}')" title="Supprimer">
+                        <button class="btn btn-danger btn-sm" onclick="deleteAdmin(${jsArg(a.email)})" title="Supprimer">
                             🗑️
                         </button>
                     ` : a.is_master ? '<span style="color: var(--ink-mute); font-size: 11px;">Irrévocable</span>' : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>'}
