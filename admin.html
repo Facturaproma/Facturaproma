@@ -1083,6 +1083,16 @@
                 </div>
             </div>
 
+            <div class="card staff-hide" style="margin-bottom:16px;">
+                <div class="card-header"><h2>⏳ Paiements en attente (un par code généré)</h2></div>
+                <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr><th>Code créé</th><th>Client</th><th>Attendu</th><th>Formule</th><th>Code</th><th></th></tr></thead>
+                    <tbody id="pendingPaymentsTable"><tr><td colspan="6" class="empty">Aucun paiement en attente</td></tr></tbody>
+                </table>
+                </div>
+            </div>
+
             <div class="card">
                 <table>
                     <thead>
@@ -2424,6 +2434,7 @@ const supaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 let allCodes = [];
 let allPayments = [];
+let allPendingPayments = []; // paiements 'pending' (un par code généré, sql/32) : jamais comptés dans les revenus
 let allUsers = [];
 let allRequests = [];
 let allAdmins = [];
@@ -2741,7 +2752,7 @@ async function loadStaffData() {
     try {
         const { data, error } = await supaClient.from('admin_payments').select('*').order('payment_date', { ascending: false }).limit(300);
         if (error) throw error;
-        allPayments = data || [];
+        allPayments = (data || []).filter(p => !p.status || p.status === 'paid');   // les paiements en attente ne sont jamais des revenus
     } catch (err) { console.warn('staff payments', err); allPayments = []; }
     try {
         const { data, error } = await supaClient.rpc('staff_open_requests');
@@ -2815,10 +2826,13 @@ async function loadAllData() {
             .select('*')
             .order('payment_date', { ascending: false });
         if (payErr) throw payErr;
-        allPayments = payments || [];
+        // Avant sql/32 la colonne status n'existe pas : tout est « encaissé ». Seuls les paiements encaissés comptent dans les revenus.
+        allPayments = (payments || []).filter(p => !p.status || p.status === 'paid');
+        allPendingPayments = (payments || []).filter(p => p.status === 'pending');
     } catch (err) {
         console.warn('Payments table error:', err);
         allPayments = [];
+        allPendingPayments = [];
     }
     
     // Load subscription requests
@@ -3975,7 +3989,27 @@ function sendByEmail() {
 // ============================================
 // PAYMENTS
 // ============================================
+function renderPendingPayments() {
+    const tb = document.getElementById('pendingPaymentsTable');
+    if (!tb) return;
+    if (!allPendingPayments.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">✨ Aucun paiement en attente</td></tr>'; return; }
+    const codeOf = (id) => (allCodes || []).find(c => c.id === id);
+    tb.innerHTML = allPendingPayments.map(p => {
+        const c = codeOf(p.code_id);
+        const days = Math.floor((Date.now() - new Date(p.created_at || p.payment_date).getTime()) / 864e5);
+        return `<tr>
+            <td>${formatDate(p.created_at || p.payment_date)} <span style="font-size:11px;color:${days > 7 ? 'var(--danger)' : 'var(--ink-mute)'};">J+${days}</span></td>
+            <td><strong>${esc(p.client_email)}</strong></td>
+            <td><strong>${parseFloat(p.amount).toLocaleString('fr-FR')} DH</strong></td>
+            <td><span class="badge badge-trial">${esc(p.type)}</span></td>
+            <td>${c ? `<code style="font-size:11px;">${esc(c.code)}</code> <span style="font-size:11px;color:var(--ink-mute);">${esc(c.status)}</span>` : '—'}</td>
+            <td>${c ? `<button class="btn btn-success btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(p.client_email)}, ${jsArg(p.type)}, ${parseFloat(p.amount) || 0})" title="Encaisser">✓ Encaisser</button>` : ''}</td>
+        </tr>`;
+    }).join('');
+}
+
 function renderPayments() {
+    renderPendingPayments();
     // Stats
     const total = allPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
     document.getElementById('statTotalRevenue').innerHTML = 
@@ -4034,6 +4068,17 @@ async function savePayment() {
     }
     
     try {
+        // Un paiement en attente existe pour ce client et cette formule (code généré) : l'encaisser plutôt que d'en créer un second
+        const pend = (allPendingPayments || []).find(p => String(p.client_email).toLowerCase() === email && p.type === type);
+        if (pend && confirm(`Un paiement en attente existe pour ${email} (${type}, ${parseFloat(pend.amount)} DH, lié à un code).\n\nOK = l'encaisser avec ces valeurs (recommandé, évite un doublon).\nAnnuler = enregistrer un paiement séparé.`)) {
+            const { data: cp, error: cpErr } = await supaClient.rpc('admin_confirm_payment', { p_id: pend.id, p_amount: amount, p_mode: mode, p_date: date, p_note: note || null });
+            if (cpErr) throw cpErr;
+            if (!cp || !cp.ok) throw new Error((cp && cp.reason) || 'refusé');
+            closeModal('paymentModal');
+            showToast('Paiement en attente encaissé !', 'success');
+            await loadAllData();
+            return;
+        }
         const { error } = await supaClient
             .from('admin_payments')
             .insert({
@@ -6310,23 +6355,33 @@ async function markAsPaid(codeId, email, tier, amount) {
     }
     
     try {
-        // 1. Enregistrer le paiement (récupérer l'ID retourné)
-        const { data: paymentData, error: payError } = await supaClient
-            .from('admin_payments')
-            .insert({
-                client_email: email,
-                payment_date: new Date().toISOString().split('T')[0],
-                amount: amount,
-                type: tier,
-                payment_mode: 'virement',
-                note: `Code activé : ${codeId.substring(0, 8)}`
-            })
-            .select()
-            .single();
-        
-        if (payError) throw payError;
-        
-        const paymentDbId = paymentData?.id;
+        // 1. Encaisser le paiement en attente lié au code (sql/32) ; sinon (ancien code sans paiement lié) en créer un
+        const linked = (allPendingPayments || []).find(p => p.code_id === codeId);
+        let paymentDbId;
+        if (linked) {
+            const { data: cp, error: cpErr } = await supaClient.rpc('admin_confirm_payment', {
+                p_id: linked.id, p_amount: amount, p_mode: 'virement',
+                p_date: new Date().toISOString().split('T')[0], p_note: `Code activé : ${codeId.substring(0, 8)}`
+            });
+            if (cpErr) throw cpErr;
+            if (!cp || !cp.ok) throw new Error({ already_paid: 'paiement déjà encaissé', cancelled: 'paiement annulé (code révoqué)', bad_amount: 'montant invalide' }[cp && cp.reason] || (cp && cp.reason) || 'refusé');
+            paymentDbId = linked.id;
+        } else {
+            const { data: paymentData, error: payError } = await supaClient
+                .from('admin_payments')
+                .insert({
+                    client_email: email,
+                    payment_date: new Date().toISOString().split('T')[0],
+                    amount: amount,
+                    type: tier,
+                    payment_mode: 'virement',
+                    note: `Code activé : ${codeId.substring(0, 8)}`
+                })
+                .select()
+                .single();
+            if (payError) throw payError;
+            paymentDbId = paymentData?.id;
+        }
         
         // 2. Marquer le code comme utilisé
         const { error: codeError } = await supaClient

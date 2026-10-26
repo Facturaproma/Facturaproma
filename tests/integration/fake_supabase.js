@@ -45,7 +45,10 @@
       from(table) {
         const st = { table, op: 'select', filters: {} };
         const b = {
-          select(cols) { st.op = 'select'; st.cols = cols; return b; },
+          select(cols) { if (st.op !== 'insert' && st.op !== 'update') st.op = 'select'; st.cols = cols; return b; },
+          insert(row) { st.op = 'insert'; st.row = row; return b; },
+          update(row) { st.op = 'update'; st.row = row; return b; },
+          limit() { return b; },
           eq(k, v) { st.filters[k] = v; return b; },
           order() { return b; },
           range(a, z) { st.range = [a, z]; return b; },
