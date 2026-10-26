@@ -1,6 +1,6 @@
 # Lien client : consultation d'une facture sans compte
 
-**État : code prêt ; `sql/30_lien_client_facture.sql` NON appliqué en production** (hors `MANIFEST.json`). Application d'abord en préproduction, puis en production sur autorisation explicite du propriétaire.
+**État : code prêt ; `sql/30_lien_client_facture.sql` appliqué en PRÉPRODUCTION le 26/10/2026 (droits vérifiés en lecture seule + essai réel sous les rôles `anon` / `authenticated`, annulé), NON appliqué en production** (hors `MANIFEST.json`). Application d'abord en préproduction, puis en production sur autorisation explicite du propriétaire.
 
 ## Ce que ça fait
 - Dans la liste des factures : **⋯ Plus → 🔗 Lien client** (factures enregistrées seulement, ni brouillon ni avoir).
