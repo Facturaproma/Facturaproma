@@ -1165,6 +1165,13 @@
             .mobile-only { display: inline-flex; }
         }
 
+        /* Accès « Déjà abonné ? » sous les boutons du hero : visible sur tous les écrans, surtout utile sur mobile
+           (le bouton « Se connecter » de l'en-tête est masqué en dessous de 700 px faute de place) */
+        .hero-login { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; font-size: 15px; color: var(--ink-mute, #5b6478); }
+        .hero-login-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border: 1.5px solid var(--primary, #1e3a6e); border-radius: 12px; color: var(--primary, #1e3a6e); font-weight: 700; text-decoration: none; background: #fff; }
+        .hero-login-link:hover { background: var(--surface, #f5f3ee); }
+        @media (min-width: 701px) { .hero-login { display: none; } }
+
         /* Version mobile compacte */
         @media (max-width: 700px) {
             section { padding-top: 40px !important; padding-bottom: 40px !important; }
@@ -1304,6 +1311,10 @@
                     <a href="#tarifs" class="btn btn-secondary btn-large">
                         Voir les tarifs
                     </a>
+                </div>
+                <div class="hero-login">
+                    <span>Déjà abonné ?</span>
+                    <a href="app.html?mode=login" class="hero-login-link">Se connecter</a>
                 </div>
                 <div class="hero-trust">
                     <div>
@@ -1804,6 +1815,7 @@ const AR_DICT = {
 "Tarifs": "الأسعار",
 "FAQ": "أسئلة شائعة",
 "Se connecter": "تسجيل الدخول",
+"Déjà abonné ?": "لديك حساب؟",
 "🚀 Essai Gratuit 14 jours": "🚀 جرّب مجاناً",
 "🇲🇦 Pensé pour la facturation au Maroc": "🇲🇦 مصمّم للفوترة في المغرب",
 "La facturation<br>marocaine, <em>enfin simple</em>.": "الفوترة المغربية،<br><em>أخيراً بكل بساطة</em>.",
