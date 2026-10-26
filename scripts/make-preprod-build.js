@@ -20,6 +20,13 @@ html = html.replace(re1, `const SUPABASE_URL = '${url}';`).replace(re2, `const S
 if (html.includes(T.prodRef)) die('la référence de PRODUCTION est encore présente dans le build.');
 fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'app.html'), html);
+// Page publique « lien client » : mêmes constantes remplacées (sinon le build de préproduction appellerait la production)
+let fjs = fs.readFileSync(path.join(ROOT, 'facture.js'), 'utf8');
+if (!re1.test(fjs) || !re2.test(fjs)) die('lignes SUPABASE_URL / SUPABASE_ANON_KEY introuvables dans facture.js.');
+fjs = fjs.replace(re1, `const SUPABASE_URL = '${url}';`).replace(re2, `const SUPABASE_ANON_KEY = '${T.anonKey}';`);
+if (fjs.includes(T.prodRef)) die('la référence de PRODUCTION est encore présente dans facture.js du build.');
+fs.writeFileSync(path.join(out, 'facture.js'), fjs);
+fs.copyFileSync(path.join(ROOT, 'facture.html'), path.join(out, 'facture.html'));
 for (const f of ['docstore.js', 'manifest.json']) fs.copyFileSync(path.join(ROOT, f), path.join(out, f));
 for (const d of ['fonts']) if (fs.existsSync(path.join(ROOT, d))) fs.cpSync(path.join(ROOT, d), path.join(out, d), { recursive: true });
 for (const f of fs.readdirSync(ROOT)) if (/^(icon-|favicon)/.test(f)) fs.copyFileSync(path.join(ROOT, f), path.join(out, f));
