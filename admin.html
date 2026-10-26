@@ -1113,6 +1113,15 @@
                 </div>
             </div>
 
+            <div class="card staff-hide" id="unlinkedPaymentsCard" style="margin-bottom:16px; display:none; border-left:4px solid var(--warning);">
+                <div class="card-header"><h2>🔗 Paiements encaissés sans code (à rattacher)</h2></div>
+                <div style="padding:0 16px 12px; font-size:13px; color:var(--ink-mute);">Saisis à la main, sans code de licence lié. Vérifie qu'un code existe pour ce client (ou crée-le) : ce contrôle évite les encaissements « orphelins ».</div>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Date</th><th>Client</th><th>Montant</th><th>Type</th><th>Code du client</th></tr></thead>
+                    <tbody id="unlinkedPaymentsTable"></tbody>
+                </table></div>
+            </div>
+
             <div class="card">
                 <table>
                     <thead>
@@ -4101,8 +4110,27 @@ function renderPendingPayments() {
     }).join('');
 }
 
+// Contrôle : paiements encaissés qui ne sont liés à aucun code (saisie manuelle). Liste « à rattacher », jamais bloquante.
+function renderUnlinkedPayments() {
+    const card = document.getElementById('unlinkedPaymentsCard'), tb = document.getElementById('unlinkedPaymentsTable');
+    if (!card || !tb) return;
+    const list = (allPayments || []).filter(p => !p.code_id && (p.status === 'paid' || !p.status));
+    card.style.display = list.length && !isStaffMode() ? '' : 'none';
+    tb.innerHTML = list.map(p => {
+        const codes = (allCodes || []).filter(c => String(c.client_email || '').toLowerCase() === String(p.client_email).toLowerCase() && c.status !== 'revoked');
+        return `<tr>
+            <td>${formatDate(p.payment_date)}</td>
+            <td><strong>${esc(p.client_email)}</strong></td>
+            <td>${parseFloat(p.amount).toLocaleString('fr-FR')} DH</td>
+            <td><span class="badge badge-trial">${esc(p.type)}</span></td>
+            <td>${codes.length ? codes.map(c => `<code style="font-size:11px;">${esc(c.code)}</code> <span style="font-size:11px;color:var(--ink-mute);">${esc(c.status)}</span>`).join('<br>') : '<span style="color:var(--danger);font-size:12px;">aucun code</span>'}</td>
+        </tr>`;
+    }).join('');
+}
+
 function renderPayments() {
     renderPendingPayments();
+    renderUnlinkedPayments();
     // Stats
     const total = allPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
     document.getElementById('statTotalRevenue').innerHTML = 
