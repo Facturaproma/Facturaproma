@@ -54,6 +54,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('code annulé → paiement annulé, non compté', sql("SELECT status FROM public.admin_payments WHERE client_email='autre@client.test'") === 'cancelled' && (await p.evaluate(() => allPendingPayments.length)) === 0);
   ok('aucun code ni paiement orphelin', sql("SELECT count(*) FROM public.admin_codes c WHERE NOT EXISTS (SELECT 1 FROM public.admin_payments p WHERE p.code_id=c.id)") === '0' && sql("SELECT count(*) FROM public.admin_payments WHERE code_id IS NULL") === '0');
 
+  // Paiement saisi à la main sans code : signalé « à rattacher », jamais bloqué
+  await p.evaluate(async () => { document.getElementById('paymentEmail').value = 'direct@client.test'; document.getElementById('paymentDate').value = new Date().toISOString().slice(0, 10); document.getElementById('paymentAmount').value = '49'; document.getElementById('paymentType').value = 'monthly'; document.getElementById('paymentMode').value = 'virement'; document.getElementById('paymentNote').value = ''; await savePayment(); });
+  await sleep(900);
+  const ul = await p.evaluate(() => ({ shown: getComputedStyle(document.getElementById('unlinkedPaymentsCard')).display !== 'none', txt: document.getElementById('unlinkedPaymentsTable').textContent }));
+  ok('paiement manuel sans code : enregistré et listé « à rattacher » (avec « aucun code »)', sql("SELECT count(*) FROM public.admin_payments WHERE client_email='direct@client.test' AND status='paid' AND code_id IS NULL") === '1' && ul.shown && /direct@client\.test/.test(ul.txt) && /aucun code/.test(ul.txt));
+  ok('les paiements liés à un code ne figurent pas dans la liste « à rattacher »', !/nouveau@client\.test/.test(ul.txt));
+
   await browser.close(); srv.close(); try { dropDb(db); } catch (e) {}
   const n = R_.filter(Boolean).length; console.log(`\n${n === R_.length ? 'OK' : 'ÉCHEC'} : ${n}/${R_.length} contrôles (paiement lié au code)`); process.exit(n === R_.length ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(1); });
