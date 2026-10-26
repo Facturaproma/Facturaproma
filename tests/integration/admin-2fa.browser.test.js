@@ -21,7 +21,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const db = createDb({}); const be = makeBackend(db);
   const { execFileSync } = require('child_process');
   const sql = (q) => execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-q', '-t', '-A', '-d', db, '-c', q]).toString().trim();
-  sql("INSERT INTO auth.users(id,email,email_confirmed_at) VALUES ('f6f6f6f6-0000-0000-0000-000000000001','boss@test.invalid',now()),('f6f6f6f6-0000-0000-0000-000000000002','client@test.invalid',now()); INSERT INTO public.admins(email,password_hash,is_master) VALUES ('boss@test.invalid','x',true)");
+  sql("INSERT INTO auth.users(id,email,email_confirmed_at) VALUES ('f6f6f6f6-0000-0000-0000-000000000001','boss@test.invalid',now()),('f6f6f6f6-0000-0000-0000-000000000002','client@test.invalid',now()),('f6f6f6f6-0000-0000-0000-000000000003','sub@test.invalid',now()); INSERT INTO public.admins(email,password_hash,is_master) VALUES ('boss@test.invalid','x',true),('sub@test.invalid','x',false)");
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
   const R_ = []; const ok = (n, c, x = '') => { R_.push(!!c); console.log((c ? 'PASS ' : 'FAIL ') + n + (x ? ' ' + x : '')); };
   async function page(init) {
@@ -81,6 +81,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   p = await page(() => { window.__mfa = { realistic: true, factors: [{ id: 'fac-1', status: 'verified', factor_type: 'totp' }], level: 'aal1', log: [] }; localStorage.setItem('__fake_session', JSON.stringify({ access_token: 'x', user: { id: 'f6f6f6f6-0000-0000-0000-000000000001', email: 'boss@test.invalid' } })); });
   await sleep(300);
   ok('session aal1 rechargée : console fermée', !(await appOpen(p)));
+  await p.close();
+
+  // 6. Admin NON propriétaire sans 2FA : aucune activation imposée, accès par mot de passe ; session rechargée conservée
+  p = await page(() => { window.__mfa = { realistic: true, factors: [], level: 'aal1', log: [] }; });
+  await login(p, 'sub@test.invalid');
+  ok('admin non propriétaire sans 2FA : accès direct, aucune activation imposée', (await appOpen(p)) && !(await overlay(p)) && await p.evaluate(() => window.__mfa.factors.length === 0));
+  await p.close();
+  p = await page(() => { window.__mfa = { realistic: true, factors: [], level: 'aal1', log: [] }; localStorage.setItem('__fake_session', JSON.stringify({ access_token: 'tok_f6f6f6f6-0000-0000-0000-000000000003', user: { id: 'f6f6f6f6-0000-0000-0000-000000000003', email: 'sub@test.invalid' } })); });
+  await sleep(1200);
+  ok('admin non propriétaire sans 2FA : session rechargée conservée (pas de déconnexion forcée)', await appOpen(p));
+  await p.close();
+  p = await page(() => { window.__mfa = { realistic: true, factors: [], level: 'aal1', log: [] }; localStorage.setItem('__fake_session', JSON.stringify({ access_token: 'tok_f6f6f6f6-0000-0000-0000-000000000001', user: { id: 'f6f6f6f6-0000-0000-0000-000000000001', email: 'boss@test.invalid' } })); });
+  await sleep(1200);
+  ok('propriétaire sans 2FA validée, session rechargée : console fermée (activation obligatoire)', !(await appOpen(p)));
+  await p.close();
+  // 7. Admin non propriétaire qui a activé la 2FA de lui-même : le code lui est demandé
+  p = await page(() => { window.__mfa = { realistic: true, factors: [{ id: 'fac-9', status: 'verified', factor_type: 'totp' }], level: 'aal1', log: [] }; });
+  await login(p, 'sub@test.invalid');
+  ok('admin non propriétaire avec 2FA volontaire : code demandé, console fermée', (await overlay(p)) && !(await appOpen(p)));
   await p.close();
 
   await browser.close(); srv.close(); try { dropDb(db); } catch (e) {}
