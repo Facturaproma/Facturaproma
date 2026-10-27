@@ -5176,10 +5176,10 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         try {
             // Logo à son ratio d'origine, contenu dans une zone 34 × 22 mm et centré verticalement
             const ip = pdf.getImageProperties(cfg.logo);
-            const box = { w: 34, h: 22 };
+            const box = { w: 46, h: 26 };
             const sc = Math.min(box.w / ip.width, box.h / ip.height);
             const lw = ip.width * sc, lh = ip.height * sc;
-            pdf.addImage(cfg.logo, ip.fileType || 'PNG', M, 10 + (box.h - lh) / 2, lw, lh);
+            pdf.addImage(cfg.logo, ip.fileType || 'PNG', M, 9 + (box.h - lh) / 2, lw, lh);
             textX = M + lw + 6;
         } catch (e) { console.warn('Logo error:', e); }
     }
@@ -5240,6 +5240,9 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     if (doc.client_name && doc.client_email) { pdf.text(pdf.splitTextToSize(doc.client_email, bw - 10)[0], cx, cy); cy += 4.5; }
     else if (!doc.client_name && doc.client_email) { /* e-mail déjà affiché comme nom */ }
     if (doc.client_ice) { pdf.text(`ICE : ${doc.client_ice}`, cx, cy); cy += 4.5; }
+    const planName = ({ ...planLabelMap(), lifetime: 'Accès à vie', monthly: 'Mensuelle', annual: 'Annuelle', founder: 'Fondateur', business: 'Business' })[doc.tier];
+    if (planName) { pdf.text(`Licence : ${planName}`, cx, cy); cy += 4.5; }
+    if (doc.code) { pdf.text(`Code : ${doc.code}`, cx, cy); cy += 4.5; }
     yPos += bh + 8;
 
     // === DATES & STATUT (bandeau 3 colonnes) ===
@@ -5348,7 +5351,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     pdf.text('Total TTC', totalsX + 2, yPos + 1);
     pdf.setTextColor(...accentColor);
     pdf.setFontSize(13);
-    pdf.text(fmt(totalTTC), 193, yPos + 1, { align: 'right' });
+    pdf.text(fmt(totalTTC), 191, yPos + 1, { align: 'right' });
     yPos += 18;
     
     // === MENTION PAIEMENT (pour reçu uniquement) ===
