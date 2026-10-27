@@ -605,6 +605,27 @@
 .am-admin { align-self:flex-end; background:var(--ink, #1b2a49); color:#fff; }
 .am-form { padding:10px; border-top:1px solid var(--line, #eee); display:flex; flex-direction:column; gap:8px; }
 .am-form textarea { width:100%; min-height:70px; font:inherit; padding:9px; border:1px solid var(--line, #d9d4c7); border-radius:8px; box-sizing:border-box; resize:vertical; }
+    .fp-doc-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+    .fp-doc-filters select, .fp-doc-filters input { padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; background:var(--card, #fff); color:inherit; }
+    .fp-doc-filters input { flex:1; min-width:180px; }
+    .fp-doc-list { display:grid; gap:10px; contain:content; }
+    .fp-doc-list .empty { padding:28px 12px; text-align:center; color:var(--ink-mute); }
+    .fp-order { border:1px solid var(--border); border-radius:12px; background:var(--card, #fff); padding:12px 14px; content-visibility:auto; contain-intrinsic-size:auto 150px; }
+    .fp-order-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+    .fp-order-client { font-weight:600; word-break:break-all; min-width:0; flex:1 1 180px; }
+    .fp-order-meta { font-size:12px; color:var(--ink-mute); margin-top:2px; }
+    .fp-order-right { text-align:right; }
+    .fp-order-amount { font-weight:700; font-size:16px; white-space:nowrap; }
+    .fp-st { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:99px; margin-top:4px; }
+    .fp-st-paid { background:#dcfce7; color:#166534; } .fp-st-issued { background:#fef3c7; color:#92400e; } .fp-st-void { background:#fee2e2; color:#991b1b; }
+    .fp-order-docs { margin-top:10px; display:grid; gap:6px; }
+    .fp-docline { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:8px; background:rgba(127,127,127,.08); }
+    .fp-docline.fp-pending { opacity:.6; font-style:italic; }
+    .fp-docline-main { flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:2px 8px; align-items:baseline; font-size:13px; }
+    .fp-docline-main code { font-size:12px; font-weight:600; }
+    .fp-docline-main small { color:var(--ink-mute); }
+    .fp-docline .btn { flex:none; }
+    .fp-order.fp-void .fp-order-amount { text-decoration:line-through; }
     .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
 .fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
 .fp-pg:disabled { opacity:.4; cursor:default; }
@@ -1725,34 +1746,18 @@
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
-                    <select id="fpDocFilterType" onchange="renderFpDocuments()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
-                        <option value="all">Tous les documents</option>
-                        <option value="invoice">📋 Factures</option>
-                        <option value="receipt">📄 Reçus</option>
+                <div class="fp-doc-filters">
+                    <select id="fpDocFilterType" onchange="renderFpDocuments()" aria-label="Filtrer par statut">
+                        <option value="all">Toutes les commandes</option>
+                        <option value="issued">⏳ À régler</option>
+                        <option value="paid">✅ Soldées</option>
+                        <option value="void">🚫 Annulées</option>
                     </select>
-                    <input type="text" id="fpDocFilterSearch" placeholder="🔍 Rechercher (client, numéro)..." oninput="renderFpDocuments()" style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                    <input type="search" id="fpDocFilterSearch" placeholder="🔍 Client, numéro, code…" oninput="fpDocSearchDebounced()">
                     <button class="btn btn-primary btn-sm" onclick="exportFpDocuments()">📥 Exporter CSV</button>
                 </div>
 
-                <div class="table-card">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Type</th>
-                                <th>Numéro</th>
-                                <th>Date</th>
-                                <th>Client</th>
-                                <th>Type licence</th>
-                                <th>Montant TTC</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fpDocsTable">
-                            <tr><td colspan="7" class="empty">Aucun document émis</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <div id="fpDocsTable" class="fp-doc-list"><div class="empty">Aucun document émis</div></div>
             </div>
 
             <!-- ================ ONGLET 3 : STATISTIQUES ================ -->
@@ -3048,7 +3053,7 @@ function fpGoto(key, n) {
 
 // Admin : les listes sont des <tbody> ; le pager est placé juste après le <table> (créé au besoin).
 function fpHost(tbody, html) {
-    const table = tbody && tbody.closest('table'); if (!table) return;
+    const table = tbody && (tbody.closest('table') || tbody); if (!table) return;
     let host = table.nextElementSibling;
     if (!host || !host.classList.contains('fp-host')) { host = document.createElement('div'); host.className = 'fp-host'; table.insertAdjacentElement('afterend', host); }
     host.innerHTML = html;
@@ -5051,29 +5056,36 @@ async function loadFpDocuments() {
 async function saveFpDocuments() { /* lecture seule : l'émission est faite par la base */ }
 
 // === RENDER LISTE ===
+let _fpDocSearchT = null;
+function fpDocSearchDebounced() { clearTimeout(_fpDocSearchT); _fpDocSearchT = setTimeout(renderFpDocuments, 150); }
+
+// Regroupe les documents par commande : 1 facture + son reçu (clé = payment_db_id, sinon group_id, sinon id du document).
+function fpGroupDocs(docs) {
+    const map = new Map();
+    for (const d of docs) {
+        const key = d.payment_db_id || d.group_id || ('doc:' + d.id);
+        let g = map.get(key);
+        if (!g) { g = { key, invoice: null, receipt: null, latest: 0 }; map.set(key, g); }
+        if (d.docType === 'receipt') g.receipt = d; else g.invoice = d;
+        g.latest = Math.max(g.latest, new Date(d.created_at).getTime() || 0);
+    }
+    return [...map.values()].sort((x, y) => y.latest - x.latest);
+}
+function fpOrderStatus(g) {
+    const ref = g.invoice || g.receipt;
+    if ((g.invoice && g.invoice.status === 'void') || (!g.invoice && ref.status === 'void')) return 'void';
+    return g.receipt ? 'paid' : 'issued';
+}
+
 function renderFpDocuments() {
-    const filterType = document.getElementById('fpDocFilterType')?.value || 'all';
-    const search = (document.getElementById('fpDocFilterSearch')?.value || '').toLowerCase();
-    
-    let docs = [...fpDocuments];
-    if (filterType !== 'all') {
-        docs = docs.filter(d => d.docType === filterType);
-    }
-    if (search) {
-        docs = docs.filter(d => 
-            (d.number || '').toLowerCase().includes(search) ||
-            (d.client_email || '').toLowerCase().includes(search) ||
-            (d.client_name || '').toLowerCase().includes(search)
-        );
-    }
-    docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    
-    // Stats
+    const filter = document.getElementById('fpDocFilterType')?.value || 'all';
+    const search = (document.getElementById('fpDocFilterSearch')?.value || '').trim().toLowerCase();
+
+    // Stats (sur l'ensemble des documents)
     const totalAmount = fpDocuments.reduce((s, d) => s + (d.totalTTC || 0), 0);
     const receipts = fpDocuments.filter(d => d.docType === 'receipt');
     const invoices = fpDocuments.filter(d => d.docType === 'invoice');
     const totalTva = invoices.reduce((s, d) => s + (d.tva || 0), 0);
-    
     document.getElementById('fpStatTotalAmount').textContent = formatCurrency(totalAmount);
     document.getElementById('fpStatTotalCount').textContent = `${fpDocuments.length} document${fpDocuments.length > 1 ? 's' : ''}`;
     document.getElementById('fpStatReceiptCount').textContent = receipts.length;
@@ -5081,38 +5093,41 @@ function renderFpDocuments() {
     document.getElementById('fpStatInvoiceCount').textContent = invoices.length;
     document.getElementById('fpStatInvoiceAmount').textContent = formatCurrency(invoices.reduce((s, d) => s + (d.totalTTC || 0), 0));
     document.getElementById('fpStatTvaAmount').textContent = formatCurrency(totalTva);
-    
-    // Table
-    const tbody = document.getElementById('fpDocsTable');
-    if (docs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty">Aucun document à afficher</td></tr>';
+
+    let groups = fpGroupDocs(fpDocuments);
+    if (filter !== 'all') groups = groups.filter(g => fpOrderStatus(g) === filter);
+    if (search) {
+        groups = groups.filter(g => [g.invoice, g.receipt].some(d => d && [d.number, d.client_email, d.client_name, d.code, d.payment_id].some(v => (v || '').toLowerCase().includes(search))));
+    }
+
+    const host = document.getElementById('fpDocsTable');
+    if (groups.length === 0) {
+        host.innerHTML = '<div class="empty">Aucun document à afficher</div>';
+        const h = host.nextElementSibling; if (h && h.classList.contains('fp-host')) h.innerHTML = '';
         return;
     }
-    
-const pg_fpdocs = fpPaginate('fpdocs', docs, fpSig(docs, ''), renderFpDocuments); fpHost(tbody, pg_fpdocs.html);
-    tbody.innerHTML = pg_fpdocs.items.map(d => {
-        const typeBadge = d.docType === 'invoice' 
-            ? '<span class="badge" style="background: var(--primary); color: white;">📋 Facture</span>'
-            : '<span class="badge" style="background: var(--accent); color: var(--ink);">📄 Reçu</span>';
-        
-        const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
-        const tierLabel = tierLabels[d.tier] || d.tier || '—';
-        
-        return `
-            <tr>
-                <td>${typeBadge}</td>
-                <td><code style="font-size: 11px;">${esc(d.number || '—')}</code></td>
-                <td>${formatDate(d.created_at)}</td>
-                <td><strong>${esc(d.client_email || '—')}</strong>${d.client_name ? `<br><small style="color: var(--ink-mute);">${esc(d.client_name)}</small>` : ''}</td>
-                <td>${tierLabel}</td>
-                <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
-                <td>
-                    <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})" title="Télécharger PDF">📥</button>
-                    <button class="btn btn-secondary btn-sm" onclick="sendFpDoc(${jsArg(d.id)})" title="Envoyer">📱</button>
-                    
-                </td>
-            </tr>
-        `;
+    const pg = fpPaginate('fpdocs', groups, fpSig(groups, filter + '|' + search), renderFpDocuments);
+    fpHost(host, pg.html);
+
+    const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const stLabel = { paid: '✅ Soldée', issued: '⏳ À régler', void: '🚫 Annulée' };
+    const line = (d, icon, label) => d
+        ? `<div class="fp-docline"><div class="fp-docline-main"><span>${icon} ${label}</span><code>${esc(d.number || '—')}</code><small>${formatDate(d.created_at)}${d.payment_mode ? ' · ' + esc(d.payment_mode) : ''}</small></div>
+            <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})" title="Télécharger le PDF">📥</button>
+            <button class="btn btn-secondary btn-sm" onclick="sendFpDoc(${jsArg(d.id)})" title="Envoyer">📱</button></div>`
+        : `<div class="fp-docline fp-pending"><div class="fp-docline-main"><span>${icon} ${label}</span><small>en attente de paiement</small></div></div>`;
+
+    host.innerHTML = pg.items.map(g => {
+        const ref = g.invoice || g.receipt;
+        const st = fpOrderStatus(g);
+        const tier = tierLabels[ref.tier] || ref.tier || '';
+        return `<div class="fp-order fp-${st}">
+            <div class="fp-order-head">
+                <div class="fp-order-client">${esc(ref.client_email || '—')}${ref.client_name ? `<div class="fp-order-meta">${esc(ref.client_name)}</div>` : ''}<div class="fp-order-meta">${esc(tier)}${ref.code ? ' · ' + esc(ref.code) : ''}</div></div>
+                <div class="fp-order-right"><div class="fp-order-amount">${formatCurrency(ref.totalTTC || 0)}</div><span class="fp-st fp-st-${st}">${stLabel[st]}</span></div>
+            </div>
+            <div class="fp-order-docs">${line(g.invoice, '📋', 'Facture')}${st === 'void' && !g.receipt ? '' : line(g.receipt, '📄', 'Reçu')}</div>
+        </div>`;
     }).join('');
 }
 
