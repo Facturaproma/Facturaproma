@@ -4564,7 +4564,7 @@
 
                 <div class="form-group">
                     <label>Code de licence</label>
-                    <input type="text" id="licenseCodeInput" placeholder="FACTURA-XXXX-XXXX-XXXX" style="text-transform: uppercase;">
+                    <input type="text" id="licenseCodeInput" placeholder="FP-XXXX-XXXX-XXXX" style="text-transform: uppercase;">
                 </div>
 
                 <button class="btn btn-success" onclick="activateLicense()" style="width: 100%;">
@@ -12416,7 +12416,7 @@ async function activateLicense() {
     }
     // ═════════════════════════════════════════════════
     
-    // Validate format: FP-XXXX-XXXX-XXXX or FACTURA-XXXX-XXXX-XXXX
+    // Format : FP-XXXX-XXXX-XXXX (codes générés par l'admin) ; FACTURA-… reste accepté (anciens codes)
     if (!/^(FP|FACTURA)-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
         showToast('Format invalide. Attendu : FP-XXXX-XXXX-XXXX', 'error');
         return;
