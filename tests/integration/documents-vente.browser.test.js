@@ -60,6 +60,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.evaluate(async () => { await loadFpDocuments(); renderFpDocuments(); });
   const tbl = await p.evaluate(() => document.getElementById('fpDocsTable').textContent);
   ok('onglet « Mes factures » : documents listés, sans bouton de suppression', /LIC-\d{4}-0001/.test(tbl) && /REC-\d{4}-0001/.test(tbl) && !/deleteFpDoc/.test(await p.evaluate(() => document.getElementById('fpDocsTable').innerHTML)));
+  const grp = await p.evaluate(() => { const o = [...document.querySelectorAll('#fpDocsTable .fp-order')]; return o.map(e => ({ inv: (e.textContent.match(/LIC-\d{4}-\d{4}/) || [])[0], rec: (e.textContent.match(/REC-\d{4}-\d{4}/) || [])[0], st: e.className })); });
+  ok('onglet documents : 1 carte par commande, facture + reçu groupés (2 commandes, pas 3 lignes)', grp.length === 2 && grp.some(g => g.inv && g.rec && /fp-paid/.test(g.st)) && grp.some(g => g.inv && !g.rec && /fp-void/.test(g.st)), JSON.stringify(grp));
+  await p.evaluate(() => { const s = document.getElementById('fpDocFilterType'); s.value = 'paid'; renderFpDocuments(); });
+  ok('filtre « Soldées » : 1 commande', (await p.evaluate(() => document.querySelectorAll('#fpDocsTable .fp-order').length)) === 1);
+  await p.evaluate(() => { document.getElementById('fpDocFilterType').value = 'all'; document.getElementById('fpDocFilterSearch').value = 'annule@'; renderFpDocuments(); });
+  ok('recherche par e-mail : 1 commande (annulée)', (await p.evaluate(() => document.querySelectorAll('#fpDocsTable .fp-order.fp-void').length)) === 1);
+  await p.evaluate(() => { document.getElementById('fpDocFilterSearch').value = ''; renderFpDocuments(); });
+  if (process.env.SHOT_DIR) { await p.setViewportSize({ width: 390, height: 800 }); await p.evaluate(() => { navTo('myinvoicing'); switchMyInvTab('documents'); if (typeof toggleSidebar === 'function' && document.querySelector('.sidebar.open')) toggleSidebar(); document.getElementById('myinv-documents').scrollIntoView(); }); await sleep(300); await p.screenshot({ path: process.env.SHOT_DIR + '/docs-mobile.png' }); await p.setViewportSize({ width: 1280, height: 800 }); }
   await p.evaluate(async () => { document.getElementById('paymentEmail').value = 'direct@client.test'; document.getElementById('paymentDate').value = new Date().toISOString().slice(0, 10); document.getElementById('paymentAmount').value = '449'; document.getElementById('paymentType').value = 'annual'; document.getElementById('paymentMode').value = 'virement'; await savePayment(); });
   await sleep(1000);
   ok('paiement saisi à la main → facture + reçu émis', sql("SELECT count(*) FROM public.admin_documents WHERE client_email='direct@client.test'") === '2');
