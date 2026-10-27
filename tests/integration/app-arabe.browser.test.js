@@ -62,6 +62,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('clients en arabe, sans français', /العملاء/.test(t) && /عميل جديد/.test(t) && !FR.test(t), (t.match(FR) || [''])[0]);
   await p.evaluate(() => navTo('invoices')); await sleep(400); t = await txt(p, '#mainApp');
   ok('factures en arabe (filtres), sans français', /مسودات/.test(t) && /متأخرة/.test(t) && !FR.test(t), (t.match(FR) || [''])[0]);
+  // Écrans secondaires : aucun texte français résiduel (hors noms propres, formats et modèles de messages destinés aux clients)
+  const OK_FR = /^(@placeholder:(Bonjour, je me|Suite à mon|Sans paiement de|FACTURA-|Casablanca|https|FAC|DEV|AVR)|FAC-2026|.*@facturapro-test|Business|ICE \*|SWIFT \/ BIC|CSV Excel|FEC)/;
+  for (const pg of ['invoice-editor', 'quotes', 'products', 'reports', 'payments', 'reminders', 'messages', 'license', 'company', 'team']) {
+    await p.evaluate((x) => { try { navTo(x); } catch (e) {} }, pg); await sleep(500);
+    const left = await p.evaluate((x) => { const root = document.getElementById('page-' + x); const out = []; const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n;
+      while ((n = w.nextNode())) { const v = n.nodeValue.trim(); if (v && !/[؀-ۿ]/.test(v) && /[A-Za-zÀ-ÿ]{3,}/.test(v)) out.push(v); }
+      root.querySelectorAll('[placeholder],[title]').forEach((e) => ['placeholder', 'title'].forEach((a) => { const v = e.getAttribute(a); if (v && /[A-Za-zÀ-ÿ]{3,}/.test(v) && !/[؀-ۿ]/.test(v)) out.push('@' + a + ':' + v); }));
+      return out; }, pg).then((l) => l.filter((v) => !OK_FR.test(v)));
+    ok('écran « ' + pg + ' » traduit en arabe', left.length === 0, left.slice(0, 3).join(' / '));
+  }
+  // Fenêtres, assistant de démarrage, écran de licence : tout le texte statique est traduit (hors CNSS / impôts, lot suivant)
+  const leftAll = await p.evaluate(() => { const out = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n;
+    while ((n = w.nextNode())) { const v = n.nodeValue.trim(); if (!v || /[؀-ۿ]/.test(v) || !/[A-Za-zÀ-ÿ]{3,}/.test(v)) continue; if (n.parentNode.closest('script,style,#page-cnss,#page-taxes')) continue; out.push(v); }
+    document.querySelectorAll('[placeholder],[title]').forEach((e) => ['placeholder', 'title'].forEach((a) => { const v = e.getAttribute(a); if (v && /[A-Za-zÀ-ÿ]{3,}/.test(v) && !/[؀-ۿ]/.test(v) && !e.closest('#page-cnss,#page-taxes')) out.push('@' + a + ':' + v); }));
+    return out; }).then((l) => l.filter((v) => !OK_FR.test(v) && !/^@placeholder:(votre@email|employe@|Mohamed|contact@|123 Boulevard|BCMAMAMC|FP-XXXX)/.test(v) && !/^(FacturaPro|facturaproma\.github\.io\/Facturaproma\/app\.html|Sage|EBP|Cegid|Ciel|Quadratus|RIB|ICE|RC|Email)$/.test(v)));
+  ok('fenêtres, assistant et licence : aucun texte français résiduel', leftAll.length === 0, leftAll.slice(0, 4).join(' / '));
   ok('le bouton de langue reste masqué (aperçu seulement)', await p.evaluate(() => { const e = document.getElementById('langCheckAr'); return !e || !e.offsetParent; }));
   ok('aucun défilement horizontal en arabe sur mobile', await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
   await ctx.close();
