@@ -2855,6 +2855,7 @@ async function loadStaffData() {
         const { data, error } = await supaClient.from('admin_payments').select('*').order('payment_date', { ascending: false }).limit(300);
         if (error) throw error;
         allPayments = (data || []).filter(p => !p.status || p.status === 'paid');   // les paiements en attente ne sont jamais des revenus
+        await loadFpDocuments();
     } catch (err) { console.warn('staff payments', err); allPayments = []; }
     try {
         const { data, error } = await supaClient.rpc('staff_open_requests');
@@ -2931,6 +2932,7 @@ async function loadAllData() {
         // Avant sql/32 la colonne status n'existe pas : tout est « encaissé ». Seuls les paiements encaissés comptent dans les revenus.
         allPayments = (payments || []).filter(p => !p.status || p.status === 'paid');
         allPendingPayments = (payments || []).filter(p => p.status === 'pending');
+        await loadFpDocuments();
     } catch (err) {
         console.warn('Payments table error:', err);
         allPayments = [];
@@ -4091,6 +4093,18 @@ function sendByEmail() {
 // ============================================
 // PAYMENTS
 // ============================================
+// Boutons « facture / reçu » d'un paiement (numéros émis par la base ; PDF réservé à l'admin car il lit les réglages société)
+function fpDocBtns(paymentId) {
+    const docs = (fpDocuments || []).filter(d => d.payment_db_id && d.payment_db_id === paymentId);
+    if (!docs.length) return '<span style="font-size:11px;color:var(--ink-mute);">aucun document</span>';
+    return docs.sort((a, b) => (a.docType === 'invoice' ? -1 : 1)).map(d => {
+        const lab = (d.docType === 'invoice' ? '📋 ' : '🧾 ') + esc(d.number) + (d.status === 'void' ? ' (annulée)' : '');
+        return isStaffMode()
+            ? `<div style="font-size:11px;">${lab}</div>`
+            : `<button class="btn btn-secondary btn-sm" style="margin:1px 0;" onclick="downloadFpDoc(${jsArg(d.id)})" title="Télécharger le PDF">${lab}</button>`;
+    }).join('<br>');
+}
+
 function renderPendingPayments() {
     const tb = document.getElementById('pendingPaymentsTable');
     if (!tb) return;
@@ -4105,7 +4119,7 @@ function renderPendingPayments() {
             <td><strong>${parseFloat(p.amount).toLocaleString('fr-FR')} DH</strong></td>
             <td><span class="badge badge-trial">${esc(p.type)}</span></td>
             <td>${c ? `<code style="font-size:11px;">${esc(c.code)}</code> <span style="font-size:11px;color:var(--ink-mute);">${esc(c.status)}</span>` : '—'}</td>
-            <td>${c ? `<button class="btn btn-success btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(p.client_email)}, ${jsArg(p.type)}, ${parseFloat(p.amount) || 0})" title="Encaisser">✓ Encaisser</button>` : ''}</td>
+            <td>${c ? `<button class="btn btn-success btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(p.client_email)}, ${jsArg(p.type)}, ${parseFloat(p.amount) || 0})" title="Encaisser">✓ Encaisser</button>` : ''}<div style="margin-top:4px;">${fpDocBtns(p.id)}</div></td>
         </tr>`;
     }).join('');
 }
@@ -4167,10 +4181,10 @@ const pg_payments = fpPaginate('payments', allPayments, fpSig(allPayments, ''), 
             <td><span class="badge badge-trial">${p.type}</span></td>
             <td>${modeIcons[p.payment_mode] || ''} ${p.payment_mode}</td>
             <td style="font-size: 12px; color: var(--ink-mute);">${esc(p.note || '—')}${p.entered_by ? `<div style="font-size:11px;">saisi par ${esc(p.entered_by)}</div>` : ''}</td>
-            <td>${isStaffMode()
+            <td>${fpDocBtns(p.id)}<div style="margin-top:4px;">${isStaffMode()
                 ? ((p.entered_by || '').toLowerCase() === (currentAdmin.email || '').toLowerCase() && Date.now() - new Date(p.created_at).getTime() < 86400000
                     ? `<button class="btn btn-secondary btn-sm" onclick="cancelMyPayment(${jsArg(p.id)})" title="Annuler ma saisie">↩️ Annuler</button>` : '')
-                : `<button class="btn btn-secondary btn-sm" onclick="deletePayment(${jsArg(p.id)})">🗑️</button>`}</td>
+                : `<button class="btn btn-secondary btn-sm" onclick="deletePayment(${jsArg(p.id)})">🗑️</button>`}</div></td>
         </tr>
     `).join('');
 }
@@ -4221,7 +4235,8 @@ async function savePayment() {
 }
 
 async function deletePayment(id) {
-    if (!confirm('Supprimer ce paiement ?')) return;
+    const linkedDocs = (fpDocuments || []).filter(d => d.payment_db_id === id);
+    if (!confirm('Supprimer ce paiement ?' + (linkedDocs.length ? '\n\n⚠️ Les documents déjà émis (' + linkedDocs.map(d => d.number).join(', ') + ') sont conservés : leur numéro reste attribué et ils restent valables comptablement.' : ''))) return;
     
     try {
         const { error } = await supaClient.from('admin_payments').delete().eq('id', id);
@@ -4588,7 +4603,7 @@ function renderTreasuryOrphan() {
                     <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
                     <td>
                         <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})">📥</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteFpDoc(${jsArg(d.id)})">🗑️</button>
+                        
                     </td>
                 </tr>
             `;
@@ -4597,23 +4612,14 @@ function renderTreasuryOrphan() {
 }
 
 async function generateMissingDocs(paymentDbId, email, tier, amount) {
-    if (!confirm(`Générer facture + reçu pour ce paiement de ${amount} DH (${email}) ?`)) return;
-    
+    // Les documents sont émis automatiquement par la base : on recharge simplement la liste.
     try {
-        const created = await createFpDocumentForPayment({
-            client_email: email,
-            amount: amount,
-            type: tier,
-            payment_id: '',
-            payment_db_id: paymentDbId
-        });
-        
+        const created = await createFpDocumentForPayment({ payment_db_id: paymentDbId });
         if (created && created.length > 0) {
-            showToast(`✓ ${created.length} document${created.length > 1 ? 's' : ''} généré${created.length > 1 ? 's' : ''}`, 'success');
-            await loadFpDocuments();
+            showToast(`✓ ${created.length} document${created.length > 1 ? 's' : ''} déjà émis pour ce paiement`, 'success');
             renderTreasury();
         } else {
-            showToast('Configurez d\'abord Ma Facturation', 'error');
+            showToast('Aucun document pour ce paiement (montant nul ou paiement annulé).', 'error');
         }
     } catch (err) {
         showToast('Erreur : ' + err.message, 'error');
@@ -4804,15 +4810,19 @@ function switchMyInvTab(tab) {
 }
 
 // === CONFIGURATION DE L'ENTREPRISE FACTURAPRO ===
+// admin_settings.value est une colonne TEXTE : la config y est stockée en JSON (lecture tolérante : texte ou objet)
+function fpParseCfg(v) {
+    if (!v) return {};
+    if (typeof v === 'object') return v;
+    try { const o = JSON.parse(v); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; }
+}
+async function fpReadCfg() {
+    const { data } = await supaClient.from('admin_settings').select('value').eq('key', 'fp_company_config').maybeSingle();
+    return fpParseCfg(data && data.value);
+}
 async function loadFpCompany() {
     try {
-        const { data, error } = await supaClient
-            .from('admin_settings')
-            .select('value')
-            .eq('key', 'fp_company_config')
-            .maybeSingle();
-        
-        const cfg = (data && data.value) || {};
+        const cfg = await fpReadCfg();
         
         document.getElementById('fpCompanyName').value = cfg.name || '';
         document.getElementById('fpCompanyForm').value = cfg.form || 'sarl';
@@ -4867,7 +4877,7 @@ async function saveFpCompany() {
         bank: document.getElementById('fpCompanyBank').value.trim(),
         rib: document.getElementById('fpCompanyRIB').value.trim(),
         swift: document.getElementById('fpCompanySwift').value.trim(),
-        tvaRate: parseFloat(document.getElementById('fpCompanyTvaRate').value) || 20,
+        tvaRate: (() => { const t = parseFloat(document.getElementById('fpCompanyTvaRate').value); return isNaN(t) ? 20 : t; })(),
         invPrefix: document.getElementById('fpCompanyInvPrefix').value.trim() || 'LIC',
         receiptPrefix: document.getElementById('fpCompanyReceiptPrefix').value.trim() || 'REC',
         autoMode: document.getElementById('fpCompanyAutoMode').value,
@@ -4888,7 +4898,7 @@ async function saveFpCompany() {
     try {
         const { error } = await supaClient
             .from('admin_settings')
-            .upsert({ key: 'fp_company_config', value: cfg }, { onConflict: 'key' });
+            .upsert({ key: 'fp_company_config', value: JSON.stringify(cfg) }, { onConflict: 'key' });
         
         if (error) throw error;
         
@@ -5009,31 +5019,36 @@ function getNextFpDocNumber(type) {
 }
 
 // === LOAD DOCUMENTS ===
+// Les factures et reçus sont émis par la base (sql/33) : numérotation atomique, non supprimables. Ici : lecture seule, remise en forme.
 async function loadFpDocuments() {
     try {
-        const { data, error } = await supaClient
-            .from('admin_settings')
-            .select('value')
-            .eq('key', 'fp_documents_emitted')
-            .maybeSingle();
-        
-        fpDocuments = (data?.value && Array.isArray(data.value)) ? data.value : [];
+        const cfg = await fpReadCfg();
+        const { data, error } = await supaClient.from('admin_documents').select('*').order('issued_at', { ascending: false }).limit(2000);
+        if (error) throw error;
+        const rows = data || [];
+        const receiptByPay = {};
+        rows.filter(d => d.doc_type === 'receipt' && d.payment_id).forEach(d => { receiptByPay[d.payment_id] = d; });
+        fpDocuments = rows.map(d => {
+            const ttc = parseFloat(d.total_ttc) || 0;
+            const rate = (d.tva_rate !== null && d.tva_rate !== undefined) ? parseFloat(d.tva_rate) : (cfg.tvaRate ?? 20);
+            const ht = rate > 0 ? ttc / (1 + rate / 100) : ttc;
+            const rc = d.doc_type === 'invoice' && d.payment_id ? receiptByPay[d.payment_id] : (d.doc_type === 'receipt' ? d : null);
+            return {
+                id: d.id, number: d.number, docType: d.doc_type, tier: d.tier, client_email: d.client_email, client_name: '',
+                totalHT: Math.round(ht * 100) / 100, tva: Math.round((ttc - ht) * 100) / 100, tvaRate: rate, totalTTC: ttc,
+                payment_db_id: d.payment_id, payment_id: d.code || '', payment_number: rc ? rc.number : '',
+                group_id: d.payment_id || d.id, status: d.status === 'void' ? 'void' : (rc ? 'reconciled' : 'issued'),
+                void_note: d.void_note || '', code: d.code || '', payment_mode: d.payment_mode || (rc && rc.payment_mode) || '',
+                payment_date: d.payment_date || (rc && rc.payment_date) || '', created_at: d.issued_at, rc_amount: rc ? parseFloat(rc.total_ttc) : null
+            };
+        });
     } catch (err) {
         console.warn('Could not load FP documents:', err);
         fpDocuments = [];
     }
 }
 
-async function saveFpDocuments() {
-    try {
-        const { error } = await supaClient
-            .from('admin_settings')
-            .upsert({ key: 'fp_documents_emitted', value: fpDocuments }, { onConflict: 'key' });
-        if (error) throw error;
-    } catch (err) {
-        console.warn('Could not save FP documents:', err);
-    }
-}
+async function saveFpDocuments() { /* lecture seule : l'émission est faite par la base */ }
 
 // === RENDER LISTE ===
 function renderFpDocuments() {
@@ -5094,7 +5109,7 @@ const pg_fpdocs = fpPaginate('fpdocs', docs, fpSig(docs, ''), renderFpDocuments)
                 <td>
                     <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})" title="Télécharger PDF">📥</button>
                     <button class="btn btn-secondary btn-sm" onclick="sendFpDoc(${jsArg(d.id)})" title="Envoyer">📱</button>
-                    <button class="btn btn-secondary btn-sm" onclick="deleteFpDoc(${jsArg(d.id)})" title="Supprimer" style="color: var(--danger);">🗑️</button>
+                    
                 </td>
             </tr>
         `;
@@ -5109,13 +5124,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     }
     
     // Récupérer la config
-    const { data: settingsData } = await supaClient
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'fp_company_config')
-        .maybeSingle();
-    
-    const cfg = (settingsData && settingsData.value) || {};
+    const cfg = await fpReadCfg();
     
     if (!cfg.name) {
         showToast('Configurez d\'abord votre entreprise', 'error');
@@ -5227,12 +5236,17 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         pdf.text('Échéance', 110, yPos);
         pdf.setFont('helvetica', 'normal');
         pdf.text(formatDate(doc.created_at), 145, yPos);
+        if (doc.status === 'void') {
+            pdf.setTextColor(180, 40, 40); pdf.setFont('helvetica', 'bold');
+            pdf.text('ANNULÉE', 175, yPos);
+            pdf.setTextColor(...grayDark);
+        }
     } else {
         pdf.setFont('helvetica', 'bold');
         pdf.text('Statut', 110, yPos);
         pdf.setTextColor(...accentColor);
         pdf.setFont('helvetica', 'bold');
-        pdf.text('PAYÉ ✓', 145, yPos);
+        pdf.text('PAYÉ', 145, yPos);
         pdf.setTextColor(...grayDark);
     }
     yPos += 12;
@@ -5266,7 +5280,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         business: 'Licence FacturaPro Business' 
     };
     
-    const tvaRate = cfg.tvaRate ?? 20;
+    const tvaRate = (doc.tvaRate !== undefined && doc.tvaRate !== null) ? doc.tvaRate : (cfg.tvaRate ?? 20);
     const totalTTC = doc.totalTTC || 0;
     let totalHT, tvaAmount;
     
@@ -5354,11 +5368,12 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         pdf.setTextColor(255, 255, 255);
         pdf.setFontSize(11);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`✓ PAIEMENT REÇU LE ${formatDate(doc.created_at)}`, 105, yPos + 6, { align: 'center' });
-        if (doc.payment_number) {
+        pdf.text(`PAIEMENT REÇU LE ${formatDate(doc.payment_date || doc.created_at)}` + ({ virement: ' — VIREMENT', cmi: ' — CARTE', cash: ' — ESPÈCES', cheque: ' — CHÈQUE' }[doc.payment_mode] || ''), 105, yPos + 6, { align: 'center' });
+        {
             pdf.setFontSize(8);
             pdf.setFont('helvetica', 'normal');
-            pdf.text(`Réf. paiement : ${doc.payment_number}`, 105, yPos + 11, { align: 'center' });
+            const invRef = fpDocuments.find(x => x.docType === 'invoice' && x.payment_db_id && x.payment_db_id === doc.payment_db_id);
+            pdf.text(invRef ? `Facture ${invRef.number}` : '', 105, yPos + 11, { align: 'center' });
         }
         yPos += 20;
     }
@@ -5370,12 +5385,21 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         pdf.setTextColor(255, 255, 255);
         pdf.setFontSize(10);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`✓ FACTURE SOLDÉE — Paiement réf. ${doc.payment_number}`, 105, yPos + 7.5, { align: 'center' });
+        pdf.text(`FACTURE SOLDÉE — Paiement réf. ${doc.payment_number}`, 105, yPos + 7.5, { align: 'center' });
         yPos += 18;
     }
     
     // === BANK DETAILS (pour facture) ===
-    if (isInvoice && (cfg.bank || cfg.rib)) {
+    if (isInvoice && doc.status === 'issued') {
+        pdf.setFillColor(...accentColor);
+        pdf.roundedRect(15, yPos, 180, 10, 2, 2, 'F');
+        pdf.setTextColor(...primaryColor);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('À RÉGLER — un reçu sera émis dès réception du paiement', 105, yPos + 6.5, { align: 'center' });
+        yPos += 14;
+    }
+    if (isInvoice && doc.status !== 'void' && (cfg.bank || cfg.rib)) {
         pdf.setFillColor(...grayLight);
         pdf.roundedRect(15, yPos, 180, 18, 2, 2, 'F');
         pdf.setTextColor(...primaryColor);
@@ -5453,86 +5477,15 @@ async function sendFpDoc(docId) {
     }, 500);
 }
 
-async function deleteFpDoc(docId) {
-    if (!confirm('Supprimer ce document ?\n\n⚠️ La suppression est définitive.')) return;
-    
-    fpDocuments = fpDocuments.filter(d => d.id !== docId);
-    await saveFpDocuments();
-    renderFpDocuments();
-    showToast('Document supprimé', 'success');
+function deleteFpDoc() {
+    showToast('Un document émis ne se supprime pas (numérotation légale). Une commande annulée marque sa facture « annulée ».', 'error');
 }
 
 // === CRÉATION AUTOMATIQUE D'UN DOC LORS DU PAIEMENT ===
 async function createFpDocumentForPayment(payment) {
-    // payment = { client_email, client_name (optional), amount, type, payment_id, payment_db_id }
-    
-    // Récupérer la config
-    const { data: settingsData } = await supaClient
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'fp_company_config')
-        .maybeSingle();
-    
-    const cfg = (settingsData && settingsData.value) || {};
-    if (!cfg.name) {
-        console.warn('FP company not configured, skipping doc generation');
-        return;
-    }
-    
+    // Facture et reçu sont émis par la base (déclencheurs sql/33) dès la commande / l'encaissement : on recharge et on renvoie ceux du paiement.
     await loadFpDocuments();
-    
-    const autoMode = cfg.autoMode || 'both';
-    const docsToCreate = [];
-    
-    if (autoMode === 'both' || autoMode === 'receipt') {
-        docsToCreate.push('receipt');
-    }
-    if (autoMode === 'both' || autoMode === 'invoice') {
-        docsToCreate.push('invoice');
-    }
-    
-    // === Génération d'un numéro de paiement unique ===
-    const paymentNumber = getNextFpDocNumber('payment');
-    
-    const created = [];
-    const groupId = 'group-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
-    
-    for (const docType of docsToCreate) {
-        const number = getNextFpDocNumber(docType);
-        const tvaRate = cfg.tvaRate ?? 20;
-        const totalTTC = payment.amount || 0;
-        const totalHT = tvaRate > 0 ? totalTTC / (1 + tvaRate / 100) : totalTTC;
-        const tva = totalTTC - totalHT;
-        
-        const newDoc = {
-            id: 'fpdoc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-            number,
-            docType,
-            tier: payment.type,
-            client_email: payment.client_email,
-            client_name: payment.client_name || '',
-            client_ice: payment.client_ice || '',
-            totalHT: Math.round(totalHT * 100) / 100,
-            tva: Math.round(tva * 100) / 100,
-            tvaRate,
-            totalTTC,
-            payment_id: payment.payment_id,        // Lien vers le code admin
-            payment_db_id: payment.payment_db_id,  // Lien vers admin_payments.id
-            payment_number: paymentNumber,         // Numéro PAY-2026-XXX
-            group_id: groupId,                     // Lie facture + reçu ensemble
-            status: 'reconciled',                  // Soldé (paiement reçu)
-            created_at: new Date().toISOString()
-        };
-        
-        fpDocuments.push(newDoc);
-        created.push(newDoc);
-    }
-    
-    if (created.length > 0) {
-        await saveFpDocuments();
-    }
-    
-    return created;
+    return fpDocuments.filter(d => d.payment_db_id && d.payment_db_id === payment.payment_db_id);
 }
 
 // === STATS ===
