@@ -63,12 +63,14 @@
           limit() { return b; },
           eq(k, v) { st.filters[k] = v; return b; },
           order() { return b; },
+          maybeSingle() { st.one = true; return b; },
+          single() { st.one = true; return b; },
           range(a, z) { st.range = [a, z]; return b; },
           upsert(row) { st.op = 'upsert'; st.row = row; return b; },
           delete() { st.op = 'delete'; return b; },
           then(res, rej) {
             const p = window.__net.down ? Promise.resolve(netErr()) : call('table', st);
-            return p.then(res, rej);
+            return (st.one ? p.then((r) => (r && Array.isArray(r.data) ? { ...r, data: r.data[0] || null } : r)) : p).then(res, rej);
           }
         };
         return b;
