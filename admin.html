@@ -5168,124 +5168,97 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     const isInvoice = doc.docType === 'invoice';
     const docTitle = isInvoice ? 'FACTURE' : 'REÇU';
     
-    // === HEADER ===
-    pdf.setFillColor(...primaryColor);
-    pdf.rect(0, 0, 210, 38, 'F');
-    pdf.setFillColor(...accentColor);
-    pdf.rect(0, 38, 210, 1.5, 'F');
-    
-    let textX = 15;
-    
-    // Logo
+    // === EN-TÊTE (fond blanc : le logo, quelles que soient ses couleurs, reste lisible) ===
+    const M = 15, R = 195, W = 180;
+    const formLabels = { sarl: 'SARL', sa: 'SA', sarlu: 'SARL.AU', sas: 'SAS', ae: 'Auto-Entrepreneur', freelance: 'Profession libérale' };
+    let textX = M;
     if (cfg.logo) {
         try {
-            pdf.addImage(cfg.logo, 'PNG', 12, 7, 24, 24);
-            textX = 42;
+            // Logo à son ratio d'origine, contenu dans une zone 34 × 22 mm et centré verticalement
+            const ip = pdf.getImageProperties(cfg.logo);
+            const box = { w: 34, h: 22 };
+            const sc = Math.min(box.w / ip.width, box.h / ip.height);
+            const lw = ip.width * sc, lh = ip.height * sc;
+            pdf.addImage(cfg.logo, ip.fileType || 'PNG', M, 10 + (box.h - lh) / 2, lw, lh);
+            textX = M + lw + 6;
         } catch (e) { console.warn('Logo error:', e); }
     }
-    
-    // Nom entreprise
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(22);
+    pdf.setTextColor(...primaryColor);
+    pdf.setFontSize(17);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(cfg.name || 'FacturaPro', textX, 18);
-    
-    // Forme juridique
-    const formLabels = { sarl: 'SARL', sa: 'SA', sarlu: 'SARL.AU', sas: 'SAS', ae: 'Auto-Entrepreneur', freelance: 'Profession libérale' };
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...accentColor);
-    pdf.text(formLabels[cfg.form] || '', textX, 25);
-    
-    // Doc title (right)
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(28);
+    const nameLines = pdf.splitTextToSize(cfg.name || 'FacturaPro', 95 - (textX - M));
+    pdf.text(nameLines.slice(0, 2), textX, 19);
+    const form = formLabels[cfg.form] || '';
+    if (form) {
+        pdf.setFontSize(8.5);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(...accentColor);
+        pdf.text(form.toUpperCase(), textX, 19 + 5.5 * Math.min(2, nameLines.length));
+    }
+    // Titre du document (droite)
+    pdf.setTextColor(...primaryColor);
+    pdf.setFontSize(26);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(docTitle, 195, 22, { align: 'right' });
+    pdf.text(docTitle, R, 20, { align: 'right' });
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...accentColor);
-    pdf.text(doc.number || '', 195, 30, { align: 'right' });
-    
-    // === COMPANY INFO LINE ===
-    let yPos = 48;
     pdf.setTextColor(...grayDark);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-    
-    const companyInfo = [];
-    if (cfg.ice) companyInfo.push(`ICE : ${cfg.ice}`);
-    if (cfg.if) companyInfo.push(`IF : ${cfg.if}`);
-    if (cfg.rc) companyInfo.push(`RC : ${cfg.rc}`);
-    if (cfg.patente) companyInfo.push(`Patente : ${cfg.patente}`);
-    if (cfg.cnss) companyInfo.push(`CNSS : ${cfg.cnss}`);
-    if (cfg.phone) companyInfo.push(`Tél : ${cfg.phone}`);
-    
-    pdf.text(companyInfo.join('  ·  '), 15, yPos);
-    yPos += 4;
-    
-    // Adresse
-    const addrParts = [];
-    if (cfg.address) addrParts.push(cfg.address);
-    if (cfg.zip) addrParts.push(cfg.zip);
-    if (cfg.city) addrParts.push(cfg.city);
-    if (addrParts.length > 0) {
-        pdf.text(addrParts.join(', '), 15, yPos);
-        yPos += 4;
-    }
-    if (cfg.email) {
-        pdf.text(`Email : ${cfg.email}` + (cfg.website ? `   ·   ${cfg.website}` : ''), 15, yPos);
-        yPos += 4;
-    }
-    
-    // === DATES & DOC INFO ===
-    yPos += 6;
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(9);
-    pdf.text('Date d\'émission', 15, yPos);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(formatDate(doc.created_at), 60, yPos);
-    
-    if (isInvoice) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Échéance', 110, yPos);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(formatDate(doc.created_at), 145, yPos);
-        if (doc.status === 'void') {
-            pdf.setTextColor(180, 40, 40); pdf.setFont('helvetica', 'bold');
-            pdf.text('ANNULÉE', 175, yPos);
-            pdf.setTextColor(...grayDark);
-        }
-    } else {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Statut', 110, yPos);
-        pdf.setTextColor(...accentColor);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('PAYÉ', 145, yPos);
-        pdf.setTextColor(...grayDark);
-    }
-    yPos += 12;
-    
-    // === CLIENT BLOCK ===
+    pdf.text('N° ' + (doc.number || ''), R, 27.5, { align: 'right' });
+    // Filets
+    pdf.setFillColor(...primaryColor);
+    pdf.rect(M, 36, W, 0.8, 'F');
+    pdf.setFillColor(...accentColor);
+    pdf.rect(M, 36.8, 28, 0.8, 'F');
+
+    // === ÉMETTEUR / CLIENT (deux blocs égaux) ===
+    let yPos = 46;
+    const bw = 87.5, bh = 32, gap = 5;
     pdf.setFillColor(...grayLight);
-    pdf.roundedRect(15, yPos, 90, 30, 2, 2, 'F');
-    
-    pdf.setTextColor(...primaryColor);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('FACTURÉ À', 20, yPos + 7);
-    
-    pdf.setFontSize(11);
-    pdf.text(doc.client_name || doc.client_email || 'Client', 20, yPos + 14);
-    
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...grayDark);
-    if (doc.client_email) pdf.text(doc.client_email, 20, yPos + 20);
-    if (doc.client_ice) pdf.text(`ICE : ${doc.client_ice}`, 20, yPos + 26);
-    
-    yPos += 40;
-    
+    pdf.roundedRect(M, yPos, bw, bh, 2, 2, 'F');
+    pdf.roundedRect(M + bw + gap, yPos, bw, bh, 2, 2, 'F');
+    const label = (t, x) => { pdf.setTextColor(...accentColor); pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold'); pdf.text(t, x, yPos + 7); };
+    label('ÉMETTEUR', M + 5);
+    label(isInvoice ? 'FACTURÉ À' : 'REÇU DE', M + bw + gap + 5);
+    // Émetteur
+    pdf.setTextColor(...primaryColor); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+    pdf.text(pdf.splitTextToSize(cfg.name || '', bw - 10)[0] || '', M + 5, yPos + 13);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...grayDark);
+    const e = [];
+    const addr = [cfg.address, [cfg.zip, cfg.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    if (addr) e.push(...pdf.splitTextToSize(addr, bw - 10).slice(0, 2));
+    const ids = [cfg.ice && `ICE ${cfg.ice}`, cfg.if && `IF ${cfg.if}`, cfg.rc && `RC ${cfg.rc}`, cfg.patente && `Patente ${cfg.patente}`, cfg.cnss && `CNSS ${cfg.cnss}`].filter(Boolean).join('  ·  ');
+    if (ids) e.push(...pdf.splitTextToSize(ids, bw - 10).slice(0, 2));
+    const contact = [cfg.phone && `Tél ${cfg.phone}`, cfg.email].filter(Boolean).join('  ·  ');
+    if (contact) e.push(...pdf.splitTextToSize(contact, bw - 10).slice(0, 1));
+    e.slice(0, 5).forEach((t, i) => pdf.text(t, M + 5, yPos + 18.5 + i * 4.2));
+    // Client
+    const cx = M + bw + gap + 5;
+    pdf.setTextColor(...primaryColor); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+    pdf.text(pdf.splitTextToSize(doc.client_name || doc.client_email || 'Client', bw - 10)[0], cx, yPos + 13);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(...grayDark);
+    let cy = yPos + 18.5;
+    if (doc.client_name && doc.client_email) { pdf.text(pdf.splitTextToSize(doc.client_email, bw - 10)[0], cx, cy); cy += 4.5; }
+    else if (!doc.client_name && doc.client_email) { /* e-mail déjà affiché comme nom */ }
+    if (doc.client_ice) { pdf.text(`ICE : ${doc.client_ice}`, cx, cy); cy += 4.5; }
+    yPos += bh + 8;
+
+    // === DATES & STATUT (bandeau 3 colonnes) ===
+    const cell = (x, k, v, color) => {
+        pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...grayDark); pdf.text(k, x, yPos);
+        pdf.setFontSize(10); pdf.setTextColor(...(color || primaryColor)); pdf.text(v, x, yPos + 5.5);
+    };
+    cell(M, 'DATE D\'ÉMISSION', formatDate(doc.created_at));
+    if (isInvoice) {
+        cell(M + 62, 'ÉCHÉANCE', formatDate(doc.created_at));
+        if (doc.status === 'void') cell(M + 124, 'STATUT', 'ANNULÉE', [180, 40, 40]);
+        else if (doc.status === 'reconciled') cell(M + 124, 'STATUT', 'SOLDÉE', [46, 125, 91]);
+        else cell(M + 124, 'STATUT', 'À RÉGLER', accentColor);
+    } else {
+        cell(M + 62, 'DATE DE PAIEMENT', formatDate(doc.payment_date || doc.created_at));
+        cell(M + 124, 'STATUT', 'PAYÉ', [46, 125, 91]);
+    }
+    yPos += 13;
+
     // === ITEMS TABLE ===
     const tierLabels = { ...planLabelMap(), 
         lifetime: 'Licence FacturaPro - Accès à vie', 
@@ -5322,16 +5295,18 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         headStyles: {
             fillColor: primaryColor,
             textColor: [255, 255, 255],
-            fontSize: 10,
+            fontSize: 9,
             fontStyle: 'bold',
-            cellPadding: 5
+            cellPadding: { top: 4, bottom: 4, left: 5, right: 5 }
         },
         bodyStyles: {
             fontSize: 10,
-            cellPadding: 5,
-            textColor: grayDark
+            cellPadding: { top: 6, bottom: 6, left: 5, right: 5 },
+            textColor: grayDark,
+            lineWidth: 0
         },
-        alternateRowStyles: { fillColor: [250, 248, 243] },
+        didDrawCell: (d) => { if (d.section === 'body') { pdf.setDrawColor(225, 220, 208); pdf.setLineWidth(0.3); pdf.line(d.cell.x, d.cell.y + d.cell.height, d.cell.x + d.cell.width, d.cell.y + d.cell.height); } },
+        didParseCell: (d) => { if (d.section === 'head') { const al = { 0: 'left', 1: 'center', 2: 'right', 3: 'center', 4: 'right' }[d.column.index]; d.cell.styles.halign = al; } },
         columnStyles: {
             0: { cellWidth: 80 },
             1: { cellWidth: 18, halign: 'center' },
@@ -5366,7 +5341,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     
     // Grand Total
     pdf.setFillColor(...primaryColor);
-    pdf.roundedRect(totalsX - 2, yPos - 6, 79, 12, 1.5, 1.5, 'F');
+    pdf.roundedRect(totalsX - 2, yPos - 6, 77, 12, 1.5, 1.5, 'F');
     pdf.setTextColor(255, 255, 255);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(12);
@@ -5441,6 +5416,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     }
     
     // === FOOTER ===
+    pdf.setFillColor(...grayLight); pdf.rect(15, 279, 180, 0.4, 'F');
     pdf.setTextColor(150, 150, 150);
     pdf.setFontSize(7);
     pdf.setFont('helvetica', 'normal');
