@@ -13203,6 +13203,22 @@ function openInMailto() {
 // fonts/) est chargée uniquement si le document contient de l'arabe, puis les textes arabes sont mis
 // en forme (liaison des lettres + sens droite-à-gauche) avec processArabic de jsPDF.
 const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F]/;
+// Libellés fixes des PDF en arabe (aperçu ?lang=ar). Les mentions légales et fiscales restent en français tant qu'elles n'ont pas été relues.
+const PDF_AR = {"facture": "الفاتورة", "devis": "عرض سعر", "avoir": "إشعار دائن", "reçu de paiement": "وصل أداء", "proposition commerciale": "عرض تجاري", "brouillon · non enregistrée": "مسودة · غير مسجّلة", "note de crédit": "إشعار دائن", "annulée par avoir": "ملغاة بإشعار دائن", "soldée": "مسدّدة", "paiement partiel": "أداء جزئي", "paiement soldé": "أداء مسدِّد", "paiement enregistré": "أداء مسجّل", "brouillon": "مسودة", "avoir établi pour": "إشعار دائن لفائدة", "facturé à": "موجّهة إلى", "destinataire": "المرسل إليه", "reçu de": "مستلَم من", "date d'émission": "تاريخ الإصدار", "échéance": "الاستحقاق", "valable jusqu'au": "صالح إلى غاية", "conditions": "الشروط", "facture d'origine": "الفاتورة الأصلية", "paiement immédiat": "أداء فوري", "désignation": "التسمية", "qté": "الكمية", "p.u. ht": "الثمن بدون ضريبة", "remise": "التخفيض", "tva": "الضريبة على القيمة المضافة", "total ht": "المجموع بدون ضريبة", "sous-total ht": "المجموع الفرعي بدون ضريبة", "total ttc": "المجموع بالضريبة", "total avoir ttc": "مجموع الإشعار الدائن بالضريبة", "déjà réglé": "المؤدّى سابقًا", "reste à payer": "المتبقي للأداء", "conditions / notes": "الشروط / ملاحظات", "conditions et modalités": "الشروط والكيفيات", "règlement par virement": "الأداء عن طريق التحويل البنكي", "coordonnées bancaires": "المعلومات البنكية", "bon pour accord": "موافقة", "date, nom, signature du client": "التاريخ والاسم وتوقيع العميل", "cachet et signature": "الختم والتوقيع", "notes": "ملاحظات", "date du paiement": "تاريخ الأداء", "mode": "الوسيلة", "référence": "المرجع", "montant reçu": "المبلغ المستلَم", "paiement soldant la facture": "أداء يسدّد الفاتورة", "facture concernée": "الفاتورة المعنية", "total de la facture (ttc)": "مجموع الفاتورة بالضريبة", "solde avant ce paiement": "الرصيد قبل هذا الأداء", "montant de ce paiement": "مبلغ هذا الأداء", "total payé à ce jour (ce paiement inclus)": "المجموع المؤدّى إلى اليوم بما فيه هذا الأداء", "reste dû après ce paiement": "المتبقي بعد هذا الأداء", "situation": "الوضعية", "facture soldée": "فاتورة مسدّدة", "soldes": "الأرصدة", "non affichés : facture annulée ou montant indisponible": "غير معروضة: فاتورة ملغاة أو مبلغ غير متوفر", "virement bancaire": "تحويل بنكي", "chèque": "شيك", "espèces": "نقدًا", "carte bancaire (cmi)": "بطاقة بنكية CMI", "effet": "ورقة تجارية", "autre": "أخرى", "profession libérale": "مهنة حرة", "société": "شركة", "auto-entrepreneur": "مقاول ذاتي", "sarl": "شركة ذات مسؤولية محدودة", "mon entreprise": "مؤسستي", "client": "العميل", "ce reçu atteste uniquement le paiement effectivement enregistré à la date indiquée. justificatif d'encaissement, non fiscal : il ne remplace pas la facture.": "يثبت هذا الوصل فقط الأداء المسجَّل فعليًا في التاريخ المبيَّن. هو وثيقة تحصيل غير جبائية: ولا يحلّ محل الفاتورة."};
+const PDF_AR_PATTERNS = [["^REÇU (.+)$", "وصل $1"], ["^(\\d+) jours$", "$1 يومًا"], ["^SUR FACTURE (.+)$", "على الفاتورة $1"], ["^TVA (.+) %$", "الضريبة $1 %"], ["^Banque : (.+)$", "البنك : $1"], ["^RIB : (.+)$", "RIB : $1"], ["^Tél : (.+)$", "الهاتف : $1"], ["^Tél (.+)$", "الهاتف $1"], ["^Encaissé par : (.+)$", "المستلِم : $1"], ["^Page (\\d+) / (\\d+)$", "صفحة $1 / $2"], ["^(.+) du (\\d{2}/\\d{2}/\\d{4})$", "$1 بتاريخ $2"]].map(p => [new RegExp(p[0], 'i'), p[1]]);
+const PDF_AR_MONTHS = { 'janv.': '01', 'févr.': '02', 'mars': '03', 'avr.': '04', 'mai': '05', 'juin': '06', 'juil.': '07', 'août': '08', 'sept.': '09', 'oct.': '10', 'nov.': '11', 'déc.': '12' };
+function pdfArTr(s) {
+    if (typeof s !== 'string') return s;
+    // dates « 20 oct. 2026 » → 20/10/2026 (chiffres identiques en français et en arabe au Maroc)
+    s = s.replace(/\b(\d{1,2}) (janv\.|févr\.|mars|avr\.|mai|juin|juil\.|août|sept\.|oct\.|nov\.|déc\.) (\d{4})\b/g, (m, d, mo, y) => String(d).padStart(2, '0') + '/' + PDF_AR_MONTHS[mo] + '/' + y);
+    const k = s.trim().replace(/\s+/g, ' ');
+    const hit = PDF_AR[k.toLowerCase()];
+    if (hit) return hit;
+    for (const [rx, rep] of PDF_AR_PATTERNS) if (rx.test(k)) return k.replace(rx, rep);
+    const m = k.match(/^(Ce reçu atteste .*non fiscal : il ne remplace pas la facture\.) Établi le (.+)\.$/);
+    if (m && PDF_AR[m[1].toLowerCase()]) return PDF_AR[m[1].toLowerCase()] + ' صدر بتاريخ ' + m[2] + '.';
+    return s;
+}
 let _arabicFontB64 = null;
 async function loadArabicFont() {
     if (_arabicFontB64) return _arabicFontB64;
@@ -13213,36 +13229,70 @@ async function loadArabicFont() {
     _arabicFontB64 = btoa(bin);
     return _arabicFontB64;
 }
-async function enableArabicPdf(pdf) {
+async function enableArabicPdf(pdf, rtl) {
     const b64 = await loadArabicFont();
     pdf.addFileToVFS('NotoNaskhArabic.ttf', b64);
     pdf.addFont('NotoNaskhArabic.ttf', 'NotoNaskhArabic', 'normal');
     pdf.addFont('NotoNaskhArabic.ttf', 'NotoNaskhArabic', 'bold');
     const shape = (t) => (typeof t === 'string' && ARABIC_RE.test(t)) ? pdf.processArabic(t) : t;
+    pdf._ar = !!rtl;
+    const W = 210;                                  // largeur A4 (mm) : miroir horizontal du document en mode arabe
+    let mirrorOff = false;                          // désactivé pendant autoTable (qui place déjà ses cellules)
+    const swapAlign = (a) => a === 'right' ? 'left' : (a === 'center' ? 'center' : 'right');
     const origText = pdf.text.bind(pdf);
     pdf.text = function (text, x, y, opts, ...rest) {
-        const list = Array.isArray(text) ? text : [text];
-        if (!list.some(t => typeof t === 'string' && ARABIC_RE.test(t))) return origText(text, x, y, opts, ...rest);
-        // texte arabe : police arabe, mise en forme, alignement à droite si la ligne est entièrement arabe
+        let list = Array.isArray(text) ? text : [text];
+        if (rtl) list = list.map(pdfArTr);
+        const arabic = list.some(t => typeof t === 'string' && ARABIC_RE.test(t));
+        let o = opts;
+        if (rtl && !mirrorOff && typeof x === 'number') { o = Object.assign({}, opts || {}); o.align = swapAlign(o.align || 'left'); x = W - x; }
+        if (!arabic) return origText(Array.isArray(text) ? list : list[0], x, y, o, ...rest);
+        // texte arabe : police arabe, mise en forme (liaison des lettres + sens droite-à-gauche)
         const prev = pdf.getFont();
         pdf.setFont('NotoNaskhArabic', 'normal');
         const out = list.map(shape);
-        const r = origText(Array.isArray(text) ? out : out[0], x, y, opts, ...rest);
+        const r = origText(Array.isArray(text) ? out : out[0], x, y, o, ...rest);
         pdf.setFont(prev.fontName, prev.fontStyle);
         return r;
     };
-    // autoTable : police arabe pour les cellules arabes (mesure de largeur correcte) + mise en forme
+    if (rtl) {
+        const origRect = pdf.rect.bind(pdf), origRR = pdf.roundedRect.bind(pdf), origLine = pdf.line.bind(pdf), origImg = pdf.addImage.bind(pdf);
+        pdf.rect = function (x, y, w, h, st) { return mirrorOff ? origRect(x, y, w, h, st) : origRect(W - x - w, y, w, h, st); };
+        pdf.roundedRect = function (x, y, w, h, rx, ry, st) { return mirrorOff ? origRR(x, y, w, h, rx, ry, st) : origRR(W - x - w, y, w, h, rx, ry, st); };
+        pdf.line = function (x1, y1, x2, y2, st) { return mirrorOff ? origLine(x1, y1, x2, y2, st) : origLine(W - x1, y1, W - x2, y2, st); };
+        pdf.addImage = function (img, fmt, x, y, w, h, ...r) { return mirrorOff ? origImg(img, fmt, x, y, w, h, ...r) : origImg(img, fmt, W - x - w, y, w, h, ...r); };
+    }
+    // autoTable : police arabe pour les cellules arabes (mesure de largeur correcte) + mise en forme ; en mode arabe : colonnes inversées, alignements miroir, libellés traduits
     const origAT = pdf.autoTable.bind(pdf);
-    pdf.autoTable = function (o) {
-        const prevHook = o.didParseCell;
+    pdf.autoTable = function (o0) {
+        let o = o0;
+        let n = 0;
+        if (rtl) {
+            o = Object.assign({}, o0);
+            const rev = (row) => Array.isArray(row) ? row.slice().reverse() : row;
+            if (o.head) o.head = o.head.map(r => rev(r.map(pdfArTr)));
+            if (o.body) { n = (o.body[0] || []).length || (o.head && o.head[0] ? o.head[0].length : 0); o.body = o.body.map(r => rev(r.map(c => typeof c === 'string' ? pdfArTr(c) : c))); }
+            else n = (o.head && o.head[0]) ? o.head[0].length : 0;
+            const cs = o0.columnStyles || {}, ncs = {};
+            Object.keys(cs).forEach(k => { const i = n - 1 - Number(k); const st = Object.assign({}, cs[k]); st.halign = swapAlign(st.halign || 'left'); ncs[i] = st; });
+            o.columnStyles = ncs;
+            o.styles = Object.assign({}, o0.styles || {}, { halign: 'right' });
+            const m = o0.margin || {}; o.margin = Object.assign({}, m, { left: m.right !== undefined ? m.right : 15, right: m.left !== undefined ? m.left : 15 });
+        }
+        const prevHook = o0.didParseCell;
         o.didParseCell = function (d) {
             if (d.cell && Array.isArray(d.cell.text) && d.cell.text.some(t => ARABIC_RE.test(t))) {
                 d.cell.styles.font = 'NotoNaskhArabic'; d.cell.styles.fontStyle = 'normal';
                 d.cell.text = d.cell.text.map(shape);
             }
-            if (prevHook) prevHook(d);
+            if (prevHook) {
+                const col = rtl ? Object.assign({}, d.column, { index: n - 1 - d.column.index }) : d.column;
+                prevHook(rtl ? Object.assign({}, d, { column: col }) : d);
+                if (rtl && d.cell && d.cell.styles && d.section === 'head') { const c0 = (o0.columnStyles || {})[n - 1 - d.column.index]; d.cell.styles.halign = swapAlign((c0 && c0.halign) || 'left'); }
+            }
         };
-        return origAT(o);
+        mirrorOff = true;
+        try { return origAT(o); } finally { mirrorOff = false; }
     };
 }
 
@@ -13395,7 +13445,7 @@ function pdfEnsure(pdf, y, h) {
 }
 // Paragraphe avec saut de page ligne à ligne (textes longs). Retourne le y suivant.
 function pdfParagraph(pdf, y, text, x, w, lineH, maxLines) {
-    let lines = pdf.splitTextToSize(String(text), w);
+    let lines = pdf.splitTextToSize(pdf._ar ? pdfArTr(String(text)) : String(text), w);
     if (maxLines) lines = lines.slice(0, maxLines);
     for (const ln of lines) { y = pdfEnsure(pdf, y, lineH); pdf.text(ln, x, y); y += lineH; }
     return y;
@@ -13426,7 +13476,7 @@ function pdfTotals(pdf, T, y, rows, ttc) {
 function pdfNoteBox(pdf, y, text, opts) {
     const o = opts || {};
     pdf.setFont('helvetica', o.italic === false ? 'normal' : 'italic'); pdf.setFontSize(8);
-    const lines = pdf.splitTextToSize(String(text), 172);
+    const lines = pdf.splitTextToSize(pdf._ar ? pdfArTr(String(text)) : String(text), 172);
     const h = lines.length * 3.9 + 5;
     y = pdfEnsure(pdf, y, h);
     pdf.setFillColor(...PDF_TINT); pdf.setDrawColor(...PDF_LINE); pdf.setLineWidth(0.25); pdf.roundedRect(15, y, 180, h, 1, 1, 'FD');
@@ -13445,8 +13495,9 @@ async function generatePDF(id, type, opts) {
     const company = Storage.get('company', {});
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
-    if (ARABIC_RE.test(JSON.stringify([doc_data, company]))) {
-        try { await enableArabicPdf(pdf); }
+    const arMode = I18n.currentLang === 'ar';          // PDF en arabe (aperçu ?lang=ar) : libellés arabes + mise en page de droite à gauche
+    if (arMode || ARABIC_RE.test(JSON.stringify([doc_data, company]))) {
+        try { await enableArabicPdf(pdf, arMode); }
         catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée, vérifiez votre connexion). Le PDF sera généré sans lui.', 'warning'); }
     }
     const T = pdfTheme(company);
@@ -13532,7 +13583,7 @@ async function generatePDF(id, type, opts) {
     y = pdfTotals(pdf, T, y, rows, ttc);
 
     // Montant en toutes lettres (usage courant sur les factures marocaines ; une obligation légale n'est pas établie ici)
-    {
+    if (!arMode) {      // montant en toutes lettres : disponible en français seulement (pas de version arabe fiable pour le moment)
         const lbl = isCredit ? 'Arrêté le présent avoir à la somme de : ' : isInvoice ? 'Arrêtée la présente facture à la somme de : ' : 'Arrêté le présent devis à la somme de : ';
         y = pdfEnsure(pdf, y, 14);
         pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8.5); pdf.setTextColor(...PDF_INK);
@@ -13617,8 +13668,9 @@ async function generatePaymentReceiptPDF(paymentId, opts) {
     const company = Storage.get('company', {});
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
-    if (ARABIC_RE.test(JSON.stringify([p, invoice, company]))) {
-        try { await enableArabicPdf(pdf); }
+    const arMode = I18n.currentLang === 'ar';
+    if (arMode || ARABIC_RE.test(JSON.stringify([p, invoice, company]))) {
+        try { await enableArabicPdf(pdf, arMode); }
         catch (e) { console.warn('PDF arabe indisponible', e); showToast('Le texte arabe ne peut pas être inclus dans le PDF (police non chargée). Le PDF sera généré sans lui.', 'warning'); }
     }
     const T = pdfTheme(company);
