@@ -8441,6 +8441,10 @@ function deleteInvoice(id) {
     if (!confirm('Supprimer ce brouillon ?')) return;
     if (inv) logDoc('suppression_brouillon', inv);
     Storage.set('invoices', invoices.filter(i => i.id !== id));
+    // Devis d'origine : le lien « facture » ne doit plus pointer vers un brouillon supprimé (le devis redevient transformable)
+    const qs = Storage.get('quotes', []) || [];
+    const qLinked = qs.filter(q => q.convertedTo === id);
+    if (qLinked.length) { qLinked.forEach(q => { delete q.convertedTo; delete q.convertedInvoiceNumber; delete q.convertedAt; }); Storage.set('quotes', qs); }
     renderInvoices();
     showToast('Brouillon supprimé', 'success');
 }
@@ -9306,6 +9310,16 @@ function deleteClient(id) {
         showToast(`Impossible : ${linked.length} facture(s) liée(s)`, 'error');
         return;
     }
+    const linkedQuotes = (Storage.get('quotes', []) || []).filter(q => q.clientId === id);
+    if (linkedQuotes.length > 0) {
+        showToast(`Impossible : ${linkedQuotes.length} devis lié(s). Supprimez-les d'abord.`, 'error');
+        return;
+    }
+    const linkedRec = (Storage.get('recurring', []) || []).filter(t => t.clientId === id);
+    if (linkedRec.length > 0) {
+        showToast(`Impossible : ${linkedRec.length} facture(s) récurrente(s) liée(s). Supprimez-les d'abord.`, 'error');
+        return;
+    }
     if (!confirm('Supprimer ce client ?')) return;
     const clients = Storage.get('clients', []);
     Storage.set('clients', clients.filter(c => c.id !== id));
@@ -9689,7 +9703,12 @@ function saveProduct() {
 }
 
 function deleteProduct(id) {
-    if (!confirm('Supprimer ce produit ?')) return;
+    const prod = (Storage.get('products', []) || []).find(p => p.id === id);
+    if (prod && prod.trackStock && stockLevel(id) !== 0) {
+        showToast(`Impossible de supprimer : il reste ${stockFmt(stockLevel(id))} ${prod.unit || 'unité'} en stock. Ramenez d'abord le stock à 0.`, 'error');
+        return;
+    }
+    if (!confirm('Supprimer ce produit ?' + (prod && prod.trackStock ? '\n\nSon historique de mouvements de stock est conservé.' : ''))) return;
     const products = Storage.get('products', []);
     Storage.set('products', products.filter(p => p.id !== id));
     renderProducts();
@@ -10643,7 +10662,8 @@ function renderSlowPayers() {
 function renderReportTopClients() {
     const range = getReportDateRange();
     const allInvoices = (Storage.get('invoices', []) || []).filter(i => 
-        i.type !== 'credit' && (i.totalTTC || 0) >= 0 && isInReportRange(i.date, range)
+        i.type !== 'credit' && i.status !== 'draft' && (i.totalTTC || 0) >= 0 && isInReportRange(i.date, range) &&
+        getInvoiceWithStatus(i).status !== 'cancelled'   // brouillons et factures annulées par avoir : pas du chiffre d'affaires
     );
     
     const today = new Date();
@@ -10651,10 +10671,10 @@ function renderReportTopClients() {
     
     const clientStats = {};
     allInvoices.forEach(i => {
-        const key = i.clientName || 'Inconnu';
+        const key = i.clientId || i.clientName || 'Inconnu';
         if (!clientStats[key]) {
             clientStats[key] = {
-                name: key,
+                name: i.clientName || 'Inconnu',
                 clientId: i.clientId,
                 count: 0,
                 totalHT: 0,
