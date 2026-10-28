@@ -47,6 +47,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('produit « Suivre le stock » enregistré (seuil 4) ; l\'autre non suivi', prod === 'Farine 25kg:true:4|Livraison:false:0', prod);
   ok('liste des produits : stock affiché pour le produit suivi seulement', /Stock : 0/.test(await p.innerText('#productsList')) && (await p.innerText('#productsList')).split('Stock :').length === 2);
   const F = await pid('Farine 25kg'), L = await pid('Livraison');
+  ok('liste produits : lien « Suivre le stock » visible sur le produit non suivi', /Suivre le stock/.test(await p.innerText('#productsList')));
+  await p.evaluate((l) => toggleProductStock(l), L);
+  ok('lien bascule le suivi (Livraison suivi), puis arrêt', await p.evaluate((l) => Storage.get('products', []).find(x => x.id === l).trackStock === true, L));
+  await p.evaluate((l) => toggleProductStock(l), L);
+  ok('suivi arrêté depuis la liste', await p.evaluate((l) => !Storage.get('products', []).find(x => x.id === l).trackStock, L));
+  if (process.env.SHOT_DIR) { await sleep(300); await p.screenshot({ path: process.env.SHOT_DIR + '/produits-mobile.png', fullPage: true, animations: 'disabled' }); }
 
   // 2) Entrée manuelle
   await p.evaluate(async () => { navTo('stock'); await openStockMove('in'); });
