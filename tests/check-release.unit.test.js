@@ -25,5 +25,16 @@ r = run(d2, ['--guards']); ok('nouvelle référence « Article 77 du CGI » non 
 // affirmation retirée du produit : plus de blocage
 const d3 = copy(); for (const f of ['app.html', 'index.html']) fs.writeFileSync(path.join(d3, f), fs.readFileSync(path.join(d3, f), 'utf8').split('Article 6 du CGI').join('(mention à confirmer avec votre comptable)'));
 r = run(d3); ok('mention retirée du produit : plus de blocage pour cette référence', /OK\s+référence fiscale « TVA_AE_ARTICLE_6 » : plus présente|plus présente dans le produit/.test(r.stdout) && !/FAIL\s+référence fiscale « TVA_AE_ARTICLE_6 »/.test(r.stdout));
+// preuves sociales / ancienne offre / affirmation de stockage local réintroduites dans la page d'accueil → garde-fou en échec
+for (const [nom, texte] of [
+  ['« 500+ entrepreneurs » réintroduit', '<p>Adopté par 500+ entrepreneurs marocains</p>'],
+  ['note « 4,9/5 » réintroduite', '<p>Note moyenne 4,9/5</p>'],
+  ['offre Lifetime réintroduite', '<p>Lifetime Deal 499 DH, plus que 47 places</p>'],
+  ['« données ne quittent jamais votre navigateur » réintroduit', '<p>Vos données ne quittent jamais votre navigateur.</p>'],
+]) {
+  const d = copy(); fs.appendFileSync(path.join(d, 'index.html'), '\n' + texte + '\n');
+  r = run(d, ['--guards']); ok(nom + ' : garde-fou en ÉCHEC', r.status !== 0 && /FAIL\s+pages publiques/.test(r.stdout));
+  fs.rmSync(d, { recursive: true, force: true });
+}
 for (const d of [d1, d2, d3]) fs.rmSync(d, { recursive: true, force: true });
 if (R.includes(false)) { console.log('\nÉCHEC : ' + R.filter((x) => !x).length); process.exit(1); } else console.log('\nOK : ' + R.length + ' contrôles (mécanisme de validation fiscale du contrôle de publication)');

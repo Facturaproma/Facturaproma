@@ -22,6 +22,11 @@ const certLines = (app + idx + legal + readme).split('\n').filter((l) => /certif
 guard('aucune affirmation « certifié » (DGI ou autre) sans négation', certLines.length === 0, certLines.slice(0, 2).map((l) => l.trim().slice(0, 100)).join(' | '));
 const priceOk = (t) => /49\s*DH/.test(t) && /449\s*DH/.test(t) && /299\s*DH/.test(t);
 guard('tarifs 49 / 449 / 299 DH présents et cohérents (accueil, conditions, administration)', priceOk(idx) && priceOk(legal) && priceOk(admin));
+// Pages publiques : pas de preuves sociales inventées ni d'ancienne offre (leçon d'un déploiement obsolète qui les affichait encore)
+const pub = idx + '\n' + legal;
+guard('pages publiques : aucune preuve sociale non vérifiée (« 500+ », « 12K+ », « 4,9/5 », « adopté par », témoignages nominatifs)', !/\b500\s?\+|\b12\s?K\s?\+|4[,.]9\s?\/\s?5|adopté par|ils ont arrêté Excel/i.test(pub));
+guard('pages publiques : plus d\'offre Lifetime ni de « places restantes » (ancienne offre retirée)', !/lifetime|à vie|\b47 places|plus que \d+ places/i.test(pub));
+guard('pages publiques : aucune affirmation « données jamais hors de l\'appareil » ou « 100 % hors ligne » (les données sont dans Supabase)', !/ne quittent jamais|100\s?%\s?hors ligne|stockées localement sur votre appareil/i.test(pub));
 guard('README: plus de tarifs périmés (Lifetime, 99 DH, 199 DH) ni de codes promo périmés', !/Lifetime|99 DH\/mois|199 DH\/mois|LANCEMENT2026|WELCOME10/.test(readme));
 const docLinks = [...readme.matchAll(/\]\((docs\/[^)]+)\)/g)].map((m) => m[1]);
 const missingDocs = docLinks.filter((p) => !fs.existsSync(path.join(ROOT, p)));
