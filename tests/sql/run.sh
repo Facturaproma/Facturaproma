@@ -10,7 +10,7 @@ P="psql -v ON_ERROR_STOP=1 -q -d $DB"
 $P -f tests/sql/stub_supabase.sql >/dev/null
 for f in sql/00_setup_complet.sql sql/05_admins.sql sql/06_securite_rls.sql sql/07_licence_serveur.sql \
          sql/08_admin_comptes.sql sql/09_periode_de_grace.sql sql/10_anti_abus.sql sql/12_admin_supprimer_compte.sql \
-         sql/13_profil_assistant.sql sql/14_numerotation_et_verrouillage.sql sql/19_journal_sans_doublons.sql sql/15_documents.sql sql/16_migration_donnees.sql sql/18_contact_public.sql sql/20_formules_configurables.sql sql/21_tracabilite_codes.sql sql/22_anti_double_abonnement.sql sql/23_licence_compte_logique.sql; do
+         sql/13_profil_assistant.sql sql/14_numerotation_et_verrouillage.sql sql/19_journal_sans_doublons.sql sql/15_documents.sql sql/16_migration_donnees.sql sql/18_contact_public.sql sql/20_formules_configurables.sql sql/21_tracabilite_codes.sql sql/22_anti_double_abonnement.sql sql/23_licence_compte_logique.sql sql/27_offre_fondateur.sql sql/28_admin_nom_societe.sql sql/29_messagerie_support.sql sql/30_lien_client_facture.sql sql/31_admin_2fa.sql sql/32_paiement_lie_au_code.sql sql/33_documents_vente.sql; do
   # Supabase accorde par défaut tous les droits aux nouvelles tables à anon/authenticated : on l'imite pour les scripts 15+ afin que leurs REVOKE soient réellement testés
   if [ "$f" = "sql/15_documents.sql" ]; then $P -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated" >/dev/null; fi
   $P -f "$f" >/dev/null 2>/tmp/fp_sql_err.txt || { echo "ECHEC chargement $f"; cat /tmp/fp_sql_err.txt; exit 1; }

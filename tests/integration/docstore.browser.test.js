@@ -15,7 +15,7 @@ const serve = (port, url) => http.createServer((q, r) => {
     let body = d;
     if (f.endsWith('app.html')) body = d.toString('utf8')
       .replace(/^const SUPABASE_URL = .*$/m, `const SUPABASE_URL = '${url}';`)
-      .replace(/^const SUPABASE_ANON_KEY = .*$/m, "const SUPABASE_ANON_KEY = 'fake-anon-key';");
+      .replace(/^const SUPABASE_ANON_KEY = .*$/m, "const SUPABASE_ANON_KEY = 'fake-anon-key';").replace(/ integrity="[^"]*" crossorigin="anonymous"/g, '');
     r.writeHead(200, { 'content-type': f.endsWith('.html') ? 'text/html' : f.endsWith('.js') ? 'text/javascript' : 'application/octet-stream' });
     r.end(body);
   });
@@ -128,6 +128,7 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
     await quiet(A);
     let row = (await docsOf(T)).find(d => d.id === dn.id);
     check('S3 paiement partiel : doc_payments 1 ligne, facture paidAmount 20 (calculé par le serveur)', Number(row.body.paidAmount) === 20 && (await be.sql("SELECT count(*)::int n FROM public.doc_payments p JOIN auth.users u ON u.id=p.user_id WHERE u.email=$1", [T]))[0].n === 1);
+    await new Promise(r => setTimeout(r, 800)); // verrou anti double-clic de savePayment
     await A.E((id) => { recordPayment(); document.getElementById('paymentInvoice').value = id; document.getElementById('paymentAmount').value = String((Storage.get('invoices', []).find(i => i.id === id).totalTTC || 0) - 20); savePayment(); }, dn.id);
     await quiet(A);
     row = (await docsOf(T)).find(d => d.id === dn.id);

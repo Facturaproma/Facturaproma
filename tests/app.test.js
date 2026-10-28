@@ -13,7 +13,7 @@ const srv = http.createServer((q, r) => {
     if (f.endsWith('app.html')) {   // mode local : on neutralise les clés Supabase en mémoire (le fichier n'est pas modifié)
       body = d.toString('utf8')
         .replace(/^const SUPABASE_URL = .*$/m, "const SUPABASE_URL = 'YOUR_SUPABASE_URL';")
-        .replace(/^const SUPABASE_ANON_KEY = .*$/m, "const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';");
+        .replace(/^const SUPABASE_ANON_KEY = .*$/m, "const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';").replace(/ integrity="[^"]*" crossorigin="anonymous"/g, '');
     }
     r.writeHead(200, { 'content-type': f.endsWith('.html') ? 'text/html' : f.endsWith('.js') ? 'text/javascript' : 'application/octet-stream' });
     r.end(body);
@@ -145,6 +145,7 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   await payFor(i2.id, 100);
   let inv2 = await E((id) => Storage.get('invoices', []).find(i => i.id === id), i2.id);
   check('paiement partiel : facture non soldée, reste 116', inv2.status === 'sent' && inv2.paidAmount === 100 && inv2.totalTTC - inv2.paidAmount === 116, JSON.stringify([inv2.status, inv2.paidAmount]));
+  await p.waitForTimeout(800); // le verrou anti double-clic (600 ms) ignore un 2e enregistrement immédiat
   await payFor(i2.id, 116);
   inv2 = await E((id) => Storage.get('invoices', []).find(i => i.id === id), i2.id);
   check('solde payé : facture « payée »', inv2.status === 'paid' && inv2.paidAmount === 216);
@@ -170,6 +171,16 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   const f = await dl;
   check('PDF facture téléchargé (FAC-' + yr + '-001.pdf)', f && f.suggestedFilename() === `FAC-${yr}-001.pdf`, f && f.suggestedFilename());
   if (f) { const pth = await f.path(); const txt = fs.readFileSync(pth).toString('latin1'); check('PDF valide (en-tête %PDF)', txt.startsWith('%PDF')); }
+
+  // Montant en toutes lettres sur le PDF (texte capturé au moment du dessin, le flux PDF étant compressé)
+  const words = await E(async (id) => {
+    const J = window.jspdf.jsPDF, seen = [];
+    window.jspdf.jsPDF = function (...a) { const d = new J(...a); const t = d.text.bind(d); d.text = (x, ...r) => { seen.push(Array.isArray(x) ? x.join(' ') : String(x)); return t(x, ...r); }; return d; };
+    try { await generatePDF(id, 'invoice'); } finally { window.jspdf.jsPDF = J; }
+    const inv = Storage.get('invoices', []).find(x => x.id === id);
+    return { line: seen.find(t => /Arrêtée la présente facture/.test(t)) || '', ttc: inv.totalTTC, expected: amountInWordsFr(inv.totalTTC) };
+  }, i1.id);
+  check('PDF facture : « Arrêtée la présente facture à la somme de … » avec le montant TTC en lettres', words.line.includes(words.expected) && /dirham/.test(words.line), words.line.slice(0, 120));
 
   // --- 7 bis. WhatsApp : PDF en pièce jointe via le partage du téléphone, sinon repli ; brouillon non présenté comme facture définitive ---
   const shared = await E(async (id) => {
@@ -256,6 +267,44 @@ const check = (name, cond, extra = '') => { results.push([!!cond, name, extra]);
   await E(() => { document.getElementById('tvaRegime').value = 'quarterly'; onVatControlChange(true); });
   await E(() => navTo('cnss')); await p.waitForTimeout(300);
   await E(() => { document.getElementById('ceLabel').value = 'Salarié test'; document.getElementById('ceGross').value = '5000'; addCnssEmployee(); });
+  check('CNSS AE : plus d\'avertissement « Calcul indicatif » en tête de page', await E(() => !/Calcul indicatif|n'ont pas pu être relus/.test(document.querySelector('#page-cnss').textContent.split('Déclaration employeur')[0])));
+  await E(() => { document.getElementById('cnssCA').value = '112000'; document.getElementById('cnssActivity').value = 'services'; calculateCNSS(); });
+  check('CNSS AE : CA 112 000 services → impôt 1 120, T4, cotisation CNSS 720, total 1 840, ligne retraite masquée', await E(() => { const n = (id) => document.getElementById(id).textContent.replace(/\s|\u00a0|\u202f/g, ''); return n('cnssIr').includes('1120,00') && n('cnssTranche') === 'T4' && n('cnssAmo').includes('720,00') && n('cnssTotal').includes('720,00') && n('cnssAllAE').includes('1840,00') && document.getElementById('cnssRetraiteLine').style.display === 'none'; }));
+  await E(() => { document.getElementById('cnssCA').value = ''; calculateCNSS(); });
+  check('CNSS AE : sans CA, minimum T1 = 300 DH', await E(() => document.getElementById('cnssTranche').textContent === 'T1' && document.getElementById('cnssTotal').textContent.replace(/\s|\u00a0|\u202f/g, '').includes('300,00')));
+  check('CNSS AE : échéancier 4 trimestres, 6 colonnes, échéances 30/04 31/07 31/10 31/01', await E(() => { const rows = [...document.querySelectorAll('#cnssSchedule tr')]; const t = document.getElementById('cnssSchedule').textContent; return rows.length === 4 && rows.every(r => r.children.length === 6) && /30 avril/.test(t) && /31 juillet/.test(t) && /31 octobre/.test(t) && /31 janvier/.test(t); }));
+  check('CNSS AE barème : formulaire rempli avec le barème de référence (8 montants, 6 bornes)', await E(() => document.querySelectorAll('#aeCnssGrid input[id^=aeAmo]').length === 8 && document.getElementById('aeAmo0').value === '300' && document.getElementById('aeT1Below').value === '500' && document.getElementById('aeBound7') === null && document.getElementById('aeBound6').value === '50000' && document.getElementById('aeRateServices').value === '1'));
+  await E(() => { document.getElementById('aeAmo0').value = '320'; document.getElementById('aeRateServices').value = '2'; saveAeCnssSettings(); });
+  await p.waitForTimeout(200);
+  check('CNSS AE barème : montant T1 modifié (320) pris en compte (CA 5 000 à 2 % = impôt 100, tranche T1), source « personnalisé »', await E(() => { const n = (id) => document.getElementById(id).textContent.replace(/\s|\u00a0|\u202f/g, ''); document.getElementById('cnssCA').value = '5000'; calculateCNSS(); return n('cnssTotal').includes('320,00') && n('cnssIr').includes('100,00') && /personnalisé/.test(document.getElementById('aeCnssSource').textContent) && JSON.stringify(Storage.get('aeCnssConfig')).includes('320'); }));
+  await E(() => { document.getElementById('aeAmo2').value = '100'; saveAeCnssSettings(); });
+  check('CNSS AE barème : barème incohérent refusé, message affiché, ancien barème conservé', await E(() => document.getElementById('aeCnssErrors').style.display !== 'none' && /augmenter/.test(document.getElementById('aeCnssErrors').textContent) && Storage.get('aeCnssConfig').amoAmounts[2] === 570));
+  await E(() => { renderCNSS(); document.getElementById('aeAmo1').value = ''; saveAeCnssSettings(); });
+  check('CNSS AE barème : champ vide refusé', await E(() => /Remplissez/.test(document.getElementById('aeCnssErrors').textContent) && Storage.get('aeCnssConfig').amoAmounts[1] === 390));
+  await E(() => { resetAeCnssSettings(); document.getElementById('cnssCA').value = '10000'; calculateCNSS(); });
+  check('CNSS AE barème : rétablir le barème de référence (T1 = 300, impôt 100, source « référence »)', await E(() => { const n = (id) => document.getElementById(id).textContent.replace(/\s|\u00a0|\u202f/g, ''); return n('cnssTotal').includes('300,00') && n('cnssIr').includes('100,00') && /référence/.test(document.getElementById('aeCnssSource').textContent) && document.getElementById('aeAmo0').value === '300'; }));
+  await E(() => { const c = Storage.get('company', {}) || {}; Storage.set('company', Object.assign({}, c, { status: 'ae' })); navTo('cnss'); });
+  check('CNSS selon le statut : auto-entrepreneur → partie AE visible, employeur masquée', await E(() => document.getElementById('cnssAeBlock').style.display !== 'none' && document.getElementById('cnssEmployerBlock').style.display === 'none' && document.getElementById('cnssTabAe').classList.contains('active')));
+  await E(() => { const c = Storage.get('company', {}) || {}; Storage.set('company', Object.assign({}, c, { status: 'sarl' })); navTo('cnss'); });
+  check('CNSS selon le statut : SARL → partie employeur visible, AE masquée', await E(() => document.getElementById('cnssEmployerBlock').style.display !== 'none' && document.getElementById('cnssAeBlock').style.display === 'none' && document.getElementById('cnssTabEmployer').classList.contains('active')));
+  await E(() => document.getElementById('cnssTabAe').click());
+  check('CNSS selon le statut : l\'onglet permet d\'afficher l\'autre partie', await E(() => document.getElementById('cnssAeBlock').style.display !== 'none' && document.getElementById('cnssEmployerBlock').style.display === 'none'));
+  await E(() => document.getElementById('cnssTabEmployer').click());
+  check('CNSS employeur : formulaire rempli avec la référence (4 branches, plafond 6 000, jour 10)', await E(() => document.querySelectorAll('#cnssEmpGrid input').length === 8 && document.getElementById('cnssEmpCeiling').value === '6000' && document.getElementById('cnssEmpDueDay').value === '10' && document.getElementById('cnssEmp_amo_emp').value === '2.26' && document.getElementById('cnssEmp_amo_er').value === '4.11'));
+  await E(() => { document.getElementById('cnssEmp_amo_emp').value = '3'; saveCnssEmpSettings(); });
+  check('CNSS employeur : AMO salarié 3 % enregistré → part salariale 374,00 (5 000 × 7,48 %), source « personnalisés »', await E(() => document.getElementById('cnssEmpTotal').textContent.replace(/\s|\u00a0|\u202f/g, '').includes('374,00') && /personnalisés/.test(document.getElementById('cnssEmpSource').textContent)));
+  await E(() => { document.getElementById('cnssEmp_amo_er').value = '90'; saveCnssEmpSettings(); });
+  check('CNSS employeur : taux 90 % refusé, message affiché, réglage précédent conservé', await E(() => document.getElementById('cnssEmpErrors').style.display !== 'none' && Storage.get('cnssEmployerConfig').branches.find(b => b.id === 'amo').er === 0.0411));
+  await E(() => { renderCNSS(); document.getElementById('cnssEmpDueDay').value = ''; saveCnssEmpSettings(); });
+  check('CNSS employeur : champ vide refusé', await E(() => /Remplissez/.test(document.getElementById('cnssEmpErrors').textContent)));
+  await E(() => resetCnssEmpSettings());
+  check('CNSS employeur : rétablir la référence → part salariale 337,00', await E(() => document.getElementById('cnssEmpTotal').textContent.replace(/\s|\u00a0|\u202f/g, '').includes('337,00') && /référence/.test(document.getElementById('cnssEmpSource').textContent)));
+  if (process.env.SHOT_DIR) {
+    await p.setViewportSize({ width: 390, height: 844 });
+    await E(() => { showCnssPart('employer'); document.getElementById('page-cnss').scrollIntoView(); }); await p.screenshot({ path: process.env.SHOT_DIR + '/cnss-employeur.png', fullPage: true });
+    await E(() => showCnssPart('ae')); await p.screenshot({ path: process.env.SHOT_DIR + '/cnss-ae.png', fullPage: true });
+    await p.setViewportSize({ width: 1280, height: 800 });
+  }
   check('CNSS employeur : 5 000 DH -> 337,00 salarié / 1 054,50 patronal', await E(() => { const t = document.getElementById('cnssEmployeesBody').textContent.replace(/\s|\u00a0|\u202f/g, ''); return t.includes('337,00DH') && t.includes('1054,50DH'); }));
   check('CNSS : liens officiels Damancom et cnss.ma, échéance affichée', await E(() => { const h = [...document.querySelectorAll('#page-cnss a')].map(a => a.href); return h.some(x => /^https:\/\/www\.damancom\.ma/.test(x)) && h.some(x => /^https:\/\/www\.cnss\.ma/.test(x)) && /^\d+(er)? \S+ \d{4} — déclaration des salaires de /.test(document.getElementById('cnssNextDue').textContent); }));
 

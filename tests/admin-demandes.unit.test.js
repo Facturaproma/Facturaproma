@@ -12,7 +12,7 @@ t('message du code : code + marche à suivre', code.includes('FP-AAAA-BBBB-CCCC'
 const ml = api.mailtoLink('a+b@x.ma', 'Sujet é', 'Ligne1\nLigne2 & plus');
 t('mailto : adresse, sujet et corps encodés', ml.startsWith('mailto:a%2Bb%40x.ma?subject=Sujet%20%C3%A9&body=Ligne1%0ALigne2%20%26%20plus'));
 // Parcours dans l'interface
-t('actions « En attente » : Contacter (e-mail/WhatsApp) + Générer code + Rejeter', /contactRequest\('\$\{esc\(r\.id\)\}'\)/.test(html) && /processRequest\('\$\{esc\(r\.id\)\}'\)/.test(html) && /rejectRequest\('\$\{esc\(r\.id\)\}'\)/.test(html));
+t('actions « En attente » : Contacter (e-mail/WhatsApp) + Générer code + Rejeter', /contactRequest\(\$\{jsArg\(r\.id\)\}\)/.test(html) && /processRequest\(\$\{jsArg\(r\.id\)\}\)/.test(html) && /rejectRequest\(\$\{jsArg\(r\.id\)\}\)/.test(html));
 t('une demande « Contacté » garde ses actions (avant : seulement « Rouvrir »)', /r\.status === 'pending' \|\| r\.status === 'contacted'\) \? `/.test(html));
 t('le RIB vient des Réglages et le message est refusé s\'il est vide', /bank_rib\) \{\s*showToast\('Renseignez/.test(html));
 t('la demande passe à « Contacté » seulement après l\'envoi (e-mail/WhatsApp), pas à la simple copie', /kind !== 'copy' && c\.afterSend/.test(html) && /update\(\{ status: 'contacted' \}\)/.test(html));

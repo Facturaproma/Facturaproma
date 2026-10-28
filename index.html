@@ -1165,6 +1165,13 @@
             .mobile-only { display: inline-flex; }
         }
 
+        /* Accès « Déjà abonné ? » sous les boutons du hero : visible sur tous les écrans, surtout utile sur mobile
+           (le bouton « Se connecter » de l'en-tête est masqué en dessous de 700 px faute de place) */
+        .hero-login { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; font-size: 15px; color: var(--ink-mute, #5b6478); }
+        .hero-login-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border: 1.5px solid var(--primary, #1e3a6e); border-radius: 12px; color: var(--primary, #1e3a6e); font-weight: 700; text-decoration: none; background: #fff; }
+        .hero-login-link:hover { background: var(--surface, #f5f3ee); }
+        @media (min-width: 701px) { .hero-login { display: none; } }
+
         /* Version mobile compacte */
         @media (max-width: 700px) {
             section { padding-top: 40px !important; padding-bottom: 40px !important; }
@@ -1187,6 +1194,66 @@
             .nav-links .btn-accent { font-size: 11.5px; padding: 8px 9px; animation: none !important; }
             .lang-btn { padding: 5px 9px; font-size: 12px; }
         }
+
+        /* === Parcours en 4 étapes === */
+        .steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1000px; margin: 0 auto; }
+        .step-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px 18px; text-align: left; }
+        .step-num { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; font-size: 14px; }
+        .step-card h4 { font-family: 'Crimson Pro', serif; font-size: 20px; margin-bottom: 6px; }
+        .step-card p { font-size: 14px; color: var(--ink-soft); }
+        .step-cta { text-align: center; margin-top: 28px; }
+
+        /* === Excel/WhatsApp : avant / avec === */
+        .vs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; margin: 0 auto; }
+        .vs-col { border-radius: 16px; padding: 22px; border: 1px solid var(--border); background: var(--surface); }
+        .vs-col.with { border-color: var(--primary); background: linear-gradient(180deg, rgba(27, 58, 107, 0.03), rgba(201, 169, 91, 0.06)); }
+        .vs-col h4 { font-family: 'Crimson Pro', serif; font-size: 22px; margin-bottom: 10px; }
+        .vs-col ul { list-style: none; font-size: 14px; color: var(--ink-soft); }
+        .vs-col li { padding: 6px 0; border-top: 1px solid var(--border); }
+        .vs-col li:first-child { border-top: 0; }
+        .vs-col:not(.with) li::before { content: '✗ '; color: var(--danger); font-weight: 700; }
+        .vs-col.with li::before { content: '✓ '; color: var(--success); font-weight: 700; }
+
+        /* === Guide d'installation === */
+        .install-box { max-width: 760px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 22px; }
+        .install-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 18px; }
+        .install-tab { padding: 12px 8px; border: 1px solid var(--border); background: var(--surface-soft); border-radius: 12px; font-weight: 700; font-family: inherit; font-size: 14px; color: var(--ink-soft); cursor: pointer; }
+        .install-tab[aria-selected="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .install-panel { display: none; }
+        .install-panel.active { display: block; }
+        .install-panel ol { margin: 0 0 14px 20px; font-size: 15px; color: var(--ink); }
+        .install-panel li { padding: 5px 0; }
+        .install-note { font-size: 13px; color: var(--ink-soft); background: var(--surface-soft); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+        .install-direct { display: none; text-align: center; margin-bottom: 14px; }
+        .install-direct.show { display: block; }
+        [dir="rtl"] .install-panel ol { margin: 0 20px 14px 0; }
+        [dir="rtl"] .step-card, [dir="rtl"] .install-note { text-align: right; }
+        [dir="rtl"] .install-note { border-left: 0; border-right: 3px solid var(--accent); }
+
+        /* === Offre annuelle mise en avant === */
+        .alt-tier.featured { border: 2px solid var(--primary); box-shadow: 0 10px 30px var(--shadow-md); }
+        .alt-tier.featured .alt-price .big { font-size: 46px; line-height: 1; }
+        .price-calc { font-size: 12px; color: var(--ink-mute); margin-bottom: 8px; }
+
+        /* === Barre d'essai fixe (mobile) === */
+        .sticky-cta { display: none; }
+        @media (max-width: 700px) {
+            .steps-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+            .vs-grid { grid-template-columns: 1fr; }
+            .alt-pricing .alt-tier.featured { order: -1; }
+            .sticky-cta {
+                display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
+                padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+                background: rgba(255, 255, 255, 0.96); border-top: 1px solid var(--border);
+                box-shadow: 0 -4px 16px rgba(26, 31, 46, 0.08);
+                transform: translateY(110%); transition: transform .25s;
+            }
+            .sticky-cta.show { transform: translateY(0); }
+            .sticky-cta .btn { width: 100%; justify-content: center; }
+            body { padding-bottom: 0; }
+            footer { padding-bottom: 80px; }
+        }
+        @media (max-width: 380px) { .steps-grid { grid-template-columns: 1fr; } }
 
         /* Bascule de langue + arabe (RTL) */
         .lang-btn { background: none; border: 1px solid var(--border, #ddd); border-radius: 100px; padding: 8px 14px; font-weight: 700; cursor: pointer; margin-right: 8px; color: var(--ink, #222); font-family: inherit; }
@@ -1213,6 +1280,7 @@
                 <button id="langBtn" class="lang-btn" onclick="toggleLang()" aria-label="Changer de langue">العربية</button>
                 <a href="#fonctionnalites">Fonctionnalités</a>
                 <a href="#tarifs">Tarifs</a>
+                <a href="#installer">Installer</a>
                 <a href="#faq">FAQ</a>
                 <a href="app.html?mode=login" class="btn btn-ghost" style="margin-right: 8px;">Se connecter</a>
                 <a href="app.html?mode=signup" class="btn btn-accent" style="font-weight: 700; box-shadow: 0 4px 12px rgba(201, 169, 91, 0.4); animation: pulse-cta 2s ease-in-out infinite;">🚀 Essai Gratuit 14 jours</a>
@@ -1243,6 +1311,10 @@
                     <a href="#tarifs" class="btn btn-secondary btn-large">
                         Voir les tarifs
                     </a>
+                </div>
+                <div class="hero-login">
+                    <span>Déjà abonné ?</span>
+                    <a href="app.html?mode=login" class="hero-login-link">Se connecter</a>
                 </div>
                 <div class="hero-trust">
                     <div>
@@ -1333,6 +1405,35 @@
     </div>
 </section>
 
+<!-- ============ AVANT / AVEC ============ -->
+<section id="pourquoi" style="padding-bottom: 20px;">
+    <div class="container">
+        <div class="section-eyebrow">POURQUOI CHANGER</div>
+        <h2 class="section-title">Vos factures ne devraient pas vivre <em>dans Excel et WhatsApp</em></h2>
+        <p class="section-subtitle" style="margin-bottom: 32px;">Un seul endroit pour vos clients, vos devis, vos factures et vos relances.</p>
+        <div class="vs-grid">
+            <div class="vs-col">
+                <h4>Aujourd'hui</h4>
+                <ul>
+                    <li>Factures dans plusieurs fichiers Excel</li>
+                    <li>Devis envoyés par WhatsApp, difficiles à retrouver</li>
+                    <li>Numérotation tenue à la main</li>
+                    <li>Relances faites quand on y pense</li>
+                </ul>
+            </div>
+            <div class="vs-col with">
+                <h4>Avec FacturaPro</h4>
+                <ul>
+                    <li>Clients, devis et factures au même endroit</li>
+                    <li>Envoi par WhatsApp ou PDF en un clic</li>
+                    <li>Numérotation séquentielle automatique</li>
+                    <li>Les factures en retard remontent seules</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
 <!-- ============ FEATURES ============ -->
 <section id="fonctionnalites">
     <div class="container">
@@ -1401,13 +1502,14 @@
             </div>
             
             <!-- ANNUEL (FEATURED) -->
-            <div class="alt-tier" style="border-color: var(--primary); position: relative; background: linear-gradient(180deg, rgba(27, 58, 107, 0.02), rgba(201, 169, 91, 0.05));">
-                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase;">🏆 Best Value</div>
+            <div class="alt-tier featured" style="position: relative; background: linear-gradient(180deg, rgba(27, 58, 107, 0.02), rgba(201, 169, 91, 0.05));">
+                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">🏆 Meilleur choix</div>
                 <h4>🏆 Annuel</h4>
                 <div class="alt-price">
                     <span style="text-decoration: line-through; color: var(--ink-mute); font-size: 16px; font-weight: 400;">588 DH</span><br>
-                    <span>449 DH<small>/an</small></span>
+                    <span class="big">449 DH<small>/an</small></span>
                 </div>
+                <p class="price-calc">Prix mensuel × 12 : 12 × 49 DH = 588 DH</p>
                 <p style="font-size: 13px; color: var(--primary); font-weight: 700; margin-bottom: 4px;">💰 Économisez 139 DH</p>
                 <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit <strong>~37 DH/mois</strong></p>
                 <ul>
@@ -1447,6 +1549,70 @@
     </div>
 </section>
 
+<!-- ============ ÉTAPES ============ -->
+<section id="etapes" style="padding-top: 20px;">
+    <div class="container">
+        <div class="section-eyebrow">PREMIER PAS</div>
+        <h2 class="section-title">Votre première facture en <em>4 étapes</em></h2>
+        <p class="section-subtitle" style="margin-bottom: 32px;">Pas de formation nécessaire : on vous guide à l'intérieur de l'application.</p>
+        <div class="steps-grid">
+            <div class="step-card"><div class="step-num">1</div><h4>Votre entreprise</h4><p>Nom, ICE, IF et coordonnées bancaires, une seule fois.</p></div>
+            <div class="step-card"><div class="step-num">2</div><h4>Un client</h4><p>Ajoutez votre premier client avec ses informations.</p></div>
+            <div class="step-card"><div class="step-num">3</div><h4>Devis ou facture</h4><p>Ajoutez vos lignes, la TVA se calcule pour vous.</p></div>
+            <div class="step-card"><div class="step-num">4</div><h4>Envoi et suivi</h4><p>PDF ou WhatsApp, puis suivi des paiements et relances.</p></div>
+        </div>
+        <div class="step-cta">
+            <a href="app.html?mode=signup" class="btn btn-primary btn-large">Créer ma première facture →</a>
+        </div>
+    </div>
+</section>
+
+<!-- ============ INSTALLATION ============ -->
+<section id="installer">
+    <div class="container">
+        <div class="section-eyebrow">INSTALLATION</div>
+        <h2 class="section-title">Installer FacturaPro sur <em>votre appareil</em></h2>
+        <p class="section-subtitle" style="margin-bottom: 28px;">Facultatif : FacturaPro fonctionne directement dans votre navigateur. L'installer ajoute une icône pour l'ouvrir en un geste.</p>
+        <div class="install-box">
+            <div class="install-direct" id="installDirect">
+                <button type="button" class="btn btn-primary" id="installDirectBtn">📲 Installer maintenant</button>
+            </div>
+            <div class="install-tabs" role="tablist">
+                <button type="button" class="install-tab" role="tab" data-tab="pc" aria-selected="false">💻 PC / Mac</button>
+                <button type="button" class="install-tab" role="tab" data-tab="android" aria-selected="false">🤖 Android</button>
+                <button type="button" class="install-tab" role="tab" data-tab="ios" aria-selected="false">🍎 iPhone</button>
+            </div>
+            <div class="install-panel" id="tab-pc" role="tabpanel">
+                <ol>
+                    <li>Ouvrez FacturaPro avec Chrome ou Edge.</li>
+                    <li>Cliquez sur l'icône d'installation à droite de la barre d'adresse, ou ouvrez le menu ⋮ puis « Installer FacturaPro ».</li>
+                    <li>Confirmez : l'application s'ouvre dans sa propre fenêtre.</li>
+                </ol>
+                <p class="install-note">Safari sur Mac récent : menu Fichier, puis « Ajouter au Dock » (selon la version). Firefox ne propose pas l'installation : utilisez simplement FacturaPro dans le navigateur ou ajoutez-le à vos favoris.</p>
+            </div>
+            <div class="install-panel" id="tab-android" role="tabpanel">
+                <ol>
+                    <li>Ouvrez FacturaPro dans Chrome.</li>
+                    <li>Touchez le menu ⋮ en haut à droite.</li>
+                    <li>Choisissez « Installer l'application » ou « Ajouter à l'écran d'accueil », puis confirmez.</li>
+                </ol>
+                <p class="install-note">Si l'option n'apparaît pas : rechargez la page, puis réessayez. Sinon, gardez FacturaPro dans un onglet ou en favori, tout fonctionne de la même façon. Dans Samsung Internet, cherchez « Ajouter à » dans le menu.</p>
+            </div>
+            <div class="install-panel" id="tab-ios" role="tabpanel">
+                <ol>
+                    <li>Ouvrez FacturaPro avec Safari (recommandé sur iPhone).</li>
+                    <li>Touchez le bouton Partager (carré avec une flèche vers le haut).</li>
+                    <li>Choisissez « Sur l'écran d'accueil », puis « Ajouter ».</li>
+                </ol>
+                <p class="install-note">Sur iPhone, l'installation n'est pas automatique : elle passe toujours par ce menu Partager. Si vous ne voyez pas l'option, ouvrez le lien dans Safari.</p>
+            </div>
+            <div style="text-align: center; margin-top: 18px;">
+                <a href="app.html" class="btn btn-secondary">Ouvrir FacturaPro</a>
+            </div>
+        </div>
+    </div>
+</section>
+
 <!-- ============ FAQ ============ -->
 <section id="faq">
     <div class="container">
@@ -1471,6 +1637,18 @@
             
             
             
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFAQ(this)">
+                    <span>Et la facture électronique de la DGI ?</span>
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        La DGI a annoncé une facturation électronique progressive (d'abord entre entreprises), mais <strong>le décret d'application n'est pas encore publié</strong> : le format, les dates et les entreprises concernées ne sont pas fixés. FacturaPro ne prétend donc pas être connecté à la plateforme de la DGI aujourd'hui. Vos factures sont déjà structurées (ICE, lignes, TVA, dates) et nous suivons le dossier : nous adapterons FacturaPro dès que les textes officiels seront publiés. En attendant, vérifiez vos obligations auprès de la DGI ou de votre comptable.
+                    </div>
+                </div>
+            </div>
+
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFAQ(this)">
                     <span>Mes données sont-elles en sécurité ?</span>
@@ -1558,6 +1736,7 @@
                 <h4>Produit</h4>
                 <a href="#fonctionnalites">Fonctionnalités</a>
                 <a href="#tarifs">Tarifs</a>
+                <a href="#installer">Installer l'application</a>
                 <a href="#faq">FAQ</a>
             </div>
             <div class="footer-col">
@@ -1577,7 +1756,48 @@
     </div>
 </footer>
 
+<div class="sticky-cta" id="stickyCta">
+    <a href="app.html?mode=signup" class="btn btn-primary">Essayer gratuitement 14 jours →</a>
+</div>
+
 <script>
+    /* Guide d'installation : onglet selon l'appareil, bouton direct si le navigateur le permet */
+    (function () {
+        var tabs = document.querySelectorAll('.install-tab');
+        function show(name) {
+            tabs.forEach(function (t) { t.setAttribute('aria-selected', t.getAttribute('data-tab') === name ? 'true' : 'false'); });
+            document.querySelectorAll('.install-panel').forEach(function (p) { p.classList.toggle('active', p.id === 'tab-' + name); });
+        }
+        tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.getAttribute('data-tab')); }); });
+        var ua = navigator.userAgent || '';
+        var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        show(isIOS ? 'ios' : /Android/i.test(ua) ? 'android' : 'pc');
+        var deferred = null;
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault(); deferred = e;
+            var box = document.getElementById('installDirect'); if (box) box.classList.add('show');
+        });
+        var btn = document.getElementById('installDirectBtn');
+        if (btn) btn.addEventListener('click', function () {
+            if (!deferred) return;
+            deferred.prompt();
+            deferred.userChoice.then(function () { deferred = null; var b = document.getElementById('installDirect'); if (b) b.classList.remove('show'); }).catch(function () {});
+        });
+        window.addEventListener('appinstalled', function () { var b = document.getElementById('installDirect'); if (b) b.classList.remove('show'); });
+    })();
+
+    /* Barre d'essai fixe sur mobile : visible une fois le haut de page passé, cachée près des autres appels à l'action */
+    (function () {
+        var bar = document.getElementById('stickyCta'), hero = document.querySelector('.hero');
+        if (!bar || !hero || !('IntersectionObserver' in window)) return;
+        var heroOut = false, ctaIn = false;
+        function update() { bar.classList.toggle('show', heroOut && !ctaIn); }
+        new IntersectionObserver(function (en) { heroOut = !en[0].isIntersecting; update(); }).observe(hero);
+        var targets = document.querySelectorAll('#tarifs .btn, .final-cta');
+        var io = new IntersectionObserver(function (en) { en.forEach(function (x) { x.target.__in = x.isIntersecting; }); ctaIn = Array.prototype.some.call(targets, function (t) { return t.__in; }); update(); });
+        targets.forEach(function (t) { io.observe(t); });
+    })();
+
     function toggleFAQ(el) {
         const item = el.closest('.faq-item');
         const wasOpen = item.classList.contains('open');
@@ -1607,6 +1827,9 @@ const AR_DICT = {
 "Tarifs": "الأسعار",
 "FAQ": "أسئلة شائعة",
 "Se connecter": "تسجيل الدخول",
+"Et la facture électronique de la DGI ?": "وماذا عن الفوترة الإلكترونية للمديرية العامة للضرائب؟",
+"La DGI a annoncé une facturation électronique progressive (d'abord entre entreprises), mais <strong>le décret d'application n'est pas encore publié</strong> : le format, les dates et les entreprises concernées ne sont pas fixés. FacturaPro ne prétend donc pas être connecté à la plateforme de la DGI aujourd'hui. Vos factures sont déjà structurées (ICE, lignes, TVA, dates) et nous suivons le dossier : nous adapterons FacturaPro dès que les textes officiels seront publiés. En attendant, vérifiez vos obligations auprès de la DGI ou de votre comptable.": "أعلنت المديرية العامة للضرائب عن فوترة إلكترونية تدريجية (بين المقاولات أولاً)، لكن <strong>المرسوم التطبيقي لم يُنشر بعد</strong> : الصيغة والتواريخ والمقاولات المعنية غير محددة. لذلك لا يدّعي FacturaPro أنه مرتبط بمنصة المديرية اليوم. فواتيرك منظّمة أصلاً (ICE والبنود والضريبة والتواريخ) ونتابع الملف : سنكيّف FacturaPro فور نشر النصوص الرسمية. في هذه الأثناء، تحقق من التزاماتك لدى المديرية العامة للضرائب أو محاسبك.",
+"Déjà abonné ?": "لديك حساب؟",
 "🚀 Essai Gratuit 14 jours": "🚀 جرّب مجاناً",
 "🇲🇦 Pensé pour la facturation au Maroc": "🇲🇦 مصمّم للفوترة في المغرب",
 "La facturation<br>marocaine, <em>enfin simple</em>.": "الفوترة المغربية،<br><em>أخيراً بكل بساطة</em>.",
@@ -1646,7 +1869,44 @@ const AR_DICT = {
 "Sync multi-appareils": "مزامنة بين الأجهزة",
 "Support email": "دعم عبر البريد الإلكتروني",
 "Démarrer": "ابدأ",
-"🏆 Best Value": "🏆 أفضل قيمة",
+"🏆 Meilleur choix": "🏆 الخيار الأفضل",
+"Prix mensuel × 12 : 12 × 49 DH = 588 DH": "السعر الشهري × 12 : 12 × 49 درهم = 588 درهم",
+"Installer": "التثبيت",
+"POURQUOI CHANGER": "لماذا التغيير",
+"Vos factures ne devraient pas vivre <em>dans Excel et WhatsApp</em>": "فواتيرك لا يجب أن تبقى <em>في Excel وواتساب</em>",
+"Un seul endroit pour vos clients, vos devis, vos factures et vos relances.": "مكان واحد لعملائك وعروض أسعارك وفواتيرك وتذكيراتك.",
+"Aujourd'hui": "اليوم",
+"Avec FacturaPro": "مع FacturaPro",
+"Factures dans plusieurs fichiers Excel": "فواتير موزعة على عدة ملفات Excel",
+"Devis envoyés par WhatsApp, difficiles à retrouver": "عروض أسعار مرسلة عبر واتساب يصعب إيجادها",
+"Numérotation tenue à la main": "ترقيم يدوي",
+"Relances faites quand on y pense": "تذكيرات تتم عندما نتذكر",
+"Clients, devis et factures au même endroit": "العملاء والعروض والفواتير في مكان واحد",
+"Envoi par WhatsApp ou PDF en un clic": "إرسال عبر واتساب أو PDF بضغطة واحدة",
+"Numérotation séquentielle automatique": "ترقيم تسلسلي تلقائي",
+"Les factures en retard remontent seules": "الفواتير المتأخرة تظهر تلقائياً",
+"PREMIER PAS": "الخطوة الأولى",
+"Votre première facture en <em>4 étapes</em>": "فاتورتك الأولى في <em>4 خطوات</em>",
+"Pas de formation nécessaire : on vous guide à l'intérieur de l'application.": "لا حاجة لتكوين : سنرشدك داخل التطبيق.",
+"Votre entreprise": "مقاولتك",
+"Nom, ICE, IF et coordonnées bancaires, une seule fois.": "الاسم وICE وIF والمعلومات البنكية، مرة واحدة فقط.",
+"Un client": "عميل",
+"Ajoutez votre premier client avec ses informations.": "أضف أول عميل مع معلوماته.",
+"Devis ou facture": "عرض سعر أو فاتورة",
+"Ajoutez vos lignes, la TVA se calcule pour vous.": "أضف البنود وتُحسب الضريبة تلقائياً.",
+"Envoi et suivi": "الإرسال والمتابعة",
+"PDF ou WhatsApp, puis suivi des paiements et relances.": "PDF أو واتساب، ثم متابعة الأداءات والتذكيرات.",
+"Créer ma première facture →": "← أنشئ فاتورتي الأولى",
+"INSTALLATION": "التثبيت",
+"Installer FacturaPro sur <em>votre appareil</em>": "ثبّت FacturaPro على <em>جهازك</em>",
+"Facultatif : FacturaPro fonctionne directement dans votre navigateur. L'installer ajoute une icône pour l'ouvrir en un geste.": "اختياري : يعمل FacturaPro مباشرة في المتصفح. التثبيت يضيف أيقونة لفتحه بسرعة.",
+"📲 Installer maintenant": "📲 ثبّت الآن",
+"💻 PC / Mac": "💻 حاسوب / Mac",
+"🤖 Android": "🤖 أندرويد",
+"🍎 iPhone": "🍎 آيفون",
+"Ouvrir FacturaPro": "افتح FacturaPro",
+"Installer l'application": "تثبيت التطبيق",
+"Essayer gratuitement 14 jours →": "← جرّب مجاناً 14 يوماً",
 "🏆 Annuel": "🏆 سنوي",
 "449 DH<small>/an</small>": "449 درهم<small>/سنة</small>",
 "💰 Économisez 139 DH": "💰 وفّر 139 درهماً",

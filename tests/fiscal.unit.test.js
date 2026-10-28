@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
 const a = html.indexOf('// <FISCAL-CALC>'), b = html.indexOf('// </FISCAL-CALC>');
 assert(a > 0 && b > a, 'bloc FISCAL-CALC introuvable');
-const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr };')();
+const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, aeCnssValidate, aeCnssRules, cnssValidate, cnssRules, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 
 // Échéances trimestrielles : fin du mois suivant le trimestre
@@ -53,6 +53,39 @@ ok('CSV : formule neutralisée (=cmd -> \'=cmd)', csv.includes("'=cmd") && !/;=c
 ok('CSV : totaux et mention non officielle', csv.includes('Total collecté') && csv.includes('Total déductible') && csv.includes('Estimation non officielle'));
 ok('CSV : séparateur ; et guillemets', api.csvText('a;b"c') === '"a;b""c"');
 
+// CNSS auto-entrepreneur : AMO fixe par tranche (décret 2.21.928 + barème CGI 73-II-B-6°) ; la retraite (AMO × 1,57) n'est pas ajoutée tant que includePension est faux
+const ae = (ca, act) => api.aeCnssQuarter(ca, act || 'services');
+ok('AE : CA 0 → impôt 0, T1, AMO 300 = cotisation 300 DH (dû même sans CA), retraite non incluse', (() => { const r = ae(0); return r.ir === 0 && r.tranche === 1 && r.amo === 300 && r.cnss === 300 && r.total === 300 && r.includePension === false; })());
+ok('AE services : CA 10 000 → impôt 100, impôt annuel 400 (< 500) : T1', (() => { const r = ae(10000); return r.ir === 100 && r.annualIr === 400 && r.tranche === 1 && r.amo === 300; })());
+ok('AE : frontière T1/T2 — impôt annuel 496 → T1, 500 → T2', ae(12400).tranche === 1 && ae(12500).tranche === 2);
+ok('AE : T2 inclut 1 000, T3 commence à 1 001 (impôt annuel)', ae(25000).tranche === 2 && ae(25100).tranche === 3);
+ok('AE commerce : CA 100 000 → impôt 500 (0,5 %), annuel 2 000, T3, cotisation 570, total 1 070', (() => { const r = ae(100000, 'commerce'); return r.ir === 500 && r.annualIr === 2000 && r.tranche === 3 && r.cnss === 570 && r.total === 1070; })());
+ok('AE services : CA 112 000 → impôt 1 120, annuel 4 480, T4, cotisation 720, total 1 840', (() => { const r = ae(112000); return r.ir === 1120 && r.tranche === 4 && r.cnss === 720 && r.total === 1840; })());
+ok('AE : T7 inclut 50 000 (impôt annuel), T8 au-delà', ae(1250000).tranche === 7 && ae(1250100).tranche === 8 && ae(1500000).amo === 3600);
+ok('AE : retraite calculée (AMO × 1,57) mais ajoutée seulement si includePension', (() => { const g = JSON.parse(JSON.stringify(api.FISCAL_RULES.aeCnss)); g.includePension = true; const on = api.aeCnssQuarter(0, 'services', g), off = ae(0); return on.retraite === 471 && on.cnss === 771 && off.retraite === 471 && off.cnss === 300; })());
+ok('AE : grille = 8 montants croissants, 6 bornes croissantes, coefficient retraite 1,57', (() => { const g = api.FISCAL_RULES.aeCnss; return g.amoAmounts.length === 8 && g.annualIrUpperBounds.length === 6 && g.amoAmounts.every((v, i, a) => !i || v > a[i - 1]) && g.annualIrUpperBounds.every((v, i, a) => !i || v > a[i - 1]) && g.pensionCoef === 1.57; })());
+ok('AE : valeurs négatives ou invalides traitées comme 0', ae(-50).amo === 300 && ae('abc').cnss === 300);
+// Barème AE modifiable par la société : validation et application
+const base = () => JSON.parse(JSON.stringify(api.FISCAL_RULES.aeCnss));
+ok('AE barème : absent ou objet vide → barème de référence (ok, rules null)', (() => { const a = api.aeCnssValidate(null), b = api.aeCnssValidate({}); return a.ok && a.rules === null && b.ok && b.rules === null; })());
+ok('AE barème : le barème de référence est valide et identique après normalisation', (() => { const v = api.aeCnssValidate(base()); return v.ok && JSON.stringify(v.rules.amoAmounts) === JSON.stringify(api.FISCAL_RULES.aeCnss.amoAmounts) && v.rules.irRates.services === 0.01; })());
+ok('AE barème : un montant modifié est appliqué au calcul', (() => { const c = base(); c.amoAmounts[0] = 320; const v = api.aeCnssValidate(c); return v.ok && api.aeCnssQuarter(0, 'services', v.rules).cnss === 320; })());
+ok('AE barème : une borne modifiée déplace la tranche', (() => { const c = base(); c.t1BelowAnnualIr = 1000; c.annualIrUpperBounds = [2000, 3000, 5000, 10000, 25000, 50000]; const v = api.aeCnssValidate(c); return v.ok && api.aeCnssQuarter(12500, 'services', v.rules).tranche === 1; })());
+ok('AE barème : taux modifié (services 2 %)', (() => { const c = base(); c.irRates.services = 0.02; const v = api.aeCnssValidate(c); return v.ok && api.aeCnssQuarter(10000, 'services', v.rules).ir === 200; })());
+ok('AE barème : retraite activée → ajoutée au total', (() => { const c = base(); c.includePension = true; const v = api.aeCnssValidate(c); return v.ok && api.aeCnssQuarter(0, 'services', v.rules).cnss === 771; })());
+ok('AE barème : montants non croissants refusés', (() => { const c = base(); c.amoAmounts[3] = 100; const v = api.aeCnssValidate(c); return !v.ok && v.rules === null && v.errors.length > 0; })());
+ok('AE barème : bornes non croissantes ou ≤ seuil T1 refusées', (() => { const c = base(); c.annualIrUpperBounds[1] = 900; const d = base(); d.annualIrUpperBounds[0] = 400; return !api.aeCnssValidate(c).ok && !api.aeCnssValidate(d).ok; })());
+ok('AE barème : taux hors 0–10 %, négatifs, texte, NaN refusés', (() => { const c = base(); c.irRates.services = 0.5; const d = base(); d.amoAmounts[0] = -1; const e = base(); e.amoAmounts[2] = 'abc'; const f = base(); f.pensionCoef = NaN; return [c, d, e, f].every(x => !api.aeCnssValidate(x).ok); })());
+ok('AE barème : mauvais nombre de tranches refusé ; virgule décimale acceptée', (() => { const c = base(); c.amoAmounts.pop(); const d = base(); d.amoAmounts[0] = '310,5'; const v = api.aeCnssValidate(d); return !api.aeCnssValidate(c).ok && v.ok && v.rules.amoAmounts[0] === 310.5; })());
+ok('AE barème : sans barème personnalisé, aeCnssRules() = référence', api.aeCnssRules() === api.FISCAL_RULES.aeCnss);
+// Taux CNSS employeur modifiables par société
+const cbase = () => JSON.parse(JSON.stringify(api.FISCAL_RULES.cnss));
+ok('CNSS employeur : absent ou objet vide → référence ; référence valide', (() => { const a = api.cnssValidate({}), b = api.cnssValidate(cbase()); return a.ok && a.rules === null && b.ok && b.rules.ceilingDH === 6000 && b.rules.dueDay === 10 && b.rules.branches.length === 4; })());
+ok('CNSS employeur : taux modifié appliqué (AMO salarié 3 % sur 5 000 → 150 + autres)', (() => { const c = cbase(); c.branches.find(b => b.id === 'amo').emp = 0.03; const v = api.cnssValidate(c); return v.ok && api.cnssForEmployee(5000, v.rules).emp === 5000 * (0.0448 + 0.03); })());
+ok('CNSS employeur : plafond modifié (7 000) appliqué aux prestations', (() => { const c = cbase(); c.ceilingDH = 7000; const v = api.cnssValidate(c); return v.ok && api.cnssForEmployee(10000, v.rules).emp === 7000 * 0.0448 + 10000 * 0.0226; })());
+ok('CNSS employeur : jour limite modifié (15) appliqué à l\'échéance', (() => { const c = cbase(); c.dueDay = 15; const v = api.cnssValidate(c); return v.ok && api.cnssNextDue('2026-10-12', v.rules).due === '2026-10-15'; })());
+ok('CNSS employeur : valeurs invalides refusées (taux > 50 %, négatif, plafond 0, jour 0 ou 31, branche manquante, texte)', (() => { const mk = (f) => { const c = cbase(); f(c); return !api.cnssValidate(c).ok; }; return mk(c => { c.branches[0].er = 0.9; }) && mk(c => { c.branches[1].emp = -0.01; }) && mk(c => { c.ceilingDH = 0; }) && mk(c => { c.dueDay = 0; }) && mk(c => { c.dueDay = 31; }) && mk(c => { c.branches.pop(); }) && mk(c => { c.branches[2].er = 'abc'; }); })());
+ok('CNSS employeur : sans réglage, cnssRules() = référence', api.cnssRules() === api.FISCAL_RULES.cnss);
 // CNSS
 ok('CNSS : taux salarié 6,74 % et employeur 21,09 % sous le plafond', (() => { const r = api.cnssForEmployee(5000); return r.emp === 337 && r.er === 1054.5; })());
 ok('CNSS : plafond 6 000 sur les prestations, AMO/allocations/formation sans plafond', (() => { const r = api.cnssForEmployee(10000); return r.emp === 494.8 && r.er === 1749.8; })());

@@ -1,7 +1,7 @@
 {
   "name": "FacturaPro - Logiciel de facturation Maroc",
   "short_name": "FacturaPro",
-  "description": "Logiciel de facturation 100% marocain pour AE, Freelances et SARL. Conformité ICE, IF, CNSS.",
+  "description": "Logiciel de facturation pensé pour le Maroc : devis, factures, clients, paiements et relances pour AE, freelances et sociétés. Mentions ICE, IF, RC et aide de calcul CNSS.",
   "start_url": "./app.html",
   "scope": "./",
   "display": "standalone",

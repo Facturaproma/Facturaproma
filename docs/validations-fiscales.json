@@ -4,7 +4,10 @@
     {
       "id": "TVA_AE_ARTICLE_6",
       "claim": "Mention « TVA non applicable - Article 6 du CGI » imprimée sur les factures des auto-entrepreneurs",
-      "found_in": { "app.html": "Article 6 du CGI", "index.html": "Article 6 du CGI" },
+      "found_in": {
+        "app.html": "Article 6 du CGI",
+        "index.html": "Article 6 du CGI"
+      },
       "pattern": "Article 6 du CGI",
       "status": "non_verifie",
       "notes": "Référence introuvable dans les sources lisibles (24/10/2026). Un blog cite « article 293 » (probablement le CGI français). À faire confirmer par le comptable. Voir docs/PROPOSITION_ICE_TVA.md (PR #66)."
@@ -12,7 +15,9 @@
     {
       "id": "CONSERVATION_10_ANS",
       "claim": "Conservation des justificatifs pendant 10 ans « (obligation DGI) »",
-      "found_in": { "app.html": "pendant 10 ans" },
+      "found_in": {
+        "app.html": "pendant 10 ans"
+      },
       "pattern": "pendant 10 ans",
       "status": "non_verifie",
       "notes": "Durée citée (Art. 211 CGI) par une source secondaire seulement ; texte officiel non lu."
@@ -20,7 +25,9 @@
     {
       "id": "LOI_69_21_DELAIS",
       "claim": "Délais de paiement : défaut 60 jours, maximum conventionnel 120 jours (loi 69-21)",
-      "found_in": { "app.html": "Loi 69-21" },
+      "found_in": {
+        "app.html": "Loi 69-21"
+      },
       "pattern": "Loi 69-21",
       "status": "non_verifie",
       "notes": "Loi non relue au Bulletin officiel ; champs d'application (entreprises concernées) à préciser par un juriste."
@@ -28,10 +35,22 @@
     {
       "id": "ICE_OBLIGATOIRE_15_CHIFFRES",
       "claim": "ICE « obligatoire » à l'inscription, 15 chiffres",
-      "found_in": { "app.html": "obligatoire, 15 chiffres" },
+      "found_in": {
+        "app.html": "obligatoire, 15 chiffres"
+      },
       "pattern": "obligatoire, 15 chiffres",
       "status": "non_verifie",
       "notes": "Paragraphe exact de l'art. 145 CGI (VIII ou IX) et sanction éventuelle (art. 198 ter ?) non confirmés. Décision produit : ICE à l'inscription ou à l'émission (PR #66)."
+    },
+    {
+      "id": "IMPOT_LIBERATOIRE_AE_ARTICLE_73",
+      "claim": "Barème de l'impôt libératoire des auto-entrepreneurs et « droits complémentaires » cités avec l'art. 73-II-B-6° du CGI et le décret 2.21.928 (rapports fiscaux)",
+      "found_in": {
+        "app.html": "art. 73-II-B-6° du CGI"
+      },
+      "pattern": "art. 73-II-B-6° du CGI",
+      "status": "non_verifie",
+      "notes": "Référence ajoutée au code après la rédaction du registre ; non vérifiée sur le texte officiel. À faire valider par le comptable (taux, tranches, article)."
     }
   ]
 }
