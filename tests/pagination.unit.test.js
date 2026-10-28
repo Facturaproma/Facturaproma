@@ -5,7 +5,9 @@ for (const f of ['app.html', 'admin.html']) {
   const h = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const a = h.indexOf('const FP_PAGE_SIZE'), b = h.indexOf('function fpGoto', a), e = h.indexOf('\n}\n', b) + 3;
   ok(f + ' : helper de pagination présent', a > 0 && b > a);
-  const ctx = {}; vm.createContext(ctx); vm.runInContext(h.slice(a, e) + ';this.fpPaginate=fpPaginate;this.fpGoto=fpGoto;', ctx);
+  const ctx = {}; vm.createContext(ctx); const ja = h.indexOf('function jsArg('), je = h.indexOf('\n}\n', ja) + 3;   // jsArg (échappement des arguments de gestionnaires) est utilisé par les onglets
+  ok(f + ' : jsArg présent', ja > 0);
+  vm.runInContext(h.slice(ja, je) + h.slice(a, e) + ';this.fpPaginate=fpPaginate;this.fpGoto=fpGoto;', ctx);
   const rows = Array.from({ length: 25 }, (_, i) => ({ id: 'r' + i }));
   let calls = 0; const fn = () => { calls++; };
   let p = ctx.fpPaginate('k', rows, 's', fn);

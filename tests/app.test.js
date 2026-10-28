@@ -13,7 +13,7 @@ const srv = http.createServer((q, r) => {
     if (f.endsWith('app.html')) {   // mode local : on neutralise les clés Supabase en mémoire (le fichier n'est pas modifié)
       body = d.toString('utf8')
         .replace(/^const SUPABASE_URL = .*$/m, "const SUPABASE_URL = 'YOUR_SUPABASE_URL';")
-        .replace(/^const SUPABASE_ANON_KEY = .*$/m, "const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';");
+        .replace(/^const SUPABASE_ANON_KEY = .*$/m, "const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';").replace(/ integrity="[^"]*" crossorigin="anonymous"/g, '');
     }
     r.writeHead(200, { 'content-type': f.endsWith('.html') ? 'text/html' : f.endsWith('.js') ? 'text/javascript' : 'application/octet-stream' });
     r.end(body);
