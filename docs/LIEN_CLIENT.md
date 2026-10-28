@@ -1,6 +1,6 @@
 # Lien client : consultation d'une facture sans compte
 
-**État : code prêt ; `sql/30_lien_client_facture.sql` appliqué en PRÉPRODUCTION le 26/10/2026 (droits vérifiés en lecture seule + essai réel sous les rôles `anon` / `authenticated`, annulé), NON appliqué en production** (hors `MANIFEST.json`). Application d'abord en préproduction, puis en production sur autorisation explicite du propriétaire.
+**État : `sql/30_lien_client_facture.sql` appliqué en PRÉPRODUCTION puis en PRODUCTION le 26/10/2026 (autorisation explicite du propriétaire), page `facture.html` déployée.** Contrôles de production en lecture seule : RLS active, 0 politique, aucun droit direct sur la table, `anon` n'exécute que `get_shared_invoice` (jeton inconnu ou mal formé = NULL), `user_data` inchangé (79 lignes, 14 comptes), 0 lien. Non testé : un vrai lien sur téléphone (voir ci-dessous). Le script reste hors `MANIFEST.json`.
 
 ## Ce que ça fait
 - Dans la liste des factures : **⋯ Plus → 🔗 Lien client** (factures enregistrées seulement, ni brouillon ni avoir).
