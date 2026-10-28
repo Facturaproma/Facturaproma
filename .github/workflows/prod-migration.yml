@@ -118,7 +118,7 @@ jobs:
         with:
           name: sauvegarde-avant-migration
           path: "*.gpg"
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: error
 
       - name: Appliquer SQL 14 + SQL 18 + update_updated_at (une transaction, contrôles intégrés)

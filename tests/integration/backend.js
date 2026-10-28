@@ -19,6 +19,8 @@ function createDb(opts = {}) {
   for (const f of SQL_FILES) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   psql(db, ['-c', 'GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated; REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.doc_counters, public.doc_events FROM authenticated;']);
   if (opts.messagerie) for (const f of ['28_admin_nom_societe', '29_messagerie_support']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
+  if (opts.paiementCode) for (const f of ['20_formules_configurables', '32_paiement_lie_au_code'].concat(opts.documentsVente ? ['33_documents_vente'] : [])) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
+  if (opts.partage) psql(db, ['-f', path.join(ROOT, 'sql', '30_lien_client_facture.sql')]);
   if (opts.docs) {
     // comme Supabase : privilèges par défaut larges, puis les scripts 15/16/17 retirent ce qui doit l'être
     psql(db, ['-c', 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated']);
@@ -52,10 +54,11 @@ function makeBackend(db) {
     get_doc_mode: [], upsert_document: ['p_doc', 'p_expected_version', 'p_op_id'], delete_document: ['p_type', 'p_id', 'p_expected_version', 'p_op_id'],
     record_payment: ['p_invoice_id', 'p_payment', 'p_op_id'], append_history: ['p_entries', 'p_op_id'], get_contact_info: [], admin_whoami: [],
     support_my_messages: [], support_send: ['p_body'], support_mark_read: [], support_unread_count: [],
-    admin_support_threads: [], admin_support_messages: ['p_user'], admin_support_reply: ['p_user', 'p_body'], admin_support_mark_read: ['p_user'], admin_support_unread_total: [] };
-  const RPC_SET = ['support_my_messages', 'admin_support_threads', 'admin_support_messages'];   // fonctions qui renvoient une table
-  const GENERIC = ['subscription_requests', 'admin_codes', 'admin_settings', 'licenses', 'admins'];
-  const JSONB_PARAMS = ['p_doc', 'p_payment', 'p_entries'];
+    admin_support_threads: [], admin_support_messages: ['p_user'], admin_support_reply: ['p_user', 'p_body'], admin_support_mark_read: ['p_user'], admin_support_unread_total: [],
+    share_invoice: ['p_invoice_id', 'p_snapshot', 'p_days'], admin_confirm_payment: ['p_id', 'p_amount', 'p_mode', 'p_date', 'p_note'], revoke_invoice_share: ['p_invoice_id'], my_invoice_shares: [] };
+  const RPC_SET = ['my_invoice_shares', 'support_my_messages', 'admin_support_threads', 'admin_support_messages'];   // fonctions qui renvoient une table
+  const GENERIC = ['subscription_requests', 'admin_codes', 'admin_settings', 'licenses', 'admins', 'admin_payments', 'plans', 'admin_documents'];
+  const JSONB_PARAMS = ['p_doc', 'p_payment', 'p_entries', 'p_snapshot'];
   const DOC_TABLES = { documents: 'doc_type, id, version, body, created_at', doc_payments: 'id, body, created_at', doc_history: 'seq, ts, body' };
   const DOC_ORDER = { documents: 'created_at, id', doc_payments: 'created_at, id', doc_history: 'seq' };
 

@@ -2,6 +2,10 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <!-- Anti-clickjacking : GitHub Pages ne peut pas envoyer X-Frame-Options. La page reste invisible tant qu'elle n'est pas la fenêtre principale ;
+         si un site tiers l'affiche dans un cadre, elle tente de se rouvrir en plein écran, sinon reste vide (aucun clic détourné possible). -->
+    <style id="fp-antiframe">html{display:none!important}</style>
+    <script>try{if(window.top===window.self){document.getElementById('fp-antiframe').remove();}else{window.top.location=window.self.location;}}catch(e){}</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FacturaPro Admin — Gestion Clients & Licences</title>
     
@@ -9,11 +13,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha256-7jvo3hkrl8sdc9HpXWuCux9rZYwPl8TvdX/DMZlu09M=" crossorigin="anonymous"></script>
     
     <!-- jsPDF for PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="vendor/jspdf.umd.min.js"></script>
+    <script src="vendor/jspdf.plugin.autotable.min.js"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -601,6 +605,27 @@
 .am-admin { align-self:flex-end; background:var(--ink, #1b2a49); color:#fff; }
 .am-form { padding:10px; border-top:1px solid var(--line, #eee); display:flex; flex-direction:column; gap:8px; }
 .am-form textarea { width:100%; min-height:70px; font:inherit; padding:9px; border:1px solid var(--line, #d9d4c7); border-radius:8px; box-sizing:border-box; resize:vertical; }
+    .fp-doc-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+    .fp-doc-filters select, .fp-doc-filters input { padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; background:var(--card, #fff); color:inherit; }
+    .fp-doc-filters input { flex:1; min-width:180px; }
+    .fp-doc-list { display:grid; gap:10px; contain:content; }
+    .fp-doc-list .empty { padding:28px 12px; text-align:center; color:var(--ink-mute); }
+    .fp-order { border:1px solid var(--border); border-radius:12px; background:var(--card, #fff); padding:12px 14px; content-visibility:auto; contain-intrinsic-size:auto 150px; }
+    .fp-order-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+    .fp-order-client { font-weight:600; word-break:break-all; min-width:0; flex:1 1 180px; }
+    .fp-order-meta { font-size:12px; color:var(--ink-mute); margin-top:2px; }
+    .fp-order-right { text-align:right; }
+    .fp-order-amount { font-weight:700; font-size:16px; white-space:nowrap; }
+    .fp-st { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:99px; margin-top:4px; }
+    .fp-st-paid { background:#dcfce7; color:#166534; } .fp-st-issued { background:#fef3c7; color:#92400e; } .fp-st-void { background:#fee2e2; color:#991b1b; }
+    .fp-order-docs { margin-top:10px; display:grid; gap:6px; }
+    .fp-docline { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:8px; background:rgba(127,127,127,.08); }
+    .fp-docline.fp-pending { opacity:.6; font-style:italic; }
+    .fp-docline-main { flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:2px 8px; align-items:baseline; font-size:13px; }
+    .fp-docline-main code { font-size:12px; font-weight:600; }
+    .fp-docline-main small { color:var(--ink-mute); }
+    .fp-docline .btn { flex:none; }
+    .fp-order.fp-void .fp-order-amount { text-decoration:line-through; }
     .fp-pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:12px 8px; }
 .fp-pg { min-width:36px; height:36px; padding:0 10px; border:1px solid var(--line, #d9d4c7); background:var(--card, #fff); color:var(--ink, #1b2a49); border-radius:8px; font:inherit; font-size:14px; cursor:pointer; }
 .fp-pg:disabled { opacity:.4; cursor:default; }
@@ -612,6 +637,26 @@
 <body>
 
 <!-- ============ LOGIN SCREEN ============ -->
+<!-- ============ DOUBLE AUTHENTIFICATION (TOTP) ============ -->
+<div id="mfaOverlay" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(20,20,20,0.6); align-items:center; justify-content:center; padding:16px;">
+    <div class="login-card" style="max-height:92vh; overflow:auto;">
+        <h1 id="mfaTitle">🔐 Vérification en deux étapes</h1>
+        <p class="subtitle" id="mfaSub"></p>
+        <div id="mfaError" style="display:none; background: rgba(200, 74, 74, 0.08); border: 1px solid rgba(200, 74, 74, 0.2); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px;"></div>
+        <div id="mfaEnroll" style="display:none; text-align:center; margin-bottom:12px;">
+            <img id="mfaQr" alt="QR code à scanner" width="180" height="180" style="background:#fff; padding:6px; border-radius:8px; max-width:100%;">
+            <div style="font-size:12px; color:var(--ink-mute); margin-top:8px;">Pas de caméra ? Saisissez cette clé dans l'application :</div>
+            <code id="mfaSecret" style="display:block; font-size:13px; word-break:break-all; user-select:all; margin-top:4px;"></code>
+        </div>
+        <div class="form-group">
+            <label>Code à 6 chiffres</label>
+            <input type="text" id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px; text-align:center; font-size:20px;">
+        </div>
+        <button class="btn btn-primary btn-block" id="mfaBtn" onclick="mfaSubmit()">Valider</button>
+        <div style="text-align:center; margin-top:14px; font-size:13px;"><a onclick="mfaCancel()" style="color:var(--primary); cursor:pointer; font-weight:600;">Annuler et se déconnecter</a></div>
+    </div>
+</div>
+
 <div id="loginScreen">
     <div class="login-card">
         <h1>🔐 Admin FacturaPro</h1>
@@ -1079,6 +1124,25 @@
                 </div>
             </div>
 
+            <div class="card staff-hide" style="margin-bottom:16px;">
+                <div class="card-header"><h2>⏳ Paiements en attente (un par code généré)</h2></div>
+                <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr><th>Code créé</th><th>Client</th><th>Attendu</th><th>Formule</th><th>Code</th><th></th></tr></thead>
+                    <tbody id="pendingPaymentsTable"><tr><td colspan="6" class="empty">Aucun paiement en attente</td></tr></tbody>
+                </table>
+                </div>
+            </div>
+
+            <div class="card staff-hide" id="unlinkedPaymentsCard" style="margin-bottom:16px; display:none; border-left:4px solid var(--warning);">
+                <div class="card-header"><h2>🔗 Paiements encaissés sans code (à rattacher)</h2></div>
+                <div style="padding:0 16px 12px; font-size:13px; color:var(--ink-mute);">Saisis à la main, sans code de licence lié. Vérifie qu'un code existe pour ce client (ou crée-le) : ce contrôle évite les encaissements « orphelins ».</div>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Date</th><th>Client</th><th>Montant</th><th>Type</th><th>Code du client</th></tr></thead>
+                    <tbody id="unlinkedPaymentsTable"></tbody>
+                </table></div>
+            </div>
+
             <div class="card">
                 <table>
                     <thead>
@@ -1455,7 +1519,7 @@
             <!-- ================ ONGLET 1 : CONFIGURATION ================ -->
             <div class="myinv-content" id="myinv-config">
                 <div class="alert" style="background: rgba(232, 177, 74, 0.08); border-color: var(--warning);">
-                    ⚠️ <strong>Important</strong> : Renseignez ces informations avec précision. Elles apparaîtront sur toutes les factures que vous émettez à vos clients. Conformité légale obligatoire au Maroc.
+                    ⚠️ <strong>Important</strong> : Renseignez ces informations avec précision. Elles apparaîtront sur toutes les factures que vous émettez à vos clients. Vérifiez auprès de votre comptable les mentions obligatoires qui s'appliquent à votre activité.
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 350px; gap: 24px; align-items: start;">
@@ -1682,34 +1746,18 @@
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
-                    <select id="fpDocFilterType" onchange="renderFpDocuments()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
-                        <option value="all">Tous les documents</option>
-                        <option value="invoice">📋 Factures</option>
-                        <option value="receipt">📄 Reçus</option>
+                <div class="fp-doc-filters">
+                    <select id="fpDocFilterType" onchange="renderFpDocuments()" aria-label="Filtrer par statut">
+                        <option value="all">Toutes les commandes</option>
+                        <option value="issued">⏳ À régler</option>
+                        <option value="paid">✅ Soldées</option>
+                        <option value="void">🚫 Annulées</option>
                     </select>
-                    <input type="text" id="fpDocFilterSearch" placeholder="🔍 Rechercher (client, numéro)..." oninput="renderFpDocuments()" style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                    <input type="search" id="fpDocFilterSearch" placeholder="🔍 Client, numéro, code…" oninput="fpDocSearchDebounced()">
                     <button class="btn btn-primary btn-sm" onclick="exportFpDocuments()">📥 Exporter CSV</button>
                 </div>
 
-                <div class="table-card">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Type</th>
-                                <th>Numéro</th>
-                                <th>Date</th>
-                                <th>Client</th>
-                                <th>Type licence</th>
-                                <th>Montant TTC</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fpDocsTable">
-                            <tr><td colspan="7" class="empty">Aucun document émis</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <div id="fpDocsTable" class="fp-doc-list"><div class="empty">Aucun document émis</div></div>
             </div>
 
             <!-- ================ ONGLET 3 : STATISTIQUES ================ -->
@@ -2420,6 +2468,7 @@ const supaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 let allCodes = [];
 let allPayments = [];
+let allPendingPayments = []; // paiements 'pending' (un par code généré, sql/32) : jamais comptés dans les revenus
 let allUsers = [];
 let allRequests = [];
 let allAdmins = [];
@@ -2479,6 +2528,64 @@ function showAdminLoginSuccess(msg) {
     document.getElementById('adminLoginError').style.display = 'none';
 }
 
+// ── Double authentification TOTP (Supabase MFA). Obligatoire pour le PROPRIÉTAIRE (compte master) ; facultative pour les autres :
+//    1re connexion du propriétaire → activation (QR code), ensuite → code à 6 chiffres ; un autre compte qui l'a activée se voit demander le code. Le serveur (sql/31) refuse les droits admin
+//    à une session sans code dès qu'un facteur est vérifié ; cet écran n'est donc pas la seule barrière.
+let _mfa = null;
+function mfaShowErr(m) { const e = document.getElementById('mfaError'); e.textContent = m; e.style.display = m ? 'block' : 'none'; }
+function mfaCancel() {
+    const r = _mfa; _mfa = null;
+    document.getElementById('mfaOverlay').style.display = 'none';
+    if (r) r.reject(new Error('mfa_cancel'));
+}
+async function mfaSubmit() {
+    if (!_mfa) return;
+    const code = document.getElementById('mfaCode').value.replace(/\s/g, '');
+    if (!/^\d{6}$/.test(code)) { mfaShowErr('Le code comporte 6 chiffres'); return; }
+    const btn = document.getElementById('mfaBtn'); btn.disabled = true;
+    try {
+        const { error } = await supaClient.auth.mfa.challengeAndVerify({ factorId: _mfa.factorId, code });
+        if (error) { mfaShowErr('Code incorrect ou expiré. Réessayez avec le code actuel de l\'application.'); document.getElementById('mfaCode').value = ''; return; }
+        const r = _mfa; _mfa = null;
+        document.getElementById('mfaOverlay').style.display = 'none';
+        r.resolve(true);
+    } catch (e) { mfaShowErr('Erreur : ' + (e.message || e)); }
+    finally { btn.disabled = false; }
+}
+document.getElementById('mfaCode')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') mfaSubmit(); });
+function mfaAsk(factorId, enroll) {
+    return new Promise((resolve, reject) => {
+        _mfa = { factorId, resolve, reject };
+        document.getElementById('mfaTitle').textContent = enroll ? '🔐 Activer la double authentification' : '🔐 Vérification en deux étapes';
+        document.getElementById('mfaSub').textContent = enroll
+            ? '1) Installez une application d\'authentification (Google Authenticator, Microsoft Authenticator, Aegis…). 2) Scannez le QR code. 3) Saisissez le code à 6 chiffres affiché.'
+            : 'Saisissez le code à 6 chiffres de votre application d\'authentification.';
+        mfaShowErr(''); document.getElementById('mfaCode').value = '';
+        if (!enroll) document.getElementById('mfaEnroll').style.display = 'none';
+        document.getElementById('mfaOverlay').style.display = 'flex';
+        setTimeout(() => document.getElementById('mfaCode').focus(), 50);
+    });
+}
+// Rend la session « aal2 ». Retourne true si OK ; lève une erreur si annulé / impossible (la connexion est alors refusée).
+async function adminMfaStep(mayEnroll) {
+    const { data: lvl, error: lErr } = await supaClient.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (lErr) throw lErr;
+    if (lvl.currentLevel === 'aal2') return true;
+    const { data: fl, error: fErr } = await supaClient.auth.mfa.listFactors();
+    if (fErr) throw fErr;
+    const verified = (fl.totp || []).find(f => f.status === 'verified');
+    if (verified) return mfaAsk(verified.id, false);
+    if (!mayEnroll) return false; // pas d'activation imposée (client, admin non propriétaire, assistant) : on continue avec le mot de passe seul
+    // Aucun facteur vérifié : activation obligatoire. On retire d'abord les tentatives abandonnées.
+    for (const f of (fl.all || []).filter(f => f.status !== 'verified' && f.factor_type === 'totp')) { try { await supaClient.auth.mfa.unenroll({ factorId: f.id }); } catch (e) {} }
+    const { data: en, error: eErr } = await supaClient.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'FacturaPro admin ' + new Date().toISOString().slice(0, 10) });
+    if (eErr) throw new Error('Impossible d\'activer la double authentification (' + eErr.message + '). Vérifiez Supabase → Authentication → Multi-factor : TOTP doit être activé.');
+    document.getElementById('mfaQr').src = en.totp.qr_code;
+    document.getElementById('mfaSecret').textContent = en.totp.secret;
+    document.getElementById('mfaEnroll').style.display = 'block';
+    return mfaAsk(en.id, true);
+}
+
 async function adminLogin() {
     const email = document.getElementById('adminEmail').value.trim().toLowerCase();
     const pwd = document.getElementById('adminPassword').value;
@@ -2499,6 +2606,19 @@ async function adminLogin() {
         if (authErr) {
             if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
             showAdminLoginError('Email ou mot de passe incorrect');
+            return;
+        }
+
+        // Double authentification AVANT toute lecture de droits : sans code, le serveur ne reconnaît pas l'administrateur
+        const ident0 = await supaClient.rpc('admin_whoami');
+        // Activation OBLIGATOIRE pour le propriétaire (compte master) seulement ; les autres admins / assistants gardent l'accès par mot de passe,
+        // et si l'un d'eux a activé la 2FA de lui-même, le code lui est demandé.
+        const mustEnroll = !!(ident0 && ident0.data && ident0.data.is_master);
+        try { await adminMfaStep(mustEnroll); }
+        catch (mfaErr) {
+            await supaClient.auth.signOut();
+            if (btn) { btn.disabled = false; btn.textContent = '🔓 Se connecter'; }
+            showAdminLoginError(mfaErr.message === 'mfa_cancel' ? 'Connexion annulée' : mfaErr.message);
             return;
         }
 
@@ -2577,7 +2697,7 @@ function updateAdminSidebar() {
     const el = document.getElementById('currentAdminInfo');
     if (el) {
         el.innerHTML = `
-            <div style="font-size: 12px; font-weight: 700; color: var(--ink);">${currentAdmin.email}</div>
+            <div style="font-size: 12px; font-weight: 700; color: var(--ink);">${esc(currentAdmin.email)}</div>
             <div style="font-size: 10px; color: ${currentAdmin.isMaster ? 'var(--accent)' : 'var(--ink-mute)'}; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-top: 2px;">
                 ${currentAdmin.isStaff ? '🧾 ASSISTANT' : currentAdmin.isMaster ? '👑 MASTER' : '👤 ADMIN'}
             </div>
@@ -2708,6 +2828,8 @@ async function submitChangeAdminPassword() {
             return;
         }
 
+        // La ré-authentification par mot de passe ramène la session au niveau « mot de passe seul » : redemander le code
+        try { await adminMfaStep(!!(currentAdmin && currentAdmin.isMaster)); } catch (mfaErr) { showErr(mfaErr.message === 'mfa_cancel' ? 'Changement annulé : la session a été rétrogradée, reconnectez-vous.' : mfaErr.message); btn.disabled = false; btn.textContent = '🔑 Changer le mot de passe'; return; }
         const { error: updErr } = await supaClient.auth.updateUser({ password: newPwd });
         if (updErr) throw updErr;
 
@@ -2737,7 +2859,8 @@ async function loadStaffData() {
     try {
         const { data, error } = await supaClient.from('admin_payments').select('*').order('payment_date', { ascending: false }).limit(300);
         if (error) throw error;
-        allPayments = data || [];
+        allPayments = (data || []).filter(p => !p.status || p.status === 'paid');   // les paiements en attente ne sont jamais des revenus
+        await loadFpDocuments();
     } catch (err) { console.warn('staff payments', err); allPayments = []; }
     try {
         const { data, error } = await supaClient.rpc('staff_open_requests');
@@ -2759,7 +2882,7 @@ function renderStaffRequests() {
             <td><strong>${esc(r.client_email)}</strong></td>
             <td>${esc(lbl[r.tier] || r.tier || '')}</td>
             <td>${Number(r.final_price || 0).toLocaleString('fr-FR')} DH</td>
-            <td><button class="btn btn-primary btn-sm" onclick='prefillPayment(${JSON.stringify({ e: r.client_email, t: r.tier, a: r.final_price })})'>Saisir le paiement</button></td>
+            <td><button class="btn btn-primary btn-sm" onclick="prefillPayment(${esc(JSON.stringify({ e: r.client_email, t: r.tier, a: r.final_price }))})">Saisir le paiement</button></td>
         </tr>`).join('') + '</tbody></table>';
 }
 
@@ -2811,10 +2934,14 @@ async function loadAllData() {
             .select('*')
             .order('payment_date', { ascending: false });
         if (payErr) throw payErr;
-        allPayments = payments || [];
+        // Avant sql/32 la colonne status n'existe pas : tout est « encaissé ». Seuls les paiements encaissés comptent dans les revenus.
+        allPayments = (payments || []).filter(p => !p.status || p.status === 'paid');
+        allPendingPayments = (payments || []).filter(p => p.status === 'pending');
+        await loadFpDocuments();
     } catch (err) {
         console.warn('Payments table error:', err);
         allPayments = [];
+        allPendingPayments = [];
     }
     
     // Load subscription requests
@@ -2909,11 +3036,11 @@ function fpPaginate(key, rows, sig, renderFn) {
         let tabs = '', prev = 0;
         for (const n of nums) {
             if (prev && n - prev > 1) tabs += '<span class="fp-gap">…</span>';
-            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto('${key}',${n})">${n}</button>`;
+            tabs += `<button type="button" class="fp-pg${n === st.page ? ' fp-pg-on' : ''}" ${n === st.page ? 'aria-current="page"' : ''} onclick="fpGoto(${jsArg(key)},${n})">${n}</button>`;
             prev = n;
         }
         html = `<div class="fp-pager" role="navigation" aria-label="Pages">
-            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto('${key}',${st.page + 1})" aria-label="Page suivante">›</button>
+            <button type="button" class="fp-pg" ${st.page === 1 ? 'disabled' : ''} onclick="fpGoto(${jsArg(key)},${st.page - 1})" aria-label="Page précédente">‹</button>${tabs}<button type="button" class="fp-pg" ${st.page === pages ? 'disabled' : ''} onclick="fpGoto(${jsArg(key)},${st.page + 1})" aria-label="Page suivante">›</button>
             <span class="fp-info">${from + 1}–${from + items.length} sur ${total}</span></div>`;
     }
     return { items, html, page: st.page, pages, total, from };
@@ -2926,7 +3053,7 @@ function fpGoto(key, n) {
 
 // Admin : les listes sont des <tbody> ; le pager est placé juste après le <table> (créé au besoin).
 function fpHost(tbody, html) {
-    const table = tbody && tbody.closest('table'); if (!table) return;
+    const table = tbody && (tbody.closest('table') || tbody); if (!table) return;
     let host = table.nextElementSibling;
     if (!host || !host.classList.contains('fp-host')) { host = document.createElement('div'); host.className = 'fp-host'; table.insertAdjacentElement('afterend', host); }
     host.innerHTML = html;
@@ -2935,6 +3062,18 @@ const fpSig = (rows, extra) => rows.length + '|' + (rows[0] ? (rows[0].id || row
 
 function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// Argument texte d'un gestionnaire en ligne : onclick="fn(${jsArg(valeur)})". Tout caractère hors [A-Za-z0-9_.:@ -] est écrit \xNN / \uNNNN :
+// la chaîne ne contient ni apostrophe, ni guillemet, ni < > & (esc() seul NE suffit PAS dans un gestionnaire : le navigateur décode &#39; avant d'exécuter le JS).
+function jsArg(v) {
+    return "'" + String(v == null ? '' : v).replace(/[^A-Za-z0-9_.:@ -]/g, (c) => { const n = c.charCodeAt(0); return n < 256 ? '\\x' + ('0' + n.toString(16)).slice(-2) : '\\u' + ('000' + n.toString(16)).slice(-4); }) + "'";
+}
+// Cellule CSV sûre : neutralise les formules (=, +, -, @, tabulation) qu'un client pourrait glisser dans son e-mail ou le nom de sa société
+// (injection de formule à l'ouverture dans Excel), double les guillemets, entoure de guillemets si besoin (always=true : toujours).
+function csvCell(v, always) {
+    let s = String(v == null ? '' : v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return (always || /[;,"\n\r]/.test(s)) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
 async function loadAccounts() {
@@ -3071,9 +3210,9 @@ function relanceEmail(uid, kind) {
 function actionRowHTML(a, kind, detail) {
     return `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;">
         <div style="flex:1; min-width:180px;"><strong>${esc(a.email)}</strong><div style="font-size:12px; color:var(--ink-mute);">${detail}</div></div>
-        <button class="btn btn-secondary btn-sm" onclick="relanceWhatsApp('${a.user_id}','${kind}')">💬 WhatsApp</button>
-        <button class="btn btn-secondary btn-sm" onclick="relanceCopy('${a.user_id}','${kind}')">📋 Copier</button>
-        <button class="btn btn-secondary btn-sm" onclick="openLicenseModal('${a.user_id}')">⚙️ Licence</button>
+        <button class="btn btn-secondary btn-sm" onclick="relanceWhatsApp(${jsArg(a.user_id)},${jsArg(kind)})">💬 WhatsApp</button>
+        <button class="btn btn-secondary btn-sm" onclick="relanceCopy(${jsArg(a.user_id)},${jsArg(kind)})">📋 Copier</button>
+        <button class="btn btn-secondary btn-sm" onclick="openLicenseModal(${jsArg(a.user_id)})">⚙️ Licence</button>
     </div>`;
 }
 
@@ -3229,25 +3368,25 @@ const pg_requests = fpPaginate('requests', filtered, fpSig(filtered, (document.g
     tbody.innerHTML = pg_requests.items.map(r => `
         <tr>
             <td>${formatDate(r.created_at)}<br><small style="color: var(--ink-mute);">${formatTime(r.created_at)}</small></td>
-            <td><strong>${r.client_email}</strong></td>
-            <td>${r.company_name || '—'}<br><small style="color: var(--ink-mute);">${r.company_status || ''}</small></td>
+            <td><strong>${esc(r.client_email)}</strong></td>
+            <td>${esc(r.company_name || '—')}<br><small style="color: var(--ink-mute);">${esc(r.company_status || '')}</small></td>
             <td>${tierLabels[r.tier] || r.tier}</td>
             <td><strong>${parseFloat(r.final_price).toLocaleString('fr-FR')} DH</strong>${r.base_price !== r.final_price ? `<br><small style="text-decoration:line-through; color: var(--ink-mute);">${r.base_price} DH</small>` : ''}</td>
-            <td>${r.promo_code ? `<span class="badge badge-trial">${r.promo_code}</span>` : '—'}</td>
+            <td>${r.promo_code ? `<span class="badge badge-trial">${esc(r.promo_code)}</span>` : '—'}</td>
             <td>${statusBadges[r.status] || r.status}${(r.status === 'pending' || r.status === 'contacted') && doubleSubscriptionBlock(r.client_email, r.tier) ? '<br><span class="badge badge-danger" title="Abonnement actif : seule une formule plus longue est possible">⛔ Déjà abonné</span>' : ''}</td>
             <td>
                 ${(r.status === 'pending' || r.status === 'contacted') ? `
-                    <button class="btn ${r.status === 'pending' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="contactRequest('${esc(r.id)}')" title="Envoyer le montant et le RIB par e-mail ou WhatsApp">
+                    <button class="btn ${r.status === 'pending' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="contactRequest(${jsArg(r.id)})" title="Envoyer le montant et le RIB par e-mail ou WhatsApp">
                         ${r.status === 'pending' ? '✉️💬 Contacter' : '✉️💬 Renvoyer RIB'}
                     </button>
-                    <button class="btn ${r.status === 'contacted' ? 'btn-success' : 'btn-secondary'} btn-sm" onclick="processRequest('${esc(r.id)}')" title="Après réception du paiement : génère le code et l'envoie au client">
+                    <button class="btn ${r.status === 'contacted' ? 'btn-success' : 'btn-secondary'} btn-sm" onclick="processRequest(${jsArg(r.id)})" title="Après réception du paiement : génère le code et l'envoie au client">
                         🎁 Générer code
                     </button>
-                    <button class="btn btn-danger btn-sm" onclick="rejectRequest('${esc(r.id)}')" title="Rejeter">
+                    <button class="btn btn-danger btn-sm" onclick="rejectRequest(${jsArg(r.id)})" title="Rejeter">
                         ❌
                     </button>
                 ` : `
-                    <button class="btn btn-secondary btn-sm" onclick="reopenRequest('${esc(r.id)}')">
+                    <button class="btn btn-secondary btn-sm" onclick="reopenRequest(${jsArg(r.id)})">
                         🔄 Rouvrir
                     </button>
                 `}
@@ -3507,9 +3646,9 @@ function renderUsers() {
             if (idle >= 14) activity += `<div style="font-size:11px; color:#8B6F1F;">inactif depuis ${idle} j</div>`;
         }
         const actions = st === 'staff' ? '—' : `
-            <button class="btn btn-secondary btn-sm" onclick="openLicenseModal('${a.user_id}')">⚙️ Licence</button>
-            <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend('${a.user_id}')">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>
-            <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount('${a.user_id}')">🗑️ Supprimer</button>`;
+            <button class="btn btn-secondary btn-sm" onclick="openLicenseModal(${jsArg(a.user_id)})">⚙️ Licence</button>
+            <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend(${jsArg(a.user_id)})">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>
+            <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount(${jsArg(a.user_id)})">🗑️ Supprimer</button>`;
         return `
             <tr>
                 <td><strong>${esc(a.email)}</strong>${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
@@ -3540,7 +3679,7 @@ const pg_usersLegacy = fpPaginate('usersLegacy', filtered, fpSig(filtered, ''), 
         const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
         const badge = hasLicense ? '<span class="badge badge-success">Licence active</span>' : '<span class="badge badge-trial">Essai</span>';
         return `<tr><td><strong>${esc(u.email)}</strong></td><td>${formatDate(u.firstSeen)}</td><td>—</td><td>—</td><td>${totalPaid > 0 ? totalPaid + ' DH payé' : '—'}</td><td>—</td><td>${badge}</td>
-            <td><button class="btn btn-secondary btn-sm" onclick="openActivateModalFor('${esc(u.email)}')">+ Licence</button></td></tr>`;
+            <td><button class="btn btn-secondary btn-sm" onclick="openActivateModalFor(${jsArg(u.email)})">+ Licence</button></td></tr>`;
     }).join('');
 }
 
@@ -3702,7 +3841,7 @@ async function deleteAccount(uid) {
 function exportAccountsCSV() {
     if (!accountsAvailable) { showToast('Données de comptes indisponibles (sql/08)', 'error'); return; }
     const head = ['email', 'inscrit_le', 'derniere_activite', 'offre', 'expire_le', 'statut', 'factures', 'clients'];
-    const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const q = v => csvCell(v, true);
     const lines = [head.join(';')].concat(allAccounts.map(a => [
         a.email, a.created_at ? a.created_at.slice(0, 10) : '', a.last_activity ? a.last_activity.slice(0, 10) : '',
         PLAN_LABEL[acctPlanKey(a)] || a.type, a.expires_at ? a.expires_at.slice(0, 10) : '', acctState(a),
@@ -3748,7 +3887,7 @@ const pg_licenses = fpPaginate('licenses', usedCodes, fpSig(usedCodes, ''), rend
             <td><code>${esc(c.code)}</code></td>
             <td>${status}</td>
             <td>
-                <button class="btn btn-danger btn-sm" onclick="revokeLicense('${c.id}')">🚫 Révoquer</button>
+                <button class="btn btn-danger btn-sm" onclick="revokeLicense(${jsArg(c.id)})">🚫 Révoquer</button>
             </td>
         </tr>`;
     }).join('');
@@ -3805,7 +3944,7 @@ const pg_codes = fpPaginate('codes', allCodes, fpSig(allCodes, ''), renderCodes)
             <tr>
                 <td><code>${c.code}</code></td>
                 <td>${c.type}</td>
-                <td>${c.client_email || '—'}</td>
+                <td>${esc(c.client_email || '—')}</td>
                 <td>${formatDate(c.created_at)}</td>
                 <td>${statusBadge}</td>
             </tr>
@@ -3953,13 +4092,64 @@ function sendByEmail() {
     const subject = 'Votre code de licence FacturaPro';
     const body = `Bonjour,\n\nVoici votre code de licence FacturaPro :\n\n${lastGeneratedCode}\n\nPour l'activer :\n1. Connectez-vous à votre app FacturaPro\n2. Allez dans "Licence"\n3. Entrez le code\n\nMerci pour votre confiance !\n\nL'équipe FacturaPro`;
     
-    window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 // ============================================
 // PAYMENTS
 // ============================================
+// Boutons « facture / reçu » d'un paiement (numéros émis par la base ; PDF réservé à l'admin car il lit les réglages société)
+function fpDocBtns(paymentId) {
+    const docs = (fpDocuments || []).filter(d => d.payment_db_id && d.payment_db_id === paymentId);
+    if (!docs.length) return '<span style="font-size:11px;color:var(--ink-mute);">aucun document</span>';
+    return docs.sort((a, b) => (a.docType === 'invoice' ? -1 : 1)).map(d => {
+        const lab = (d.docType === 'invoice' ? '📋 ' : '🧾 ') + esc(d.number) + (d.status === 'void' ? ' (annulée)' : '');
+        return isStaffMode()
+            ? `<div style="font-size:11px;">${lab}</div>`
+            : `<button class="btn btn-secondary btn-sm" style="margin:1px 0;" onclick="downloadFpDoc(${jsArg(d.id)})" title="Télécharger le PDF">${lab}</button>`;
+    }).join('<br>');
+}
+
+function renderPendingPayments() {
+    const tb = document.getElementById('pendingPaymentsTable');
+    if (!tb) return;
+    if (!allPendingPayments.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">✨ Aucun paiement en attente</td></tr>'; return; }
+    const codeOf = (id) => (allCodes || []).find(c => c.id === id);
+    tb.innerHTML = allPendingPayments.map(p => {
+        const c = codeOf(p.code_id);
+        const days = Math.floor((Date.now() - new Date(p.created_at || p.payment_date).getTime()) / 864e5);
+        return `<tr>
+            <td>${formatDate(p.created_at || p.payment_date)} <span style="font-size:11px;color:${days > 7 ? 'var(--danger)' : 'var(--ink-mute)'};">J+${days}</span></td>
+            <td><strong>${esc(p.client_email)}</strong></td>
+            <td><strong>${parseFloat(p.amount).toLocaleString('fr-FR')} DH</strong></td>
+            <td><span class="badge badge-trial">${esc(p.type)}</span></td>
+            <td>${c ? `<code style="font-size:11px;">${esc(c.code)}</code> <span style="font-size:11px;color:var(--ink-mute);">${esc(c.status)}</span>` : '—'}</td>
+            <td>${c ? `<button class="btn btn-success btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(p.client_email)}, ${jsArg(p.type)}, ${parseFloat(p.amount) || 0})" title="Encaisser">✓ Encaisser</button>` : ''}<div style="margin-top:4px;">${fpDocBtns(p.id)}</div></td>
+        </tr>`;
+    }).join('');
+}
+
+// Contrôle : paiements encaissés qui ne sont liés à aucun code (saisie manuelle). Liste « à rattacher », jamais bloquante.
+function renderUnlinkedPayments() {
+    const card = document.getElementById('unlinkedPaymentsCard'), tb = document.getElementById('unlinkedPaymentsTable');
+    if (!card || !tb) return;
+    const list = (allPayments || []).filter(p => !p.code_id && (p.status === 'paid' || !p.status));
+    card.style.display = list.length && !isStaffMode() ? '' : 'none';
+    tb.innerHTML = list.map(p => {
+        const codes = (allCodes || []).filter(c => String(c.client_email || '').toLowerCase() === String(p.client_email).toLowerCase() && c.status !== 'revoked');
+        return `<tr>
+            <td>${formatDate(p.payment_date)}</td>
+            <td><strong>${esc(p.client_email)}</strong></td>
+            <td>${parseFloat(p.amount).toLocaleString('fr-FR')} DH</td>
+            <td><span class="badge badge-trial">${esc(p.type)}</span></td>
+            <td>${codes.length ? codes.map(c => `<code style="font-size:11px;">${esc(c.code)}</code> <span style="font-size:11px;color:var(--ink-mute);">${esc(c.status)}</span>`).join('<br>') : '<span style="color:var(--danger);font-size:12px;">aucun code</span>'}</td>
+        </tr>`;
+    }).join('');
+}
+
 function renderPayments() {
+    renderPendingPayments();
+    renderUnlinkedPayments();
     // Stats
     const total = allPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
     document.getElementById('statTotalRevenue').innerHTML = 
@@ -3991,15 +4181,15 @@ const pg_payments = fpPaginate('payments', allPayments, fpSig(allPayments, ''), 
     tbody.innerHTML = pg_payments.items.map(p => `
         <tr>
             <td>${formatDate(p.payment_date)}</td>
-            <td><strong>${p.client_email}</strong></td>
+            <td><strong>${esc(p.client_email)}</strong></td>
             <td><strong style="color: var(--success);">${parseFloat(p.amount).toLocaleString('fr-FR')} DH</strong></td>
             <td><span class="badge badge-trial">${p.type}</span></td>
             <td>${modeIcons[p.payment_mode] || ''} ${p.payment_mode}</td>
             <td style="font-size: 12px; color: var(--ink-mute);">${esc(p.note || '—')}${p.entered_by ? `<div style="font-size:11px;">saisi par ${esc(p.entered_by)}</div>` : ''}</td>
-            <td>${isStaffMode()
+            <td>${fpDocBtns(p.id)}<div style="margin-top:4px;">${isStaffMode()
                 ? ((p.entered_by || '').toLowerCase() === (currentAdmin.email || '').toLowerCase() && Date.now() - new Date(p.created_at).getTime() < 86400000
-                    ? `<button class="btn btn-secondary btn-sm" onclick="cancelMyPayment('${p.id}')" title="Annuler ma saisie">↩️ Annuler</button>` : '')
-                : `<button class="btn btn-secondary btn-sm" onclick="deletePayment('${p.id}')">🗑️</button>`}</td>
+                    ? `<button class="btn btn-secondary btn-sm" onclick="cancelMyPayment(${jsArg(p.id)})" title="Annuler ma saisie">↩️ Annuler</button>` : '')
+                : `<button class="btn btn-secondary btn-sm" onclick="deletePayment(${jsArg(p.id)})">🗑️</button>`}</div></td>
         </tr>
     `).join('');
 }
@@ -4018,6 +4208,17 @@ async function savePayment() {
     }
     
     try {
+        // Un paiement en attente existe pour ce client et cette formule (code généré) : l'encaisser plutôt que d'en créer un second
+        const pend = (allPendingPayments || []).find(p => String(p.client_email).toLowerCase() === email && p.type === type);
+        if (pend && confirm(`Un paiement en attente existe pour ${email} (${type}, ${parseFloat(pend.amount)} DH, lié à un code).\n\nOK = l'encaisser avec ces valeurs (recommandé, évite un doublon).\nAnnuler = enregistrer un paiement séparé.`)) {
+            const { data: cp, error: cpErr } = await supaClient.rpc('admin_confirm_payment', { p_id: pend.id, p_amount: amount, p_mode: mode, p_date: date, p_note: note || null });
+            if (cpErr) throw cpErr;
+            if (!cp || !cp.ok) throw new Error((cp && cp.reason) || 'refusé');
+            closeModal('paymentModal');
+            showToast('Paiement en attente encaissé !', 'success');
+            await loadAllData();
+            return;
+        }
         const { error } = await supaClient
             .from('admin_payments')
             .insert({
@@ -4039,7 +4240,8 @@ async function savePayment() {
 }
 
 async function deletePayment(id) {
-    if (!confirm('Supprimer ce paiement ?')) return;
+    const linkedDocs = (fpDocuments || []).filter(d => d.payment_db_id === id);
+    if (!confirm('Supprimer ce paiement ?' + (linkedDocs.length ? '\n\n⚠️ Les documents déjà émis (' + linkedDocs.map(d => d.number).join(', ') + ') sont conservés : leur numéro reste attribué et ils restent valables comptablement.' : ''))) return;
     
     try {
         const { error } = await supaClient.from('admin_payments').delete().eq('id', id);
@@ -4286,16 +4488,16 @@ function renderTreasuryReconciled() {
     
     tbody.innerHTML = list.map(r => {
         const invoiceLink = r.invoice 
-            ? `<a onclick="downloadFpDoc('${r.invoice.id}')" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${r.invoice.number}</code></a>`
+            ? `<a onclick="downloadFpDoc(${jsArg(r.invoice.id)})" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${esc(r.invoice.number)}</code></a>`
             : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>';
         const receiptLink = r.receipt
-            ? `<a onclick="downloadFpDoc('${r.receipt.id}')" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${r.receipt.number}</code></a>`
+            ? `<a onclick="downloadFpDoc(${jsArg(r.receipt.id)})" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-size: 12px;"><code>${esc(r.receipt.number)}</code></a>`
             : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>';
         
         return `
             <tr>
-                <td><code style="font-size: 11px;">${r.paymentNumber || '—'}</code></td>
-                <td><strong>${r.client_email}</strong>${r.client_name ? `<br><small style="color: var(--ink-mute);">${r.client_name}</small>` : ''}</td>
+                <td><code style="font-size: 11px;">${esc(r.paymentNumber || '—')}</code></td>
+                <td><strong>${esc(r.client_email)}</strong>${r.client_name ? `<br><small style="color: var(--ink-mute);">${esc(r.client_name)}</small>` : ''}</td>
                 <td>${TIER_LABELS_TR[r.tier] || r.tier}</td>
                 <td>${formatDate(r.date)}</td>
                 <td><strong>${formatCurrency(r.amount)}</strong></td>
@@ -4342,13 +4544,13 @@ function renderTreasuryPending() {
             <tr>
                 <td><code style="font-size: 11px;">${c.code}</code></td>
                 <td>${formatDate(c.created_at)}</td>
-                <td><strong>${c.client_email || '—'}</strong></td>
+                <td><strong>${esc(c.client_email || '—')}</strong></td>
                 <td>${TIER_LABELS_TR[c.type] || c.type}</td>
                 <td><strong>${formatCurrency(amount)}</strong></td>
                 <td><strong style="color: ${days > 7 ? 'var(--danger)' : 'var(--ink)'};">J+${days}</strong></td>
                 <td><span style="color: ${urgenceColor}; font-weight: 600; font-size: 12px;">${urgenceLabel}</span></td>
                 <td>
-                    <button class="btn btn-success btn-sm" onclick="markAsPaid('${c.id}', '${c.client_email}', '${c.type}', ${amount})" title="Marquer payé">✓ Payé</button>
+                    <button class="btn btn-success btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(c.client_email)}, ${jsArg(c.type)}, ${amount})" title="Marquer payé">✓ Payé</button>
                 </td>
             </tr>
         `;
@@ -4375,12 +4577,12 @@ function renderTreasuryOrphan() {
         tbodyP.innerHTML = orphanPayments.map(p => `
             <tr>
                 <td>${formatDate(p.payment_date)}</td>
-                <td><strong>${p.client_email || '—'}</strong></td>
+                <td><strong>${esc(p.client_email || '—')}</strong></td>
                 <td><strong>${formatCurrency(p.amount)}</strong></td>
                 <td>${TIER_LABELS_TR[p.type] || p.type}</td>
                 <td><span style="font-size: 11px;">${p.payment_mode || 'virement'}</span></td>
                 <td>
-                    <button class="btn btn-primary btn-sm" onclick="generateMissingDocs('${p.id}', '${p.client_email}', '${p.type}', ${p.amount})" title="Générer facture/reçu manquant">📄 Régulariser</button>
+                    <button class="btn btn-primary btn-sm" onclick="generateMissingDocs(${jsArg(p.id)}, ${jsArg(p.client_email)}, ${jsArg(p.type)}, ${p.amount})" title="Générer facture/reçu manquant">📄 Régulariser</button>
                 </td>
             </tr>
         `).join('');
@@ -4400,13 +4602,13 @@ function renderTreasuryOrphan() {
             return `
                 <tr>
                     <td>${typeBadge}</td>
-                    <td><code style="font-size: 11px;">${d.number}</code></td>
+                    <td><code style="font-size: 11px;">${esc(d.number)}</code></td>
                     <td>${formatDate(d.created_at)}</td>
-                    <td><strong>${d.client_email || '—'}</strong></td>
+                    <td><strong>${esc(d.client_email || '—')}</strong></td>
                     <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
                     <td>
-                        <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc('${d.id}')">📥</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteFpDoc('${d.id}')">🗑️</button>
+                        <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})">📥</button>
+                        
                     </td>
                 </tr>
             `;
@@ -4415,23 +4617,14 @@ function renderTreasuryOrphan() {
 }
 
 async function generateMissingDocs(paymentDbId, email, tier, amount) {
-    if (!confirm(`Générer facture + reçu pour ce paiement de ${amount} DH (${email}) ?`)) return;
-    
+    // Les documents sont émis automatiquement par la base : on recharge simplement la liste.
     try {
-        const created = await createFpDocumentForPayment({
-            client_email: email,
-            amount: amount,
-            type: tier,
-            payment_id: '',
-            payment_db_id: paymentDbId
-        });
-        
+        const created = await createFpDocumentForPayment({ payment_db_id: paymentDbId });
         if (created && created.length > 0) {
-            showToast(`✓ ${created.length} document${created.length > 1 ? 's' : ''} généré${created.length > 1 ? 's' : ''}`, 'success');
-            await loadFpDocuments();
+            showToast(`✓ ${created.length} document${created.length > 1 ? 's' : ''} déjà émis pour ce paiement`, 'success');
             renderTreasury();
         } else {
-            showToast('Configurez d\'abord Ma Facturation', 'error');
+            showToast('Aucun document pour ce paiement (montant nul ou paiement annulé).', 'error');
         }
     } catch (err) {
         showToast('Erreur : ' + err.message, 'error');
@@ -4508,7 +4701,7 @@ const pg_ledger = fpPaginate('ledger', entries, fpSig(entries, ''), renderTreasu
     tbody.innerHTML = pg_ledger.items.map(e => `
         <tr>
             <td>${formatDate(e.date)}</td>
-            <td><code style="font-size: 11px;">${e.number}</code></td>
+            <td><code style="font-size: 11px;">${esc(e.number)}</code></td>
             <td>${e.type === 'Facture' ? '<span class="badge" style="background: var(--primary); color: white;">📋</span>' : '<span class="badge badge-success">💰</span>'} ${e.type}</td>
             <td><small>${e.client}</small></td>
             <td style="text-align: right; ${e.debit > 0 ? 'color: var(--danger); font-weight: 700;' : 'color: var(--ink-mute);'}">${e.debit > 0 ? formatCurrency(e.debit) : '—'}</td>
@@ -4581,7 +4774,7 @@ function exportTreasuryLedger() {
     const headers = ['Date', 'N° Pièce', 'Type', 'Client', 'HT (DH)', 'TVA (DH)', 'TTC (DH)', 'Débit', 'Crédit'];
     let csv = headers.join(';') + '\n';
     csv += entries.map(e => [e.date, e.number, e.type, e.client, e.ht, e.tva, e.ttc, e.debit, e.credit]
-        .map(c => String(c).includes(';') ? `"${c}"` : c)
+        .map(c => csvCell(c))
         .join(';')
     ).join('\n');
     
@@ -4622,15 +4815,19 @@ function switchMyInvTab(tab) {
 }
 
 // === CONFIGURATION DE L'ENTREPRISE FACTURAPRO ===
+// admin_settings.value est une colonne TEXTE : la config y est stockée en JSON (lecture tolérante : texte ou objet)
+function fpParseCfg(v) {
+    if (!v) return {};
+    if (typeof v === 'object') return v;
+    try { const o = JSON.parse(v); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; }
+}
+async function fpReadCfg() {
+    const { data } = await supaClient.from('admin_settings').select('value').eq('key', 'fp_company_config').maybeSingle();
+    return fpParseCfg(data && data.value);
+}
 async function loadFpCompany() {
     try {
-        const { data, error } = await supaClient
-            .from('admin_settings')
-            .select('value')
-            .eq('key', 'fp_company_config')
-            .maybeSingle();
-        
-        const cfg = (data && data.value) || {};
+        const cfg = await fpReadCfg();
         
         document.getElementById('fpCompanyName').value = cfg.name || '';
         document.getElementById('fpCompanyForm').value = cfg.form || 'sarl';
@@ -4685,7 +4882,7 @@ async function saveFpCompany() {
         bank: document.getElementById('fpCompanyBank').value.trim(),
         rib: document.getElementById('fpCompanyRIB').value.trim(),
         swift: document.getElementById('fpCompanySwift').value.trim(),
-        tvaRate: parseFloat(document.getElementById('fpCompanyTvaRate').value) || 20,
+        tvaRate: (() => { const t = parseFloat(document.getElementById('fpCompanyTvaRate').value); return isNaN(t) ? 20 : t; })(),
         invPrefix: document.getElementById('fpCompanyInvPrefix').value.trim() || 'LIC',
         receiptPrefix: document.getElementById('fpCompanyReceiptPrefix').value.trim() || 'REC',
         autoMode: document.getElementById('fpCompanyAutoMode').value,
@@ -4706,7 +4903,7 @@ async function saveFpCompany() {
     try {
         const { error } = await supaClient
             .from('admin_settings')
-            .upsert({ key: 'fp_company_config', value: cfg }, { onConflict: 'key' });
+            .upsert({ key: 'fp_company_config', value: JSON.stringify(cfg) }, { onConflict: 'key' });
         
         if (error) throw error;
         
@@ -4827,56 +5024,68 @@ function getNextFpDocNumber(type) {
 }
 
 // === LOAD DOCUMENTS ===
+// Les factures et reçus sont émis par la base (sql/33) : numérotation atomique, non supprimables. Ici : lecture seule, remise en forme.
 async function loadFpDocuments() {
     try {
-        const { data, error } = await supaClient
-            .from('admin_settings')
-            .select('value')
-            .eq('key', 'fp_documents_emitted')
-            .maybeSingle();
-        
-        fpDocuments = (data?.value && Array.isArray(data.value)) ? data.value : [];
+        const cfg = await fpReadCfg();
+        const { data, error } = await supaClient.from('admin_documents').select('*').order('issued_at', { ascending: false }).limit(2000);
+        if (error) throw error;
+        const rows = data || [];
+        const receiptByPay = {};
+        rows.filter(d => d.doc_type === 'receipt' && d.payment_id).forEach(d => { receiptByPay[d.payment_id] = d; });
+        fpDocuments = rows.map(d => {
+            const ttc = parseFloat(d.total_ttc) || 0;
+            const rate = (d.tva_rate !== null && d.tva_rate !== undefined) ? parseFloat(d.tva_rate) : (cfg.tvaRate ?? 20);
+            const ht = rate > 0 ? ttc / (1 + rate / 100) : ttc;
+            const rc = d.doc_type === 'invoice' && d.payment_id ? receiptByPay[d.payment_id] : (d.doc_type === 'receipt' ? d : null);
+            return {
+                id: d.id, number: d.number, docType: d.doc_type, tier: d.tier, client_email: d.client_email, client_name: '',
+                totalHT: Math.round(ht * 100) / 100, tva: Math.round((ttc - ht) * 100) / 100, tvaRate: rate, totalTTC: ttc,
+                payment_db_id: d.payment_id, payment_id: d.code || '', payment_number: rc ? rc.number : '',
+                group_id: d.payment_id || d.id, status: d.status === 'void' ? 'void' : (rc ? 'reconciled' : 'issued'),
+                void_note: d.void_note || '', code: d.code || '', payment_mode: d.payment_mode || (rc && rc.payment_mode) || '',
+                payment_date: d.payment_date || (rc && rc.payment_date) || '', created_at: d.issued_at, rc_amount: rc ? parseFloat(rc.total_ttc) : null
+            };
+        });
     } catch (err) {
         console.warn('Could not load FP documents:', err);
         fpDocuments = [];
     }
 }
 
-async function saveFpDocuments() {
-    try {
-        const { error } = await supaClient
-            .from('admin_settings')
-            .upsert({ key: 'fp_documents_emitted', value: fpDocuments }, { onConflict: 'key' });
-        if (error) throw error;
-    } catch (err) {
-        console.warn('Could not save FP documents:', err);
-    }
-}
+async function saveFpDocuments() { /* lecture seule : l'émission est faite par la base */ }
 
 // === RENDER LISTE ===
+let _fpDocSearchT = null;
+function fpDocSearchDebounced() { clearTimeout(_fpDocSearchT); _fpDocSearchT = setTimeout(renderFpDocuments, 150); }
+
+// Regroupe les documents par commande : 1 facture + son reçu (clé = payment_db_id, sinon group_id, sinon id du document).
+function fpGroupDocs(docs) {
+    const map = new Map();
+    for (const d of docs) {
+        const key = d.payment_db_id || d.group_id || ('doc:' + d.id);
+        let g = map.get(key);
+        if (!g) { g = { key, invoice: null, receipt: null, latest: 0 }; map.set(key, g); }
+        if (d.docType === 'receipt') g.receipt = d; else g.invoice = d;
+        g.latest = Math.max(g.latest, new Date(d.created_at).getTime() || 0);
+    }
+    return [...map.values()].sort((x, y) => y.latest - x.latest);
+}
+function fpOrderStatus(g) {
+    const ref = g.invoice || g.receipt;
+    if ((g.invoice && g.invoice.status === 'void') || (!g.invoice && ref.status === 'void')) return 'void';
+    return g.receipt ? 'paid' : 'issued';
+}
+
 function renderFpDocuments() {
-    const filterType = document.getElementById('fpDocFilterType')?.value || 'all';
-    const search = (document.getElementById('fpDocFilterSearch')?.value || '').toLowerCase();
-    
-    let docs = [...fpDocuments];
-    if (filterType !== 'all') {
-        docs = docs.filter(d => d.docType === filterType);
-    }
-    if (search) {
-        docs = docs.filter(d => 
-            (d.number || '').toLowerCase().includes(search) ||
-            (d.client_email || '').toLowerCase().includes(search) ||
-            (d.client_name || '').toLowerCase().includes(search)
-        );
-    }
-    docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    
-    // Stats
+    const filter = document.getElementById('fpDocFilterType')?.value || 'all';
+    const search = (document.getElementById('fpDocFilterSearch')?.value || '').trim().toLowerCase();
+
+    // Stats (sur l'ensemble des documents)
     const totalAmount = fpDocuments.reduce((s, d) => s + (d.totalTTC || 0), 0);
     const receipts = fpDocuments.filter(d => d.docType === 'receipt');
     const invoices = fpDocuments.filter(d => d.docType === 'invoice');
     const totalTva = invoices.reduce((s, d) => s + (d.tva || 0), 0);
-    
     document.getElementById('fpStatTotalAmount').textContent = formatCurrency(totalAmount);
     document.getElementById('fpStatTotalCount').textContent = `${fpDocuments.length} document${fpDocuments.length > 1 ? 's' : ''}`;
     document.getElementById('fpStatReceiptCount').textContent = receipts.length;
@@ -4884,38 +5093,41 @@ function renderFpDocuments() {
     document.getElementById('fpStatInvoiceCount').textContent = invoices.length;
     document.getElementById('fpStatInvoiceAmount').textContent = formatCurrency(invoices.reduce((s, d) => s + (d.totalTTC || 0), 0));
     document.getElementById('fpStatTvaAmount').textContent = formatCurrency(totalTva);
-    
-    // Table
-    const tbody = document.getElementById('fpDocsTable');
-    if (docs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty">Aucun document à afficher</td></tr>';
+
+    let groups = fpGroupDocs(fpDocuments);
+    if (filter !== 'all') groups = groups.filter(g => fpOrderStatus(g) === filter);
+    if (search) {
+        groups = groups.filter(g => [g.invoice, g.receipt].some(d => d && [d.number, d.client_email, d.client_name, d.code, d.payment_id].some(v => (v || '').toLowerCase().includes(search))));
+    }
+
+    const host = document.getElementById('fpDocsTable');
+    if (groups.length === 0) {
+        host.innerHTML = '<div class="empty">Aucun document à afficher</div>';
+        const h = host.nextElementSibling; if (h && h.classList.contains('fp-host')) h.innerHTML = '';
         return;
     }
-    
-const pg_fpdocs = fpPaginate('fpdocs', docs, fpSig(docs, ''), renderFpDocuments); fpHost(tbody, pg_fpdocs.html);
-    tbody.innerHTML = pg_fpdocs.items.map(d => {
-        const typeBadge = d.docType === 'invoice' 
-            ? '<span class="badge" style="background: var(--primary); color: white;">📋 Facture</span>'
-            : '<span class="badge" style="background: var(--accent); color: var(--ink);">📄 Reçu</span>';
-        
-        const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
-        const tierLabel = tierLabels[d.tier] || d.tier || '—';
-        
-        return `
-            <tr>
-                <td>${typeBadge}</td>
-                <td><code style="font-size: 11px;">${d.number || '—'}</code></td>
-                <td>${formatDate(d.created_at)}</td>
-                <td><strong>${d.client_email || '—'}</strong>${d.client_name ? `<br><small style="color: var(--ink-mute);">${d.client_name}</small>` : ''}</td>
-                <td>${tierLabel}</td>
-                <td><strong>${formatCurrency(d.totalTTC || 0)}</strong></td>
-                <td>
-                    <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc('${d.id}')" title="Télécharger PDF">📥</button>
-                    <button class="btn btn-secondary btn-sm" onclick="sendFpDoc('${d.id}')" title="Envoyer">📱</button>
-                    <button class="btn btn-secondary btn-sm" onclick="deleteFpDoc('${d.id}')" title="Supprimer" style="color: var(--danger);">🗑️</button>
-                </td>
-            </tr>
-        `;
+    const pg = fpPaginate('fpdocs', groups, fpSig(groups, filter + '|' + search), renderFpDocuments);
+    fpHost(host, pg.html);
+
+    const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const stLabel = { paid: '✅ Soldée', issued: '⏳ À régler', void: '🚫 Annulée' };
+    const line = (d, icon, label) => d
+        ? `<div class="fp-docline"><div class="fp-docline-main"><span>${icon} ${label}</span><code>${esc(d.number || '—')}</code><small>${formatDate(d.created_at)}${d.payment_mode ? ' · ' + esc(d.payment_mode) : ''}</small></div>
+            <button class="btn btn-secondary btn-sm" onclick="downloadFpDoc(${jsArg(d.id)})" title="Télécharger le PDF">📥</button>
+            <button class="btn btn-secondary btn-sm" onclick="sendFpDoc(${jsArg(d.id)})" title="Envoyer">📱</button></div>`
+        : `<div class="fp-docline fp-pending"><div class="fp-docline-main"><span>${icon} ${label}</span><small>en attente de paiement</small></div></div>`;
+
+    host.innerHTML = pg.items.map(g => {
+        const ref = g.invoice || g.receipt;
+        const st = fpOrderStatus(g);
+        const tier = tierLabels[ref.tier] || ref.tier || '';
+        return `<div class="fp-order fp-${st}">
+            <div class="fp-order-head">
+                <div class="fp-order-client">${esc(ref.client_email || '—')}${ref.client_name ? `<div class="fp-order-meta">${esc(ref.client_name)}</div>` : ''}<div class="fp-order-meta">${esc(tier)}${ref.code ? ' · ' + esc(ref.code) : ''}</div></div>
+                <div class="fp-order-right"><div class="fp-order-amount">${formatCurrency(ref.totalTTC || 0)}</div><span class="fp-st fp-st-${st}">${stLabel[st]}</span></div>
+            </div>
+            <div class="fp-order-docs">${line(g.invoice, '📋', 'Facture')}${st === 'void' && !g.receipt ? '' : line(g.receipt, '📄', 'Reçu')}</div>
+        </div>`;
     }).join('');
 }
 
@@ -4927,13 +5139,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     }
     
     // Récupérer la config
-    const { data: settingsData } = await supaClient
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'fp_company_config')
-        .maybeSingle();
-    
-    const cfg = (settingsData && settingsData.value) || {};
+    const cfg = await fpReadCfg();
     
     if (!cfg.name) {
         showToast('Configurez d\'abord votre entreprise', 'error');
@@ -4962,119 +5168,100 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     const isInvoice = doc.docType === 'invoice';
     const docTitle = isInvoice ? 'FACTURE' : 'REÇU';
     
-    // === HEADER ===
-    pdf.setFillColor(...primaryColor);
-    pdf.rect(0, 0, 210, 38, 'F');
-    pdf.setFillColor(...accentColor);
-    pdf.rect(0, 38, 210, 1.5, 'F');
-    
-    let textX = 15;
-    
-    // Logo
+    // === EN-TÊTE (fond blanc : le logo, quelles que soient ses couleurs, reste lisible) ===
+    const M = 15, R = 195, W = 180;
+    const formLabels = { sarl: 'SARL', sa: 'SA', sarlu: 'SARL.AU', sas: 'SAS', ae: 'Auto-Entrepreneur', freelance: 'Profession libérale' };
+    let textX = M;
     if (cfg.logo) {
         try {
-            pdf.addImage(cfg.logo, 'PNG', 12, 7, 24, 24);
-            textX = 42;
+            // Logo à son ratio d'origine, contenu dans une zone 34 × 22 mm et centré verticalement
+            const ip = pdf.getImageProperties(cfg.logo);
+            const box = { w: 46, h: 26 };
+            const sc = Math.min(box.w / ip.width, box.h / ip.height);
+            const lw = ip.width * sc, lh = ip.height * sc;
+            pdf.addImage(cfg.logo, ip.fileType || 'PNG', M, 9 + (box.h - lh) / 2, lw, lh);
+            textX = M + lw + 6;
         } catch (e) { console.warn('Logo error:', e); }
     }
-    
-    // Nom entreprise
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(22);
+    pdf.setTextColor(...primaryColor);
+    pdf.setFontSize(17);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(cfg.name || 'FacturaPro', textX, 18);
-    
-    // Forme juridique
-    const formLabels = { sarl: 'SARL', sa: 'SA', sarlu: 'SARL.AU', sas: 'SAS', ae: 'Auto-Entrepreneur', freelance: 'Profession libérale' };
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...accentColor);
-    pdf.text(formLabels[cfg.form] || '', textX, 25);
-    
-    // Doc title (right)
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(28);
+    const nameLines = pdf.splitTextToSize(cfg.name || 'FacturaPro', 95 - (textX - M));
+    pdf.text(nameLines.slice(0, 2), textX, 19);
+    const form = formLabels[cfg.form] || '';
+    if (form) {
+        pdf.setFontSize(8.5);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(...accentColor);
+        pdf.text(form.toUpperCase(), textX, 19 + 5.5 * Math.min(2, nameLines.length));
+    }
+    // Titre du document (droite)
+    pdf.setTextColor(...primaryColor);
+    pdf.setFontSize(26);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(docTitle, 195, 22, { align: 'right' });
+    pdf.text(docTitle, R, 20, { align: 'right' });
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...accentColor);
-    pdf.text(doc.number || '', 195, 30, { align: 'right' });
-    
-    // === COMPANY INFO LINE ===
-    let yPos = 48;
     pdf.setTextColor(...grayDark);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-    
-    const companyInfo = [];
-    if (cfg.ice) companyInfo.push(`ICE : ${cfg.ice}`);
-    if (cfg.if) companyInfo.push(`IF : ${cfg.if}`);
-    if (cfg.rc) companyInfo.push(`RC : ${cfg.rc}`);
-    if (cfg.patente) companyInfo.push(`Patente : ${cfg.patente}`);
-    if (cfg.cnss) companyInfo.push(`CNSS : ${cfg.cnss}`);
-    if (cfg.phone) companyInfo.push(`Tél : ${cfg.phone}`);
-    
-    pdf.text(companyInfo.join('  ·  '), 15, yPos);
-    yPos += 4;
-    
-    // Adresse
-    const addrParts = [];
-    if (cfg.address) addrParts.push(cfg.address);
-    if (cfg.zip) addrParts.push(cfg.zip);
-    if (cfg.city) addrParts.push(cfg.city);
-    if (addrParts.length > 0) {
-        pdf.text(addrParts.join(', '), 15, yPos);
-        yPos += 4;
-    }
-    if (cfg.email) {
-        pdf.text(`Email : ${cfg.email}` + (cfg.website ? `   ·   ${cfg.website}` : ''), 15, yPos);
-        yPos += 4;
-    }
-    
-    // === DATES & DOC INFO ===
-    yPos += 6;
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(9);
-    pdf.text('Date d\'émission', 15, yPos);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(formatDate(doc.created_at), 60, yPos);
-    
-    if (isInvoice) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Échéance', 110, yPos);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(formatDate(doc.created_at), 145, yPos);
-    } else {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Statut', 110, yPos);
-        pdf.setTextColor(...accentColor);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('PAYÉ ✓', 145, yPos);
-        pdf.setTextColor(...grayDark);
-    }
-    yPos += 12;
-    
-    // === CLIENT BLOCK ===
+    pdf.text('N° ' + (doc.number || ''), R, 27.5, { align: 'right' });
+    // Filets
+    pdf.setFillColor(...primaryColor);
+    pdf.rect(M, 36, W, 0.8, 'F');
+    pdf.setFillColor(...accentColor);
+    pdf.rect(M, 36.8, 28, 0.8, 'F');
+
+    // === ÉMETTEUR / CLIENT (deux blocs égaux) ===
+    let yPos = 46;
+    const bw = 87.5, bh = 32, gap = 5;
     pdf.setFillColor(...grayLight);
-    pdf.roundedRect(15, yPos, 90, 30, 2, 2, 'F');
-    
-    pdf.setTextColor(...primaryColor);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('FACTURÉ À', 20, yPos + 7);
-    
-    pdf.setFontSize(11);
-    pdf.text(doc.client_name || doc.client_email || 'Client', 20, yPos + 14);
-    
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(...grayDark);
-    if (doc.client_email) pdf.text(doc.client_email, 20, yPos + 20);
-    if (doc.client_ice) pdf.text(`ICE : ${doc.client_ice}`, 20, yPos + 26);
-    
-    yPos += 40;
-    
+    pdf.roundedRect(M, yPos, bw, bh, 2, 2, 'F');
+    pdf.roundedRect(M + bw + gap, yPos, bw, bh, 2, 2, 'F');
+    const label = (t, x) => { pdf.setTextColor(...accentColor); pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold'); pdf.text(t, x, yPos + 7); };
+    label('ÉMETTEUR', M + 5);
+    label(isInvoice ? 'FACTURÉ À' : 'REÇU DE', M + bw + gap + 5);
+    // Émetteur
+    pdf.setTextColor(...primaryColor); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+    pdf.text(pdf.splitTextToSize(cfg.name || '', bw - 10)[0] || '', M + 5, yPos + 13);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...grayDark);
+    const e = [];
+    const addr = [cfg.address, [cfg.zip, cfg.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    if (addr) e.push(...pdf.splitTextToSize(addr, bw - 10).slice(0, 2));
+    const ids = [cfg.ice && `ICE ${cfg.ice}`, cfg.if && `IF ${cfg.if}`, cfg.rc && `RC ${cfg.rc}`, cfg.patente && `Patente ${cfg.patente}`, cfg.cnss && `CNSS ${cfg.cnss}`].filter(Boolean).join('  ·  ');
+    if (ids) e.push(...pdf.splitTextToSize(ids, bw - 10).slice(0, 2));
+    const contact = [cfg.phone && `Tél ${cfg.phone}`, cfg.email].filter(Boolean).join('  ·  ');
+    if (contact) e.push(...pdf.splitTextToSize(contact, bw - 10).slice(0, 1));
+    e.slice(0, 5).forEach((t, i) => pdf.text(t, M + 5, yPos + 18.5 + i * 4.2));
+    // Client
+    const cx = M + bw + gap + 5;
+    pdf.setTextColor(...primaryColor); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+    pdf.text(pdf.splitTextToSize(doc.client_name || doc.client_email || 'Client', bw - 10)[0], cx, yPos + 13);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(...grayDark);
+    let cy = yPos + 18.5;
+    if (doc.client_name && doc.client_email) { pdf.text(pdf.splitTextToSize(doc.client_email, bw - 10)[0], cx, cy); cy += 4.5; }
+    else if (!doc.client_name && doc.client_email) { /* e-mail déjà affiché comme nom */ }
+    if (doc.client_ice) { pdf.text(`ICE : ${doc.client_ice}`, cx, cy); cy += 4.5; }
+    const planName = ({ ...planLabelMap(), lifetime: 'Accès à vie', monthly: 'Mensuelle', annual: 'Annuelle', founder: 'Fondateur', business: 'Business' })[doc.tier];
+    if (planName) { pdf.text(`Licence : ${planName}`, cx, cy); cy += 4.5; }
+    if (doc.code) { pdf.text(`Code : ${doc.code}`, cx, cy); cy += 4.5; }
+    yPos += bh + 8;
+
+    // === DATES & STATUT (bandeau 3 colonnes) ===
+    const cell = (x, k, v, color) => {
+        pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...grayDark); pdf.text(k, x, yPos);
+        pdf.setFontSize(10); pdf.setTextColor(...(color || primaryColor)); pdf.text(v, x, yPos + 5.5);
+    };
+    cell(M, 'DATE D\'ÉMISSION', formatDate(doc.created_at));
+    if (isInvoice) {
+        cell(M + 62, 'ÉCHÉANCE', formatDate(doc.created_at));
+        if (doc.status === 'void') cell(M + 124, 'STATUT', 'ANNULÉE', [180, 40, 40]);
+        else if (doc.status === 'reconciled') cell(M + 124, 'STATUT', 'SOLDÉE', [46, 125, 91]);
+        else cell(M + 124, 'STATUT', 'À RÉGLER', accentColor);
+    } else {
+        cell(M + 62, 'DATE DE PAIEMENT', formatDate(doc.payment_date || doc.created_at));
+        cell(M + 124, 'STATUT', 'PAYÉ', [46, 125, 91]);
+    }
+    yPos += 13;
+
     // === ITEMS TABLE ===
     const tierLabels = { ...planLabelMap(), 
         lifetime: 'Licence FacturaPro - Accès à vie', 
@@ -5084,7 +5271,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         business: 'Licence FacturaPro Business' 
     };
     
-    const tvaRate = cfg.tvaRate ?? 20;
+    const tvaRate = (doc.tvaRate !== undefined && doc.tvaRate !== null) ? doc.tvaRate : (cfg.tvaRate ?? 20);
     const totalTTC = doc.totalTTC || 0;
     let totalHT, tvaAmount;
     
@@ -5111,16 +5298,18 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         headStyles: {
             fillColor: primaryColor,
             textColor: [255, 255, 255],
-            fontSize: 10,
+            fontSize: 9,
             fontStyle: 'bold',
-            cellPadding: 5
+            cellPadding: { top: 4, bottom: 4, left: 5, right: 5 }
         },
         bodyStyles: {
             fontSize: 10,
-            cellPadding: 5,
-            textColor: grayDark
+            cellPadding: { top: 6, bottom: 6, left: 5, right: 5 },
+            textColor: grayDark,
+            lineWidth: 0
         },
-        alternateRowStyles: { fillColor: [250, 248, 243] },
+        didDrawCell: (d) => { if (d.section === 'body') { pdf.setDrawColor(225, 220, 208); pdf.setLineWidth(0.3); pdf.line(d.cell.x, d.cell.y + d.cell.height, d.cell.x + d.cell.width, d.cell.y + d.cell.height); } },
+        didParseCell: (d) => { if (d.section === 'head') { const al = { 0: 'left', 1: 'center', 2: 'right', 3: 'center', 4: 'right' }[d.column.index]; d.cell.styles.halign = al; } },
         columnStyles: {
             0: { cellWidth: 80 },
             1: { cellWidth: 18, halign: 'center' },
@@ -5155,14 +5344,14 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     
     // Grand Total
     pdf.setFillColor(...primaryColor);
-    pdf.roundedRect(totalsX - 2, yPos - 6, 79, 12, 1.5, 1.5, 'F');
+    pdf.roundedRect(totalsX - 2, yPos - 6, 77, 12, 1.5, 1.5, 'F');
     pdf.setTextColor(255, 255, 255);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(12);
     pdf.text('Total TTC', totalsX + 2, yPos + 1);
     pdf.setTextColor(...accentColor);
     pdf.setFontSize(13);
-    pdf.text(fmt(totalTTC), 193, yPos + 1, { align: 'right' });
+    pdf.text(fmt(totalTTC), 191, yPos + 1, { align: 'right' });
     yPos += 18;
     
     // === MENTION PAIEMENT (pour reçu uniquement) ===
@@ -5172,11 +5361,12 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         pdf.setTextColor(255, 255, 255);
         pdf.setFontSize(11);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`✓ PAIEMENT REÇU LE ${formatDate(doc.created_at)}`, 105, yPos + 6, { align: 'center' });
-        if (doc.payment_number) {
+        pdf.text(`PAIEMENT REÇU LE ${formatDate(doc.payment_date || doc.created_at)}` + ({ virement: ' — VIREMENT', cmi: ' — CARTE', cash: ' — ESPÈCES', cheque: ' — CHÈQUE' }[doc.payment_mode] || ''), 105, yPos + 6, { align: 'center' });
+        {
             pdf.setFontSize(8);
             pdf.setFont('helvetica', 'normal');
-            pdf.text(`Réf. paiement : ${doc.payment_number}`, 105, yPos + 11, { align: 'center' });
+            const invRef = fpDocuments.find(x => x.docType === 'invoice' && x.payment_db_id && x.payment_db_id === doc.payment_db_id);
+            pdf.text(invRef ? `Facture ${invRef.number}` : '', 105, yPos + 11, { align: 'center' });
         }
         yPos += 20;
     }
@@ -5188,12 +5378,21 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         pdf.setTextColor(255, 255, 255);
         pdf.setFontSize(10);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`✓ FACTURE SOLDÉE — Paiement réf. ${doc.payment_number}`, 105, yPos + 7.5, { align: 'center' });
+        pdf.text(`FACTURE SOLDÉE — Paiement réf. ${doc.payment_number}`, 105, yPos + 7.5, { align: 'center' });
         yPos += 18;
     }
     
     // === BANK DETAILS (pour facture) ===
-    if (isInvoice && (cfg.bank || cfg.rib)) {
+    if (isInvoice && doc.status === 'issued') {
+        pdf.setFillColor(...accentColor);
+        pdf.roundedRect(15, yPos, 180, 10, 2, 2, 'F');
+        pdf.setTextColor(...primaryColor);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('À RÉGLER — un reçu sera émis dès réception du paiement', 105, yPos + 6.5, { align: 'center' });
+        yPos += 14;
+    }
+    if (isInvoice && doc.status !== 'void' && (cfg.bank || cfg.rib)) {
         pdf.setFillColor(...grayLight);
         pdf.roundedRect(15, yPos, 180, 18, 2, 2, 'F');
         pdf.setTextColor(...primaryColor);
@@ -5220,6 +5419,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     }
     
     // === FOOTER ===
+    pdf.setFillColor(...grayLight); pdf.rect(15, 279, 180, 0.4, 'F');
     pdf.setTextColor(150, 150, 150);
     pdf.setFontSize(7);
     pdf.setFont('helvetica', 'normal');
@@ -5231,7 +5431,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     pdf.text('Document généré par FacturaPro - facturaproma.github.io/Facturaproma', 105, 293, { align: 'center' });
     
     if (downloadDirectly) {
-        pdf.save(`${doc.number}.pdf`);
+        pdf.save(`${esc(doc.number)}.pdf`);
     } else {
         return pdf;
     }
@@ -5252,11 +5452,11 @@ async function sendFpDoc(docId) {
     const docTypeLabel = doc.docType === 'invoice' ? 'facture' : 'reçu';
     const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
     
-    const msg = `Bonjour ${doc.client_name || ''} 🇲🇦,\n\n` +
+    const msg = `Bonjour ${esc(doc.client_name || '')} 🇲🇦,\n\n` +
         `Merci pour votre confiance !\n\n` +
         `📄 Vous trouverez ci-joint votre ${docTypeLabel} pour votre licence FacturaPro ${tierLabels[doc.tier] || ''}.\n\n` +
         `📋 Détails :\n` +
-        `• Référence : ${doc.number}\n` +
+        `• Référence : ${esc(doc.number)}\n` +
         `• Montant : ${formatCurrency(doc.totalTTC || 0)}\n` +
         `• Date : ${formatDate(doc.created_at)}\n\n` +
         `Pour toute question, n'hésitez pas.\n\nCordialement.`;
@@ -5271,86 +5471,15 @@ async function sendFpDoc(docId) {
     }, 500);
 }
 
-async function deleteFpDoc(docId) {
-    if (!confirm('Supprimer ce document ?\n\n⚠️ La suppression est définitive.')) return;
-    
-    fpDocuments = fpDocuments.filter(d => d.id !== docId);
-    await saveFpDocuments();
-    renderFpDocuments();
-    showToast('Document supprimé', 'success');
+function deleteFpDoc() {
+    showToast('Un document émis ne se supprime pas (numérotation légale). Une commande annulée marque sa facture « annulée ».', 'error');
 }
 
 // === CRÉATION AUTOMATIQUE D'UN DOC LORS DU PAIEMENT ===
 async function createFpDocumentForPayment(payment) {
-    // payment = { client_email, client_name (optional), amount, type, payment_id, payment_db_id }
-    
-    // Récupérer la config
-    const { data: settingsData } = await supaClient
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'fp_company_config')
-        .maybeSingle();
-    
-    const cfg = (settingsData && settingsData.value) || {};
-    if (!cfg.name) {
-        console.warn('FP company not configured, skipping doc generation');
-        return;
-    }
-    
+    // Facture et reçu sont émis par la base (déclencheurs sql/33) dès la commande / l'encaissement : on recharge et on renvoie ceux du paiement.
     await loadFpDocuments();
-    
-    const autoMode = cfg.autoMode || 'both';
-    const docsToCreate = [];
-    
-    if (autoMode === 'both' || autoMode === 'receipt') {
-        docsToCreate.push('receipt');
-    }
-    if (autoMode === 'both' || autoMode === 'invoice') {
-        docsToCreate.push('invoice');
-    }
-    
-    // === Génération d'un numéro de paiement unique ===
-    const paymentNumber = getNextFpDocNumber('payment');
-    
-    const created = [];
-    const groupId = 'group-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
-    
-    for (const docType of docsToCreate) {
-        const number = getNextFpDocNumber(docType);
-        const tvaRate = cfg.tvaRate ?? 20;
-        const totalTTC = payment.amount || 0;
-        const totalHT = tvaRate > 0 ? totalTTC / (1 + tvaRate / 100) : totalTTC;
-        const tva = totalTTC - totalHT;
-        
-        const newDoc = {
-            id: 'fpdoc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-            number,
-            docType,
-            tier: payment.type,
-            client_email: payment.client_email,
-            client_name: payment.client_name || '',
-            client_ice: payment.client_ice || '',
-            totalHT: Math.round(totalHT * 100) / 100,
-            tva: Math.round(tva * 100) / 100,
-            tvaRate,
-            totalTTC,
-            payment_id: payment.payment_id,        // Lien vers le code admin
-            payment_db_id: payment.payment_db_id,  // Lien vers admin_payments.id
-            payment_number: paymentNumber,         // Numéro PAY-2026-XXX
-            group_id: groupId,                     // Lie facture + reçu ensemble
-            status: 'reconciled',                  // Soldé (paiement reçu)
-            created_at: new Date().toISOString()
-        };
-        
-        fpDocuments.push(newDoc);
-        created.push(newDoc);
-    }
-    
-    if (created.length > 0) {
-        await saveFpDocuments();
-    }
-    
-    return created;
+    return fpDocuments.filter(d => d.payment_db_id && d.payment_db_id === payment.payment_db_id);
 }
 
 // === STATS ===
@@ -5491,10 +5620,7 @@ function exportFpDocuments() {
     ]);
     
     let csv = headers.join(';') + '\n';
-    csv += rows.map(r => r.map(c => {
-        const s = String(c || '');
-        return s.includes(';') ? `"${s}"` : s;
-    }).join(';')).join('\n');
+    csv += rows.map(r => r.map(c => csvCell(c || '')).join(';')).join('\n');
     
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -5576,8 +5702,8 @@ function renderPlans() {
             <td>${esc(planPeriodText(p.duration_days))}</td>
             <td>${p.active ? '<span class="badge badge-success">En vente</span>' : '<span class="badge">Désactivée</span>'}</td>
             <td style="white-space: nowrap;">
-                <button class="btn btn-secondary btn-sm" onclick="editPlan('${esc(p.key)}')">✏️ Modifier</button>
-                <button class="btn btn-secondary btn-sm" onclick="togglePlan('${esc(p.key)}')">${p.active ? '⏸️ Désactiver' : '▶️ Réactiver'}</button>
+                <button class="btn btn-secondary btn-sm" onclick="editPlan(${jsArg(p.key)})">✏️ Modifier</button>
+                <button class="btn btn-secondary btn-sm" onclick="togglePlan(${jsArg(p.key)})">${p.active ? '⏸️ Désactiver' : '▶️ Réactiver'}</button>
             </td>
         </tr>`).join('') : '<tr><td colspan="5" class="empty">Aucune formule personnalisée. Les offres Mensuel, Annuel et Fondateur restent disponibles.</td></tr>';
 }
@@ -6044,11 +6170,11 @@ function renderReports() {
             <tr>
                 <td>${formatDate(c.created_at)}</td>
                 <td><code style="font-size: 11px;">${c.code}</code></td>
-                <td>${c.client_email || '—'}</td>
+                <td>${esc(c.client_email || '—')}</td>
                 <td>${TIER_LABELS[c.type] || c.type}</td>
                 <td><strong>${(TIER_PRICES[c.type] || 0).toLocaleString('fr-FR')} DH</strong></td>
                 <td>${statusBadges[c.status] || c.status}</td>
-                <td style="font-size: 11px; color: var(--ink-mute);">${c.note || '—'}</td>
+                <td style="font-size: 11px; color: var(--ink-mute);">${esc(c.note || '—')}</td>
             </tr>
         `).join('');
     }
@@ -6245,7 +6371,7 @@ function renderFollowUp(pendingCodes) {
         return `
             <tr>
                 <td><code style="font-size: 11px;">${c.code}</code></td>
-                <td><strong>${c.client_email || '—'}</strong></td>
+                <td><strong>${esc(c.client_email || '—')}</strong></td>
                 <td>${TIER_LABELS[c.type] || c.type}</td>
                 <td><strong>${amount.toLocaleString('fr-FR')} DH</strong></td>
                 <td>
@@ -6255,13 +6381,13 @@ function renderFollowUp(pendingCodes) {
                 </td>
                 <td><span style="color: ${relanceColor}; font-weight: 600; font-size: 12px;">${relanceStatus}</span></td>
                 <td>
-                    <button class="btn btn-success btn-sm" onclick="relanceFollowUp('${c.code}', '${c.client_email}', '${c.type}', ${amount})" title="Envoyer relance WhatsApp">
+                    <button class="btn btn-success btn-sm" onclick="relanceFollowUp(${jsArg(c.code)}, ${jsArg(c.client_email)}, ${jsArg(c.type)}, ${amount})" title="Envoyer relance WhatsApp">
                         📱 Relancer
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="markAsPaid('${c.id}', '${c.client_email}', '${c.type}', ${amount})" title="Marquer comme payé">
+                    <button class="btn btn-secondary btn-sm" onclick="markAsPaid(${jsArg(c.id)}, ${jsArg(c.client_email)}, ${jsArg(c.type)}, ${amount})" title="Marquer comme payé">
                         ✓ Payé
                     </button>
-                    <button class="btn btn-danger btn-sm" onclick="cancelCode('${c.id}')" title="Annuler ce code">
+                    <button class="btn btn-danger btn-sm" onclick="cancelCode(${jsArg(c.id)})" title="Annuler ce code">
                         ✕
                     </button>
                 </td>
@@ -6297,23 +6423,33 @@ async function markAsPaid(codeId, email, tier, amount) {
     }
     
     try {
-        // 1. Enregistrer le paiement (récupérer l'ID retourné)
-        const { data: paymentData, error: payError } = await supaClient
-            .from('admin_payments')
-            .insert({
-                client_email: email,
-                payment_date: new Date().toISOString().split('T')[0],
-                amount: amount,
-                type: tier,
-                payment_mode: 'virement',
-                note: `Code activé : ${codeId.substring(0, 8)}`
-            })
-            .select()
-            .single();
-        
-        if (payError) throw payError;
-        
-        const paymentDbId = paymentData?.id;
+        // 1. Encaisser le paiement en attente lié au code (sql/32) ; sinon (ancien code sans paiement lié) en créer un
+        const linked = (allPendingPayments || []).find(p => p.code_id === codeId);
+        let paymentDbId;
+        if (linked) {
+            const { data: cp, error: cpErr } = await supaClient.rpc('admin_confirm_payment', {
+                p_id: linked.id, p_amount: amount, p_mode: 'virement',
+                p_date: new Date().toISOString().split('T')[0], p_note: `Code activé : ${codeId.substring(0, 8)}`
+            });
+            if (cpErr) throw cpErr;
+            if (!cp || !cp.ok) throw new Error({ already_paid: 'paiement déjà encaissé', cancelled: 'paiement annulé (code révoqué)', bad_amount: 'montant invalide' }[cp && cp.reason] || (cp && cp.reason) || 'refusé');
+            paymentDbId = linked.id;
+        } else {
+            const { data: paymentData, error: payError } = await supaClient
+                .from('admin_payments')
+                .insert({
+                    client_email: email,
+                    payment_date: new Date().toISOString().split('T')[0],
+                    amount: amount,
+                    type: tier,
+                    payment_mode: 'virement',
+                    note: `Code activé : ${codeId.substring(0, 8)}`
+                })
+                .select()
+                .single();
+            if (payError) throw payError;
+            paymentDbId = paymentData?.id;
+        }
         
         // 2. Marquer le code comme utilisé
         const { error: codeError } = await supaClient
@@ -6433,7 +6569,7 @@ function renderTopClients(codes, payments) {
         
         return `
             <tr>
-                <td><strong>${c.email}</strong></td>
+                <td><strong>${esc(c.email)}</strong></td>
                 <td>${c.codesGenerated}</td>
                 <td><strong style="color: ${c.amountPaid > 0 ? 'var(--success)' : 'var(--ink-mute)'};">${c.amountPaid.toLocaleString('fr-FR')} DH</strong></td>
                 <td>${formatDate(c.lastAction)}</td>
@@ -6458,11 +6594,11 @@ function exportReportCSV() {
         TIER_PRICES[c.type] || 0,
         c.status,
         c.activated_at ? formatDate(c.activated_at) : '',
-        (c.note || '').replace(/[",]/g, ' ')
+        (c.note || '')
     ]);
     
     let csv = headers.join(',') + '\n';
-    csv += rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+    csv += rows.map(r => r.map(cell => csvCell(cell, true)).join(',')).join('\n');
     
     // Download
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -6653,16 +6789,16 @@ async function renderAdmins() {
         
         return `
             <tr>
-                <td><strong>${a.email}</strong>${isCurrentUser ? ' <span style="color: var(--success); font-size: 11px;">(vous)</span>' : ''}</td>
+                <td><strong>${esc(a.email)}</strong>${isCurrentUser ? ' <span style="color: var(--success); font-size: 11px;">(vous)</span>' : ''}</td>
                 <td>${roleBadge}</td>
                 <td>${formatDate(a.created_at)}</td>
                 <td>${adminLastLogin(a) ? formatDate(adminLastLogin(a)) : '—'}</td>
                 <td>
                     ${canDelete ? `
-                        <button class="btn btn-secondary btn-sm" onclick="resetAdminPassword('${a.email}')" title="Réinitialiser mot de passe">
+                        <button class="btn btn-secondary btn-sm" onclick="resetAdminPassword(${jsArg(a.email)})" title="Réinitialiser mot de passe">
                             🔑 Reset
                         </button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteAdmin('${a.email}')" title="Supprimer">
+                        <button class="btn btn-danger btn-sm" onclick="deleteAdmin(${jsArg(a.email)})" title="Supprimer">
                             🗑️
                         </button>
                     ` : a.is_master ? '<span style="color: var(--ink-mute); font-size: 11px;">Irrévocable</span>' : '<span style="color: var(--ink-mute); font-size: 11px;">—</span>'}
@@ -6888,7 +7024,13 @@ function showToast(msg, type = 'info') {
         }
         const { data: { session } } = await supaClient.auth.getSession();
         if (!session) return;
+        // Session sans code de double authentification : retour à l'écran de connexion (le code sera demandé)
+        const { data: lvl } = await supaClient.auth.mfa.getAuthenticatorAssuranceLevel();
+        const needsCode = !lvl || (lvl.currentLevel !== 'aal2' && lvl.nextLevel === 'aal2');   // 2FA activée mais code non saisi dans cette session
+        if (needsCode) { try { await supaClient.auth.signOut(); } catch {} AdminSession.clear(); return; }
         const who = await fetchAdminIdentity();
+        // Propriétaire sans 2FA validée dans cette session : retour à la connexion (activation / code obligatoires)
+        if (who && who.is_master && (!lvl || lvl.currentLevel !== 'aal2')) { try { await supaClient.auth.signOut(); } catch {} AdminSession.clear(); return; }
         if (!who || !(who.is_admin || who.is_staff)) return;
         currentAdmin = { email: who.email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
         const expired = AdminSession.check();
