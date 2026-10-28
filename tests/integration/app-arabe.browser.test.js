@@ -63,7 +63,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.evaluate(() => navTo('invoices')); await sleep(400); t = await txt(p, '#mainApp');
   ok('factures en arabe (filtres), sans français', /مسودات/.test(t) && /متأخرة/.test(t) && !FR.test(t), (t.match(FR) || [''])[0]);
   // Écrans secondaires : aucun texte français résiduel (hors noms propres, formats et modèles de messages destinés aux clients)
-  const OK_FR = /^(@placeholder:(Bonjour, je me|Suite à mon|Sans paiement de|FACTURA-|Casablanca|https|FAC|DEV|AVR)|FAC-2026|.*@facturapro-test|Business|ICE \*|SWIFT \/ BIC|CSV Excel|FEC)/;
+  const OK_FR = /^(@placeholder:(Bonjour, je me|Suite à mon|Sans paiement de|FP-|Casablanca|https|FAC|DEV|AVR)|FAC-2026|.*@facturapro-test|Business|ICE \*|SWIFT \/ BIC|CSV Excel|FEC)/;
   for (const pg of ['invoice-editor', 'quotes', 'products', 'reports', 'payments', 'reminders', 'messages', 'license', 'company', 'team']) {
     await p.evaluate((x) => { try { navTo(x); } catch (e) {} }, pg); await sleep(500);
     const left = await p.evaluate((x) => { const root = document.getElementById('page-' + x); const out = []; const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n;
