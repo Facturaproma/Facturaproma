@@ -7771,7 +7771,7 @@ function navTo(page) {
     if (page === 'invoices') renderInvoices();
     if (page === 'quotes') renderQuotes();
     if (page === 'clients') renderClients();
-    if (page === 'products') renderProducts();
+    if (page === 'products') { renderProducts(); stockRefreshLevels().then(() => { if (document.getElementById('page-products').classList.contains('active')) renderProducts(); }).catch(() => {}); }
     if (page === 'stock') { initStockPeriod(); renderStock(); }
     if (page === 'payments') renderPayments();
     if (page === 'reminders') renderReminders();
@@ -8503,7 +8503,7 @@ async function createCreditFromInvoice(id) {
     invoices.push(credit);
     Storage.set('invoices', invoices);
     logDoc('avoir', credit, `sur ${original.number}`);
-    try { stockOnCreditIssued(credit); } catch (e) { console.warn('Stock :', e); }
+    stockOnCreditIssued(credit).catch(e => console.warn('Stock :', e));
     
     showToast(`✓ Avoir ${creditNumber} créé`, 'success');
     renderInvoices();
@@ -8915,7 +8915,7 @@ async function _persistEditor(forceStatus = null) {
     editingInvoice = data;   // les enregistrements suivants mettent à jour ce document (pas de doublon)
     if (justIssued) {
         logDoc('emission', data, `Facture émise, total TTC ${data.totalTTC}`);
-        try { stockOnInvoiceIssued(data); } catch (e) { console.warn('Stock :', e); }
+        stockOnInvoiceIssued(data).catch(e => console.warn('Stock :', e));
         // le devis d'origine pointe vers le numéro officiel
         const quotes = Storage.get('quotes', []);
         const q = quotes.find(x => x.convertedTo === data.id);
@@ -9376,62 +9376,106 @@ function renderProducts() {
 // ============================================
 // STOCK : mouvements (entrées / sorties) par produit « suivi ». Niveau = Σ entrées − Σ sorties.
 // Facture émise → sorties automatiques ; avoir → entrées ; brouillons sans effet ; entrées et ajustements manuels.
+// Avec Supabase (sql/34) : les mouvements sont enregistrés et CALCULÉS par le serveur (table fermée, historique non modifiable,
+// clés d'idempotence = jamais de double déduction). Hors ligne : file d'attente « stockOutbox » rejouée sans risque (mêmes clés).
+// Sans Supabase (mode local) : repli sur la clé locale « stockMoves ».
 // ============================================
 const stockRound = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 const stockFmt = (n) => stockRound(n).toLocaleString('fr-FR', { maximumFractionDigits: 3 });
-function stockMoves() { const m = Storage.get('stockMoves', []); return Array.isArray(m) ? m : []; }
-function stockLevel(productId, moves, upToDate) {
-    return stockRound((moves || stockMoves()).reduce((t, m) => {
-        if (m.productId !== productId) return t;
-        if (upToDate && String(m.date) > upToDate) return t;
-        return t + (m.type === 'in' ? 1 : -1) * (Number(m.qty) || 0);
-    }, 0));
+const stockServer = () => USE_SUPABASE && ensureSupabase();
+let _stockLv = {};            // product_id -> niveau (cache du serveur)
+// ---- mode local (sans serveur) ----
+function stockLocalMoves() { const m = Storage.get('stockMoves', []); return Array.isArray(m) ? m : []; }
+function stockLocalLevel(productId, moves) {
+    return stockRound((moves || stockLocalMoves()).reduce((t, m) => m.productId === productId ? t + (m.type === 'in' ? 1 : -1) * (Number(m.qty) || 0) : t, 0));
 }
-function stockAddMoves(list) {
-    if (!list.length) return;
-    const all = stockMoves().concat(list.map(m => ({ id: uuid(), createdAt: new Date().toISOString(), ...m })));
-    Storage.set('stockMoves', all);
+function stockLevel(productId) { return stockServer() ? stockRound(_stockLv[productId] || 0) : stockLocalLevel(productId); }
+// Forme serveur d'un mouvement client
+const stockToServer = (m) => ({ product_id: m.productId, product_name: m.productName, unit: m.unit, type: m.type, qty: m.qty, date: m.date, source: m.source, ref: m.ref || '', ref_id: m.refId || '', note: m.note || '', key: m.key || null });
+const STOCK_FATAL = /(_INVALIDE|TROP_DE_MOUVEMENTS|LIMITE_STOCK|PRODUIT_INVALIDE)/;
+// File d'attente : mouvements non envoyés (réseau coupé). Rejouables : le serveur ignore les clés déjà enregistrées.
+function stockOutbox() { const o = Storage.get('stockOutbox', []); return Array.isArray(o) ? o : []; }
+async function stockSend(payloads) {
+    for (let i = 0; i < payloads.length; i += 200) {
+        const { error } = await supaClient.rpc('stock_record', { p_moves: payloads.slice(i, i + 200) });
+        if (error) throw new Error(error.message || 'erreur');
+    }
 }
-// Sorties à l'émission d'une facture (une seule fois par facture : clé source+facture+ligne).
-function stockOnInvoiceIssued(inv) {
-    if (!inv || inv.type === 'credit' || inv.type === 'quote') return [];
-    const products = Storage.get('products', []) || [], existing = new Set(stockMoves().map(m => m.key).filter(Boolean));
-    const add = [], short = [];
-    (inv.items || []).forEach((it, idx) => {
+async function stockFlush() {
+    if (!stockServer()) return;
+    // 1) anciens mouvements locaux (version précédente) → serveur, une fois
+    const legacy = stockLocalMoves();
+    if (legacy.length) { try { await stockSend(legacy.map(stockToServer)); Storage.set('stockMoves', []); } catch (e) { console.warn('Stock : migration locale en attente', e.message); } }
+    // 2) file d'attente hors ligne
+    const q = stockOutbox();
+    if (q.length) { try { await stockSend(q); Storage.set('stockOutbox', []); } catch (e) { if (STOCK_FATAL.test(e.message || '')) { console.warn('Stock : mouvements invalides abandonnés', e.message); Storage.set('stockOutbox', []); } } }
+}
+async function stockRefreshLevels() {
+    if (!stockServer()) return;
+    await stockFlush();
+    const { data, error } = await supaClient.rpc('stock_levels');
+    if (!error && Array.isArray(data)) { _stockLv = {}; data.forEach(r => { _stockLv[r.product_id] = Number(r.level) || 0; }); }
+}
+// Enregistre des mouvements (client). Retourne 'ok' | 'queued' | 'error'.
+async function stockRecord(list) {
+    if (!list.length) return 'ok';
+    if (!stockServer()) {
+        const all = stockLocalMoves().concat(list.map(m => ({ id: uuid(), createdAt: new Date().toISOString(), ...m })));
+        Storage.set('stockMoves', all); return 'ok';
+    }
+    try { await stockSend(list.map(stockToServer)); }
+    catch (e) {
+        const msg = e.message || '';
+        if (STOCK_FATAL.test(msg)) { showToast('Stock : mouvement refusé (' + msg + ')', 'error'); return 'error'; }
+        if (/LICENCE_INACTIVE/.test(msg)) { showToast('🔒 Licence inactive : le stock n\'a pas été modifié.', 'error'); return 'error'; }
+        Storage.set('stockOutbox', stockOutbox().concat(list.map(stockToServer)));
+        showToast('📶 Stock enregistré sur cet appareil, il sera envoyé dès que la connexion revient.', 'info');
+        return 'queued';
+    }
+    await stockRefreshLevels();
+    return 'ok';
+}
+function stockLines(doc, type, prefix) {
+    const products = Storage.get('products', []) || [], out = [];
+    (doc.items || []).forEach((it, idx) => {
         const p = it.productId && products.find(x => x.id === it.productId);
         const qty = stockRound(Math.abs(Number(it.quantity) || 0));
-        const key = `inv:${inv.id}:${idx}`;
-        if (!p || !p.trackStock || qty <= 0 || existing.has(key)) return;
-        add.push({ key, productId: p.id, productName: p.name, unit: p.unit || 'unité', type: 'out', qty, date: String(inv.date || todayISO()).slice(0, 10), source: 'invoice', ref: inv.number || '', refId: inv.id, note: '' });
+        if (!p || !p.trackStock || qty <= 0) return;
+        out.push({ key: `${prefix}:${doc.id}:${idx}`, productId: p.id, productName: p.name, unit: p.unit || 'unité', type, qty, date: String(doc.date || todayISO()).slice(0, 10), source: prefix === 'inv' ? 'invoice' : 'credit', ref: doc.number || '', refId: doc.id,
+                     note: prefix === 'cr' && doc.relatedInvoiceNumber ? 'sur ' + dn(doc.relatedInvoiceNumber) : '' });
     });
-    stockAddMoves(add);
-    const lv = stockMoves();
-    add.forEach(m => { if (stockLevel(m.productId, lv) < 0 && !short.includes(m.productName)) short.push(m.productName); });
-    if (add.length) showToast(`📦 Stock mis à jour (${add.length} ligne${add.length > 1 ? 's' : ''})` + (short.length ? ` — ⚠️ stock négatif : ${short.join(', ')}` : ''), short.length ? 'error' : 'success');
+    return out;
+}
+// Sorties à l'émission d'une facture (idempotent : clé facture + ligne).
+async function stockOnInvoiceIssued(inv) {
+    if (!inv || inv.type === 'credit' || inv.type === 'quote') return [];
+    let add = stockLines(inv, 'out', 'inv');
+    if (!stockServer()) { const ex = new Set(stockLocalMoves().map(m => m.key).filter(Boolean)); add = add.filter(m => !ex.has(m.key)); }
+    if (!add.length) return [];
+    const r = await stockRecord(add);
+    if (r === 'error') return [];
+    const short = [];
+    add.forEach(m => { if (stockLevel(m.productId) < 0 && !short.includes(m.productName)) short.push(m.productName); });
+    showToast(`📦 Stock mis à jour (${add.length} ligne${add.length > 1 ? 's' : ''})` + (short.length ? ` — ⚠️ stock négatif : ${short.join(', ')}` : ''), short.length ? 'error' : 'success');
     return add;
 }
 // Entrées à l'émission d'un avoir (remise en stock des quantités de la facture annulée).
-function stockOnCreditIssued(credit) {
+async function stockOnCreditIssued(credit) {
     if (!credit) return [];
-    const products = Storage.get('products', []) || [], existing = new Set(stockMoves().map(m => m.key).filter(Boolean));
-    const add = [];
-    (credit.items || []).forEach((it, idx) => {
-        const p = it.productId && products.find(x => x.id === it.productId);
-        const qty = stockRound(Math.abs(Number(it.quantity) || 0));
-        const key = `cr:${credit.id}:${idx}`;
-        if (!p || !p.trackStock || qty <= 0 || existing.has(key)) return;
-        add.push({ key, productId: p.id, productName: p.name, unit: p.unit || 'unité', type: 'in', qty, date: String(credit.date || todayISO()).slice(0, 10), source: 'credit', ref: credit.number || '', refId: credit.id, note: credit.relatedInvoiceNumber ? 'sur ' + dn(credit.relatedInvoiceNumber) : '' });
-    });
-    stockAddMoves(add);
-    if (add.length) showToast(`📦 Stock remis à jour (${add.length} ligne${add.length > 1 ? 's' : ''})`, 'success');
+    let add = stockLines(credit, 'in', 'cr');
+    if (!stockServer()) { const ex = new Set(stockLocalMoves().map(m => m.key).filter(Boolean)); add = add.filter(m => !ex.has(m.key)); }
+    if (!add.length) return [];
+    const r = await stockRecord(add);
+    if (r !== 'error') showToast(`📦 Stock remis à jour (${add.length} ligne${add.length > 1 ? 's' : ''})`, 'success');
     return add;
 }
-function openStockMove(type) {
+async function openStockMove(type) {
     const tracked = (Storage.get('products', []) || []).filter(p => p.trackStock);
     if (!tracked.length) {
         if (confirm('Aucun produit n\'est suivi en stock.\n\nOuvrir « Produits & Services » pour cocher « Suivre le stock » sur un produit ?')) navTo('products');
         return;
     }
+    await stockRefreshLevels();
     document.getElementById('stockMoveType').value = type;
     document.getElementById('stockMoveTitle').textContent = type === 'in' ? 'Entrée de stock' : 'Sortie / ajustement de stock';
     document.getElementById('stockMoveHint').textContent = type === 'in' ? 'Ajoutez des quantités reçues (achat, production, retour...)' : 'Retirez des quantités (casse, perte, usage interne, correction d\'inventaire...)';
@@ -9441,7 +9485,7 @@ function openStockMove(type) {
     document.getElementById('stockMoveNote').value = '';
     document.getElementById('stockMoveModal').classList.add('active');
 }
-function saveStockMove() {
+async function saveStockMove() {
     const type = document.getElementById('stockMoveType').value === 'out' ? 'out' : 'in';
     const pid = document.getElementById('stockMoveProduct').value;
     const qty = stockRound(parseFloat(document.getElementById('stockMoveQty').value));
@@ -9449,9 +9493,9 @@ function saveStockMove() {
     const p = (Storage.get('products', []) || []).find(x => x.id === pid);
     if (!p) return showToast('Produit introuvable', 'error');
     if (!(qty > 0)) return showToast('Quantité invalide', 'error');
-    stockAddMoves([{ productId: p.id, productName: p.name, unit: p.unit || 'unité', type, qty, date, source: 'manual', ref: '', refId: '', note: document.getElementById('stockMoveNote').value.trim().slice(0, 200) }]);
+    const r = await stockRecord([{ key: 'man:' + uuid(), productId: p.id, productName: p.name, unit: p.unit || 'unité', type, qty, date, source: 'manual', ref: '', refId: '', note: document.getElementById('stockMoveNote').value.trim().slice(0, 200) }]);
     closeModal('stockMoveModal');
-    showToast(type === 'in' ? 'Entrée enregistrée ✓' : 'Sortie enregistrée ✓', 'success');
+    if (r !== 'error') showToast(type === 'in' ? 'Entrée enregistrée ✓' : 'Sortie enregistrée ✓', 'success');
     renderStock();
 }
 function initStockPeriod() {
@@ -9467,7 +9511,7 @@ function setStockPeriod(kind, silent) {
     document.getElementById('stockFrom').value = iso(a); document.getElementById('stockTo').value = iso(b);
     if (!silent) renderStock();
 }
-// Calcul pur de la période : par produit, stock initial / entrées / sorties / stock final.
+// Calcul pur de la période (mode local) : par produit, stock initial / entrées / sorties / stock final.
 function stockPeriodSummary(moves, from, to) {
     const by = {};
     moves.forEach(m => {
@@ -9479,32 +9523,57 @@ function stockPeriodSummary(moves, from, to) {
     });
     return Object.values(by).map(r => ({ ...r, open: stockRound(r.open), in: stockRound(r.in), out: stockRound(r.out), close: stockRound(r.open + r.in - r.out) }));
 }
-function renderStock() {
-    const products = Storage.get('products', []) || [], moves = stockMoves();
+// Période + détail : serveur (fonctions SQL) ou calcul local
+async function stockFetchPeriod(from, to, limit) {
+    if (stockServer()) {
+        const [p, l] = await Promise.all([supaClient.rpc('stock_period', { p_from: from || null, p_to: to || null }), supaClient.rpc('stock_list', { p_from: from || null, p_to: to || null, p_limit: limit, p_offset: 0 })]);
+        if (p.error || l.error) throw new Error((p.error || l.error).message);
+        return {
+            rows: (p.data || []).map(r => ({ productId: r.product_id, name: r.product_name, unit: r.unit, open: Number(r.opening), in: Number(r.entries), out: Number(r.exits), close: Number(r.closing) })),
+            list: (l.data || []).map(m => ({ productName: m.product_name, unit: m.unit, type: m.move_type, qty: Number(m.qty), date: m.move_date, source: m.source, ref: m.ref || '', note: m.note || '' }))
+        };
+    }
+    const moves = stockLocalMoves();
+    return {
+        rows: stockPeriodSummary(moves, from, to).filter(r => r.in || r.out || r.open || r.close),
+        list: moves.filter(m => (!from || String(m.date) >= from) && (!to || String(m.date) <= to)).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit)
+    };
+}
+let _stockRenderTok = 0;
+async function renderStock() {
+    const tok = ++_stockRenderTok;
+    const products = Storage.get('products', []) || [];
     const q = (document.getElementById('stockSearch')?.value || '').toLowerCase();
+    try { await stockRefreshLevels(); } catch (e) { console.warn('Stock :', e); }
+    if (tok !== _stockRenderTok) return;
     const tracked = products.filter(p => p.trackStock && (!q || (p.name || '').toLowerCase().includes(q)));
     const cur = document.getElementById('stockCurrent');
     if (!products.some(p => p.trackStock)) {
         cur.innerHTML = `<div class="empty-state"><div class="empty-icon">🏬</div><h3>Aucun produit suivi</h3><p>Dans « Produits & Services », cochez « Suivre le stock » sur un produit.</p><button class="btn btn-primary" onclick="navTo('products')">Aller aux produits</button></div>`;
     } else {
-        cur.innerHTML = `<table class="tbl-act"><thead><tr><th>Produit</th><th>Stock</th><th>État</th></tr></thead><tbody>${tracked.map(p => {
-            const lv = stockLevel(p.id, moves), alert = Number(p.stockAlert) || 0;
+        const pend = stockOutbox().length;
+        cur.innerHTML = (pend ? `<div style="padding:8px 16px; font-size:12px; color:var(--warning);">📶 ${pend} mouvement${pend > 1 ? 's' : ''} en attente d'envoi (connexion).</div>` : '') +
+            `<table class="tbl-act"><thead><tr><th>Produit</th><th>Stock</th><th>État</th></tr></thead><tbody>${tracked.map(p => {
+            const lv = stockLevel(p.id), alert = Number(p.stockAlert) || 0;
             const st = lv < 0 ? '<span style="color:var(--danger);font-weight:600;">Négatif</span>' : lv === 0 ? '<span style="color:var(--danger);font-weight:600;">Rupture</span>' : (alert > 0 && lv <= alert) ? '<span style="color:var(--warning);font-weight:600;">Stock bas</span>' : '<span style="color:var(--success);">OK</span>';
             return `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td><strong>${stockFmt(lv)}</strong> ${escapeHtml(p.unit || 'unité')}</td><td>${st}</td></tr>`;
         }).join('')}</tbody></table>`;
     }
     const from = document.getElementById('stockFrom')?.value || '', to = document.getElementById('stockTo')?.value || '';
-    const rows = stockPeriodSummary(moves, from, to).filter(r => r.in || r.out || r.open || r.close).sort((a, b) => a.name.localeCompare(b.name));
-    const per = document.getElementById('stockPeriod');
+    const per = document.getElementById('stockPeriod'), el = document.getElementById('stockMoves');
+    let data;
+    try { data = await stockFetchPeriod(from, to, 200); }
+    catch (e) { if (tok === _stockRenderTok) { per.innerHTML = '<div style="padding:16px; color:var(--danger);">Impossible de charger la période (connexion). Réessayez.</div>'; el.innerHTML = ''; } return; }
+    if (tok !== _stockRenderTok) return;
+    const rows = data.rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     per.innerHTML = rows.length ? rows.map(r => `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(r.name)}</strong><div class="stk-chips"><span>Initial <b>${stockFmt(r.open)}</b></span><span style="color:var(--success);">Entrées <b>+${stockFmt(r.in)}</b></span><span style="color:var(--danger);">Sorties <b>−${stockFmt(r.out)}</b></span></div></div><div class="stk-qty">${stockFmt(r.close)} ${escapeHtml(r.unit)}<div class="stk-sub">final</div></div></div>`).join('') : '<div style="padding:16px; color:var(--ink-mute);">Aucun mouvement sur cette période.</div>';
-    const list = moves.filter(m => (!from || String(m.date) >= from) && (!to || String(m.date) <= to)).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)));
     const srcLabel = { invoice: 'Facture', credit: 'Avoir', manual: 'Manuel' };
-    const el = document.getElementById('stockMoves');
-    el.innerHTML = list.length ? list.slice(0, 200).map(m => `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(m.productName || '—')}</strong><div class="stk-sub">${formatDate(m.date)} · ${srcLabel[m.source] || ''}${m.ref ? ' ' + escapeHtml(dn(m.ref)) : ''}${m.note ? ' · ' + escapeHtml(m.note) : ''}</div></div><div class="stk-qty" style="color:${m.type === 'in' ? 'var(--success)' : 'var(--danger)'};">${m.type === 'in' ? '+' : '−'}${stockFmt(m.qty)} ${escapeHtml(m.unit || '')}</div></div>`).join('') + (list.length > 200 ? `<div style="padding:8px 16px;font-size:12px;color:var(--ink-mute);">200 derniers mouvements affichés sur ${list.length} (le CSV contient tout).</div>` : '') : '<div style="padding:16px; color:var(--ink-mute);">Aucun mouvement sur cette période.</div>';
+    el.innerHTML = data.list.length ? data.list.map(m => `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(m.productName || '—')}</strong><div class="stk-sub">${formatDate(m.date)} · ${srcLabel[m.source] || ''}${m.ref ? ' ' + escapeHtml(dn(m.ref)) : ''}${m.note ? ' · ' + escapeHtml(m.note) : ''}</div></div><div class="stk-qty" style="color:${m.type === 'in' ? 'var(--success)' : 'var(--danger)'};">${m.type === 'in' ? '+' : '−'}${stockFmt(m.qty)} ${escapeHtml(m.unit || '')}</div></div>`).join('') + (data.list.length >= 200 ? '<div style="padding:8px 16px;font-size:12px;color:var(--ink-mute);">200 derniers mouvements affichés (le CSV contient tout).</div>' : '') : '<div style="padding:16px; color:var(--ink-mute);">Aucun mouvement sur cette période.</div>';
 }
-function exportStockCsv() {
+async function exportStockCsv() {
     const from = document.getElementById('stockFrom')?.value || '', to = document.getElementById('stockTo')?.value || '';
-    const moves = stockMoves().filter(m => (!from || String(m.date) >= from) && (!to || String(m.date) <= to)).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    let moves;
+    try { moves = (await stockFetchPeriod(from, to, 5000)).list.slice().reverse(); } catch (e) { return showToast('Export impossible (connexion)', 'error'); }
     if (!moves.length) return showToast('Aucun mouvement à exporter', 'error');
     const L = [['Date', 'Produit', 'Mouvement', 'Quantité', 'Unité', 'Origine', 'Référence', 'Note'].join(';')];
     moves.forEach(m => L.push([m.date, csvText(m.productName), m.type === 'in' ? 'Entrée' : 'Sortie', String(m.qty).replace('.', ','), csvText(m.unit), m.source === 'invoice' ? 'Facture' : m.source === 'credit' ? 'Avoir' : 'Manuel', csvText(m.ref), csvText(m.note)].join(';')));
