@@ -12,7 +12,7 @@
     "test:preprod-local": "node tests/preprod/apply.local.test.js && node tests/preprod/check.mock.test.js && node tests/preprod/backup.local.test.js && node tests/preprod/scan.test.js && node tests/preprod-build.test.js && UI_DRYRUN=1 node scripts/preprod-ui-validation.js knownrun && UI_DRYRUN=1 node scripts/preprod-ui-validation.js guardtests && UI_DRYRUN=1 UI_DRY_KNOWNROW=1 node scripts/preprod-ui-validation.js test && UI_DRYRUN=1 UI_DRY_KNOWNROW=1 node scripts/preprod-ui-validation.js cleanup"
   },
   "devDependencies": {
-    "jspdf": "2.5.1",
+    "jspdf": "4.2.1",
     "jspdf-autotable": "3.5.31",
     "playwright-core": "^1.48.0",
     "pg": "^8.11.0"
