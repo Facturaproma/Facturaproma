@@ -40,7 +40,7 @@
       async getUser() { return { data: { user: session && session.user }, error: null }; },
       async signOut() { session = null; persist(); listeners.forEach(f => f('SIGNED_OUT', null)); return { error: null }; },
       onAuthStateChange(cb) { listeners.push(cb); return { data: { subscription: { unsubscribe() {} } } }; },
-      async updateUser() { return { data: {}, error: null }; },
+      async updateUser() { const m = M(); window.__updateCalls = (window.__updateCalls || 0) + 1; if (m.realistic && m.factors.some(f => f.status === 'verified') && m.level !== 'aal2') return { data: null, error: { message: 'AAL2 session is required to update email or password when MFA is enabled.' } }; return { data: {}, error: null }; },
       async resetPasswordForEmail() { return { data: {}, error: null }; }
     };
     return {
