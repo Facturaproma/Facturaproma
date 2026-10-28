@@ -54,6 +54,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('suivi arrêté depuis la liste', await p.evaluate((l) => !Storage.get('products', []).find(x => x.id === l).trackStock, L));
   if (process.env.SHOT_DIR) { await sleep(300); await p.screenshot({ path: process.env.SHOT_DIR + '/produits-mobile.png', fullPage: true, animations: 'disabled' }); }
 
+  // 1b) Arrêt du suivi : refusé si stock ≠ 0
+  // (le niveau de Farine est 0 ici : arrêt accepté puis réactivé ; le refus avec stock ≠ 0 est testé après l'entrée manuelle)
   // 2) Entrée manuelle
   await p.evaluate(async () => { navTo('stock'); await openStockMove('in'); });
   ok('fenêtre d\'entrée : seul le produit suivi est proposé', (await p.$$eval('#stockMoveProduct option', o => o.length)) === 1);
@@ -61,6 +63,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('entrée manuelle de 10 : stock = 10', (await level(F)) === 10);
   ok('page Stock : stock actuel affiché', /Farine 25kg/.test(await p.innerText('#stockCurrent')) && /10/.test(await p.innerText('#stockCurrent')));
 
+  ok('arrêt du suivi refusé tant que le stock ≠ 0 (liste)', await p.evaluate((f) => { toggleProductStock(f); return Storage.get('products', []).find(x => x.id === f).trackStock === true; }, F));
+  ok('arrêt du suivi refusé tant que le stock ≠ 0 (fenêtre produit)', await p.evaluate((f) => { editProduct(f); document.getElementById('modalProductTrack').checked = false; saveProduct(); const ok_ = Storage.get('products', []).find(x => x.id === f).trackStock === true && document.getElementById('modalProductTrack').checked === true; closeModal('productModal'); return ok_; }, F));
   // 3) Facture émise : sortie automatique
   const issue = async (lines, status) => p.evaluate(async ([ls, st]) => {
     newInvoice(); document.getElementById('editorClient').value = 'c1'; document.getElementById('itemsBody').innerHTML = '';

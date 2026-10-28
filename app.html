@@ -9589,6 +9589,7 @@ async function exportStockCsv() {
 function toggleProductStock(id) {
     const ps = Storage.get('products', []) || [], p = ps.find(x => x.id === id);
     if (!p) return;
+    if (p.trackStock && stockLevel(p.id) !== 0) return showToast(`Impossible d'arrêter le suivi : il reste ${stockFmt(stockLevel(p.id))} ${p.unit || 'unité'} en stock. Ramenez d'abord le stock à 0 (sortie ou ajustement).`, 'error');
     p.trackStock = !p.trackStock;
     Storage.set('products', ps);
     showToast(p.trackStock ? '🏬 Suivi du stock activé (stock initial : 0 — ajoutez une entrée dans « Stock »)' : 'Suivi du stock arrêté', 'success');
@@ -9640,6 +9641,11 @@ function saveProduct() {
     }
     
     const products = Storage.get('products', []);
+    const prev = editingProductId && products.find(p => p.id === editingProductId);
+    if (prev && prev.trackStock && !document.getElementById('modalProductTrack').checked && stockLevel(prev.id) !== 0) {
+        document.getElementById('modalProductTrack').checked = true;
+        return showToast(`Impossible d'arrêter le suivi : il reste ${stockFmt(stockLevel(prev.id))} ${prev.unit || 'unité'} en stock. Ramenez d'abord le stock à 0 (sortie ou ajustement).`, 'error');
+    }
     const data = {
         id: editingProductId || uuid(),
         name: name,
