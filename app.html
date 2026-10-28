@@ -9988,30 +9988,7 @@ async function sendDocWhatsApp(id, type) {
 }
 
 function quickRelance(invoiceId) {
-    const invoices = Storage.get('invoices', []);
-    const invoice = invoices.find(i => i.id === invoiceId);
-    if (!invoice) return;
-    
-    const clients = Storage.get('clients', []);
-    const client = clients.find(c => c.id === invoice.clientId);
-    
-    const company = Storage.get('company', {});
-    const dueLabel = invoice.dueDate ? formatDate(invoice.dueDate) : '';
-    
-    const msg = `Bonjour 🇲🇦,\n\n` +
-        `Je me permets de revenir vers vous concernant la facture ${invoice.number}${dueLabel ? ` (échéance ${dueLabel})` : ''}.\n\n` +
-        `📋 Détail :\n` +
-        `• N° : ${invoice.number}\n` +
-        `• Montant : ${formatCurrency(invoice.totalTTC)}\n` +
-        `${invoiceRemaining(invoice, Storage.get('payments', []) || []) < (invoice.totalTTC || 0) ? `• Reste à régler : ${formatCurrency(invoiceRemaining(invoice, Storage.get('payments', []) || []))}\n` : ''}` +
-        `• Date : ${formatDate(invoice.date)}\n\n` +
-        `Pourriez-vous svp me faire un retour sur le statut du règlement ?\n\n` +
-        `${company.rib ? `RIB : ${company.rib}\n` : ''}` +
-        `Bien cordialement,\n${company.name || ''}`;
-    
-    const phone = (client?.phone || '').replace(/\D/g, '');
-    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank');
+    sendReminderWhatsApp(invoiceId);
 }
 
 // ============================================
@@ -13120,6 +13097,42 @@ Veuillez agréer mes salutations distinguées.
 {ENTREPRISE}`
 };
 
+// Niveau de relance selon le retard (pure : testable). < 15 j : niveau 1 ; 15-29 j : niveau 2 ; 30 j et plus : mise en demeure.
+function reminderLevelForDays(days) {
+    return days >= 30 ? 3 : (days >= 15 ? 2 : 1);
+}
+
+// Texte d'une relance (pure : testable). Même texte pour l'e-mail et WhatsApp : les modèles de la page Relances s'appliquent partout.
+function buildReminderMessage(invoice, level, client, company, templates, payments) {
+    const tpls = templates || DEFAULT_REMINDER_TEMPLATES;
+    const template = tpls['level' + level] || DEFAULT_REMINDER_TEMPLATES['level' + level];
+    const remaining = invoiceRemaining(invoice, payments || []);
+    return template
+        .replace(/{CLIENT}/g, (client && client.name) || invoice.clientName || 'Cher client')
+        .replace(/{NUMERO}/g, invoice.number)
+        .replace(/{MONTANT}/g, formatCurrency(remaining || invoice.totalTTC, false))
+        .replace(/{ECHEANCE}/g, formatDate(invoice.dueDate))
+        .replace(/{ENTREPRISE}/g, (company && company.name) || 'Mon entreprise');
+}
+
+// Lien WhatsApp (pure : testable). Numéro marocain local (06…/07…) converti au format international ; sans numéro, WhatsApp demande le contact.
+function reminderWhatsAppUrl(phone, text) {
+    let d = String(phone || '').replace(/\D/g, '');
+    if (/^0[5-7]\d{8}$/.test(d)) d = '212' + d.slice(1);
+    return d ? `https://wa.me/${d}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+function sendReminderWhatsApp(invoiceId, level) {
+    const invoice = (Storage.get('invoices', []) || []).find(i => i.id === invoiceId);
+    if (!invoice) return;
+    const client = (Storage.get('clients', []) || []).find(c => c.id === invoice.clientId);
+    const company = Storage.get('company', {});
+    const lvl = level || reminderLevelForDays(getOverdueDays(invoice));
+    let msg = buildReminderMessage(invoice, lvl, client, company, Storage.get('reminderTemplates', DEFAULT_REMINDER_TEMPLATES), Storage.get('payments', []) || []);
+    if (lvl < 3 && company.rib) msg += `\n\nRIB : ${company.rib}`;
+    window.open(reminderWhatsAppUrl(client && client.phone, msg), '_blank');
+}
+
 function renderReminders() {
     const invoices = (Storage.get('invoices', []) || []).map(getInvoiceWithStatus);
     const overdue = invoices.filter(i => i.status === 'overdue');
@@ -13183,6 +13196,7 @@ function renderReminders() {
                             <td><span style="color: ${levelColor}; font-weight: 600; font-size: 12px;">${levelLabel}</span></td>
                             <td><strong>${formatCurrency(invoiceRemaining(inv, payList))}</strong></td>
                             <td>
+                                <button class="btn btn-sm" onclick="sendReminderWhatsApp(${jsArg(inv.id)}, ${level})" style="color:#25D366;" title="Relancer par WhatsApp">💬 WhatsApp</button>
                                 <button class="btn btn-primary btn-sm" onclick="generateReminderEmail(${jsArg(inv.id)}, ${level})">📧 Générer email</button>
                             </td>
                         </tr>
@@ -13213,14 +13227,7 @@ function generateReminderEmail(invoiceId, level) {
     const company = Storage.get('company', {});
     const templates = Storage.get('reminderTemplates', DEFAULT_REMINDER_TEMPLATES);
     
-    const template = templates[`level${level}`] || DEFAULT_REMINDER_TEMPLATES[`level${level}`];
-    
-    const message = template
-        .replace(/{CLIENT}/g, client?.name || invoice.clientName || 'Cher client')
-        .replace(/{NUMERO}/g, invoice.number)
-        .replace(/{MONTANT}/g, formatCurrency(invoiceRemaining(invoice, Storage.get('payments', []) || []) || invoice.totalTTC, false))
-        .replace(/{ECHEANCE}/g, formatDate(invoice.dueDate))
-        .replace(/{ENTREPRISE}/g, company.name || 'Mon entreprise');
+    const message = buildReminderMessage(invoice, level, client, company, templates, Storage.get('payments', []) || []);
     
     const subject = `Relance facture ${invoice.number}`;
     const email = client?.email || '';
@@ -13232,7 +13239,7 @@ function generateReminderEmail(invoiceId, level) {
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 640px;" onclick="event.stopPropagation()">
             <h2>📧 Email de relance</h2>
-            <p>Niveau ${level} — ${invoice.overdueDays || 0} jours de retard</p>
+            <p>Niveau ${level} — ${getOverdueDays(invoice)} jours de retard</p>
             
             <div class="form-group">
                 <label>Destinataire</label>
