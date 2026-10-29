@@ -2,7 +2,9 @@ name: Supabase keepalive
 
 # Évite la mise en pause du projet Supabase gratuit (inactivité d'1 semaine).
 # La clé "anon" est la clé publique déjà présente dans app.html ; la sécurité
-# repose sur le RLS. La requête ne renvoie aucune donnée (0 ligne sans connexion).
+# repose sur le RLS. Le ping appelle la fonction publique get_shared_invoice avec un
+# jeton invalide : elle répond 200 (null) sans lire ni modifier de donnée. (L'ancien
+# ping lisait user_data, devenue inaccessible au rôle anonyme : HTTP 401 depuis le 24/10.)
 on:
   schedule:
     - cron: '17 6 * * *'   # tous les jours à 06:17 UTC
@@ -19,7 +21,8 @@ jobs:
       - name: Ping Supabase
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-            "https://mdozjptoecygmpkjlohr.supabase.co/rest/v1/user_data?select=id&limit=1" \
+            -X POST -H "Content-Type: application/json" -d '{"p_token":"0"}' \
+            "https://mdozjptoecygmpkjlohr.supabase.co/rest/v1/rpc/get_shared_invoice" \
             -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q")
           echo "HTTP $code"
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then exit 1; fi
