@@ -1,5 +1,7 @@
 # 🚀 Guide de Déploiement
 
+> **FacturaPro 2.0 (achats, livraisons, stock valorisé, trésorerie, clôture, pilotage)** : scripts SQL `sql/36` à `sql/41`, ordre de déploiement, contrôles et retour arrière dans [`docs/FACTURAPRO-2.0.md`](FACTURAPRO-2.0.md).
+
 ## Pré-requis
 
 - Compte [Supabase](https://supabase.com) (gratuit)

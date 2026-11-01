@@ -24,7 +24,8 @@
 --   DROP TRIGGER IF EXISTS trg_fin_closure_delivery ON public.deliveries;    DROP TRIGGER IF EXISTS trg_fin_closure_cash ON public.cash_movements;
 --   DROP TRIGGER IF EXISTS trg_fin_closure_account ON public.cash_accounts;
 --   DROP FUNCTION IF EXISTS public.period_close(TEXT, TEXT), public.period_reopen(TEXT, TEXT), public.period_status(), public.period_check(TEXT),
---     public.fin_lock_date(UUID), public.fin_closure_row_guard(), public.fin_closure_userdata_guard();
+--     public.fin_lock_date(UUID), public.fin_closure_row_guard(), public.fin_closure_userdata_guard(), public.fin_month_end(TEXT);
+--   DROP TRIGGER IF EXISTS trg_closure_guard ON public.period_closures;  DROP FUNCTION IF EXISTS public.fin_closure_guard();
 --   recoller la version « vide » de fin_assert_open de sql/37 ;  DROP TABLE IF EXISTS public.period_closures;
 -- ============================================================================================================
 
@@ -58,8 +59,8 @@ BEGIN
     END IF;
     RETURN NEW;
 END; $$;
-DROP TRIGGER IF EXISTS trg_closure_guard ON public.period_closures;
-CREATE TRIGGER trg_closure_guard BEFORE UPDATE ON public.period_closures FOR EACH ROW EXECUTE FUNCTION public.fin_closure_guard();
+REVOKE ALL ON FUNCTION public.fin_closure_guard() FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE TRIGGER trg_closure_guard BEFORE UPDATE ON public.period_closures FOR EACH ROW EXECUTE FUNCTION public.fin_closure_guard();
 
 -- ---------- date de verrouillage et vérification ----------
 CREATE OR REPLACE FUNCTION public.fin_lock_date(p_uid UUID) RETURNS DATE
@@ -97,16 +98,11 @@ BEGIN
 END; $$;
 REVOKE ALL ON FUNCTION public.fin_closure_row_guard() FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS trg_fin_closure_stock ON public.stock_movements;
-CREATE TRIGGER trg_fin_closure_stock BEFORE INSERT ON public.stock_movements FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
-DROP TRIGGER IF EXISTS trg_fin_closure_purchase ON public.purchases;
-CREATE TRIGGER trg_fin_closure_purchase BEFORE INSERT ON public.purchases FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
-DROP TRIGGER IF EXISTS trg_fin_closure_delivery ON public.deliveries;
-CREATE TRIGGER trg_fin_closure_delivery BEFORE INSERT ON public.deliveries FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
-DROP TRIGGER IF EXISTS trg_fin_closure_cash ON public.cash_movements;
-CREATE TRIGGER trg_fin_closure_cash BEFORE INSERT ON public.cash_movements FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
-DROP TRIGGER IF EXISTS trg_fin_closure_account ON public.cash_accounts;
-CREATE TRIGGER trg_fin_closure_account BEFORE INSERT ON public.cash_accounts FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
+CREATE OR REPLACE TRIGGER trg_fin_closure_stock BEFORE INSERT ON public.stock_movements FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
+CREATE OR REPLACE TRIGGER trg_fin_closure_purchase BEFORE INSERT ON public.purchases FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
+CREATE OR REPLACE TRIGGER trg_fin_closure_delivery BEFORE INSERT ON public.deliveries FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
+CREATE OR REPLACE TRIGGER trg_fin_closure_cash BEFORE INSERT ON public.cash_movements FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
+CREATE OR REPLACE TRIGGER trg_fin_closure_account BEFORE INSERT ON public.cash_accounts FOR EACH ROW EXECUTE FUNCTION public.fin_closure_row_guard();
 
 -- ---------- user_data : factures nouvellement émises et paiements nouveaux ----------
 -- Factures : refusé = une facture/avoir NON brouillon, datée dans la période clôturée, qui n'était pas déjà émise côté serveur.
@@ -143,8 +139,7 @@ BEGIN
     RETURN NEW;
 END; $$;
 REVOKE ALL ON FUNCTION public.fin_closure_userdata_guard() FROM PUBLIC, anon, authenticated;
-DROP TRIGGER IF EXISTS trg_20_fin_closure ON public.user_data;
-CREATE TRIGGER trg_20_fin_closure BEFORE INSERT OR UPDATE ON public.user_data
+CREATE OR REPLACE TRIGGER trg_20_fin_closure BEFORE INSERT OR UPDATE ON public.user_data
     FOR EACH ROW WHEN (NEW.key IN ('invoices', 'payments')) EXECUTE FUNCTION public.fin_closure_userdata_guard();
 
 -- ---------- API ----------

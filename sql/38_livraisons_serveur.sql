@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS public.delivery_lines (
     PRIMARY KEY (delivery_id, line_no),
     CHECK (track_stock = false OR product_id IS NOT NULL)
 );
+CREATE INDEX IF NOT EXISTS delivery_lines_user_idx ON public.delivery_lines (user_id);   -- clé étrangère vers auth.users (suppression de compte)
 ALTER TABLE public.delivery_lines ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.delivery_lines FROM PUBLIC, anon, authenticated;
 
@@ -96,10 +97,8 @@ BEGIN
     RETURN NEW;
 END; $$;
 REVOKE ALL ON FUNCTION public.fin_delivery_guard() FROM PUBLIC, anon, authenticated;
-DROP TRIGGER IF EXISTS trg_delivery_guard ON public.deliveries;
-CREATE TRIGGER trg_delivery_guard BEFORE UPDATE ON public.deliveries FOR EACH ROW EXECUTE FUNCTION public.fin_delivery_guard();
-DROP TRIGGER IF EXISTS trg_delivery_lines_guard ON public.delivery_lines;
-CREATE TRIGGER trg_delivery_lines_guard BEFORE UPDATE ON public.delivery_lines FOR EACH ROW EXECUTE FUNCTION public.fin_lines_guard();
+CREATE OR REPLACE TRIGGER trg_delivery_guard BEFORE UPDATE ON public.deliveries FOR EACH ROW EXECUTE FUNCTION public.fin_delivery_guard();
+CREATE OR REPLACE TRIGGER trg_delivery_lines_guard BEFORE UPDATE ON public.delivery_lines FOR EACH ROW EXECUTE FUNCTION public.fin_lines_guard();
 
 -- Statut d'une facture du compte, LU dans user_data (clé 'invoices') : 'draft', 'issued' ou NULL si absente. Aucune écriture.
 CREATE OR REPLACE FUNCTION public.fin_invoice_status(p_uid UUID, p_invoice_id TEXT) RETURNS TEXT

@@ -155,14 +155,12 @@ BEGIN
     RAISE EXCEPTION 'achat non modifiable (annulation uniquement)' USING ERRCODE = '42501';
 END; $$;
 REVOKE ALL ON FUNCTION public.fin_purchase_guard() FROM PUBLIC, anon, authenticated;
-DROP TRIGGER IF EXISTS trg_purchase_guard ON public.purchases;
-CREATE TRIGGER trg_purchase_guard BEFORE UPDATE ON public.purchases FOR EACH ROW EXECUTE FUNCTION public.fin_purchase_guard();
+CREATE OR REPLACE TRIGGER trg_purchase_guard BEFORE UPDATE ON public.purchases FOR EACH ROW EXECUTE FUNCTION public.fin_purchase_guard();
 
 CREATE OR REPLACE FUNCTION public.fin_lines_guard() RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN RAISE EXCEPTION 'ligne non modifiable' USING ERRCODE = '42501'; END; $$;
 REVOKE ALL ON FUNCTION public.fin_lines_guard() FROM PUBLIC, anon, authenticated;
-DROP TRIGGER IF EXISTS trg_purchase_lines_guard ON public.purchase_lines;
-CREATE TRIGGER trg_purchase_lines_guard BEFORE UPDATE ON public.purchase_lines FOR EACH ROW EXECUTE FUNCTION public.fin_lines_guard();
+CREATE OR REPLACE TRIGGER trg_purchase_lines_guard BEFORE UPDATE ON public.purchase_lines FOR EACH ROW EXECUTE FUNCTION public.fin_lines_guard();
 
 -- ---------- enregistrement ----------
 -- p = { key, supplier_id, supplier_name, supplier_ice, supplier_ref, date, due_date, vat_deductible, note,

@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.cash_movements (
     CHECK (kind NOT IN ('transfer_in', 'transfer_out') OR transfer_id IS NOT NULL)
 );
 CREATE INDEX IF NOT EXISTS cash_movements_account_idx ON public.cash_movements (user_id, account_id, move_date);
+CREATE INDEX IF NOT EXISTS cash_movements_account_fk_idx ON public.cash_movements (account_id);   -- clé étrangère vers cash_accounts
 CREATE INDEX IF NOT EXISTS cash_movements_purchase_idx ON public.cash_movements (purchase_id) WHERE purchase_id IS NOT NULL;
 ALTER TABLE public.cash_movements ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.cash_movements FROM PUBLIC, anon, authenticated;
@@ -72,8 +73,7 @@ REVOKE ALL ON public.cash_movements FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION public.fin_cash_guard() RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN RAISE EXCEPTION 'mouvement de trésorerie non modifiable' USING ERRCODE = '42501'; END; $$;
 REVOKE ALL ON FUNCTION public.fin_cash_guard() FROM PUBLIC, anon, authenticated;
-DROP TRIGGER IF EXISTS trg_cash_guard ON public.cash_movements;
-CREATE TRIGGER trg_cash_guard BEFORE UPDATE ON public.cash_movements FOR EACH ROW EXECUTE FUNCTION public.fin_cash_guard();
+CREATE OR REPLACE TRIGGER trg_cash_guard BEFORE UPDATE ON public.cash_movements FOR EACH ROW EXECUTE FUNCTION public.fin_cash_guard();
 
 CREATE OR REPLACE FUNCTION public.fin_account_guard() RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
@@ -81,8 +81,7 @@ BEGIN
     RETURN NEW;
 END; $$;
 REVOKE ALL ON FUNCTION public.fin_account_guard() FROM PUBLIC, anon, authenticated;
-DROP TRIGGER IF EXISTS trg_account_guard ON public.cash_accounts;
-CREATE TRIGGER trg_account_guard BEFORE UPDATE ON public.cash_accounts FOR EACH ROW EXECUTE FUNCTION public.fin_account_guard();
+CREATE OR REPLACE TRIGGER trg_account_guard BEFORE UPDATE ON public.cash_accounts FOR EACH ROW EXECUTE FUNCTION public.fin_account_guard();
 
 -- Montant réglé d'un achat = règlements non annulés (remplace la version « 0 » de sql/37)
 CREATE OR REPLACE FUNCTION public.fin_purchase_paid(p_uid UUID, p_purchase UUID) RETURNS NUMERIC

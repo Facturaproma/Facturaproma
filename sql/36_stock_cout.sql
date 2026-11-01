@@ -26,7 +26,8 @@
 -- Réexécutable.
 --
 -- RETOUR ARRIÈRE (l'application de la PR 3 doit d'abord être retirée) :
---   1) recoller la fonction stock_record de sql/35 et la fonction stock_list de sql/34 (+ GRANT EXECUTE ... TO authenticated) ;
+--   1) recoller la fonction stock_record de sql/35 ; pour stock_list : supprimer la nouvelle version puis renommer stock_list_pre36 en stock_list
+--      (+ GRANT EXECUTE ... TO authenticated) ;
 --   2) DROP FUNCTION IF EXISTS public.stock_valuation(DATE);
 --   3) DROP TABLE IF EXISTS public.stock_cost_state;
 --   4) (facultatif, perd les coûts enregistrés) ALTER TABLE public.stock_movements DROP COLUMN IF EXISTS unit_cost,
@@ -195,9 +196,22 @@ END; $$;
 REVOKE ALL ON FUNCTION public.stock_valuation(DATE) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.stock_valuation(DATE) TO authenticated;
 
--- 5) stock_list : mêmes colonnes que sql/34 + coût unitaire, CMUP après, coût connu, clé, sortie d'origine d'un retour (le type de retour change : DROP puis CREATE)
-DROP FUNCTION IF EXISTS public.stock_list(DATE, DATE, INT, INT);
-CREATE FUNCTION public.stock_list(p_from DATE, p_to DATE, p_limit INT DEFAULT 200, p_offset INT DEFAULT 0)
+-- 5) stock_list : mêmes colonnes que sql/34 + coût unitaire, CMUP après, coût connu, clé, sortie d'origine d'un retour.
+--    Le type de retour change : l'ancienne version (sql/34) est RENOMMÉE stock_list_pre36 (aucune suppression, droits retirés), puis recréée.
+DO $$ BEGIN
+    IF to_regprocedure('public.stock_list(date,date,integer,integer)') IS NOT NULL
+       AND position('return_of' in pg_get_function_result('public.stock_list(date,date,integer,integer)'::regprocedure)) = 0 THEN
+        IF to_regprocedure('public.stock_list_pre36(date,date,integer,integer)') IS NULL THEN
+            ALTER FUNCTION public.stock_list(DATE, DATE, INT, INT) RENAME TO stock_list_pre36;
+        ELSE
+            ALTER FUNCTION public.stock_list(DATE, DATE, INT, INT) RENAME TO stock_list_pre36b;
+        END IF;
+    END IF;
+    IF to_regprocedure('public.stock_list_pre36(date,date,integer,integer)') IS NOT NULL THEN
+        EXECUTE 'REVOKE ALL ON FUNCTION public.stock_list_pre36(DATE, DATE, INT, INT) FROM PUBLIC, anon, authenticated';
+    END IF;
+END $$;
+CREATE OR REPLACE FUNCTION public.stock_list(p_from DATE, p_to DATE, p_limit INT DEFAULT 200, p_offset INT DEFAULT 0)
 RETURNS TABLE (id UUID, product_id TEXT, product_name TEXT, unit TEXT, move_type TEXT, qty NUMERIC, move_date DATE, source TEXT, ref TEXT, note TEXT,
                created_at TIMESTAMPTZ, unit_cost NUMERIC, cmup_after NUMERIC, cost_known BOOLEAN, idem_key TEXT, return_of TEXT)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, auth AS $$
