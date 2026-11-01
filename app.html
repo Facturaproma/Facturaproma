@@ -6721,7 +6721,7 @@ const Auth = {
                 throw new Error('Cet email est déjà utilisé');
             }
             const passwordHash = await this._hashPassword(password);
-            const userId = 'user_' + ((window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '').slice(0, 16) : Date.now().toString(36) + Math.random().toString(36).substr(2, 6));
+            const userId = 'user_' + Date.now().toString(36) + Array.from(crypto.getRandomValues(new Uint8Array(6)), (x) => x.toString(16).padStart(2, '0')).join('');
             users.push({ id: userId, email, passwordHash, createdAt: new Date().toISOString() });
             this._saveLocalUsers(users);
             this._createLocalSession(userId, email);
@@ -7301,8 +7301,8 @@ let clientFromInvoice = false;
 // HELPERS
 // ============================================
 function uuid() {
-    if (window.crypto && crypto.getRandomValues) { const r = new Uint32Array(2); crypto.getRandomValues(r); return Date.now().toString(36) + r[0].toString(36) + r[1].toString(36).slice(0, 3); }
-    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+    const r = new Uint32Array(2); crypto.getRandomValues(r);   // disponible dans tous les navigateurs pris en charge
+    return Date.now().toString(36) + r[0].toString(36) + r[1].toString(36).slice(0, 3);
 }
 
 function formatCurrency(amount, withSymbol = true) {
