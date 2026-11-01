@@ -84,6 +84,9 @@ SELECT pg_temp.ok('reprise : 2 achats repris, le 2e appel ne reprend rien', (pub
 SELECT pg_temp.ok('reprise : numéro d''origine conservé (ACH-2026-010) ; numéro déjà pris remplacé', EXISTS (SELECT 1 FROM public.purchase_list(NULL, NULL, NULL, 50, 0) WHERE number = 'ACH-2026-010')
   AND (SELECT count(*) FROM public.purchase_list(NULL, NULL, NULL, 50, 0) WHERE supplier_name = 'Ancien' AND number <> 'ACH-2026-010' AND number <> 'ACH-2026-001') = 1);
 SELECT pg_temp.ok('reprise : aucun mouvement de stock recréé (A toujours 10)', (SELECT qty FROM public.stock_valuation() WHERE product_id = 'A') = 10);
+SELECT public.stock_record('[{"product_id":"A","product_name":"Farine","type":"in","qty":2,"unit_cost":40,"date":"2026-09-01","source":"purchase","key":"pur:old1:0"}]'::jsonb);
+SELECT pg_temp.ok('achat repris annulé : son entrée de stock d''origine (clé de l''ancienne version) est bien sortie', (public.purchase_cancel((SELECT id FROM public.purchase_list(NULL, NULL, NULL, 50, 0) WHERE number = 'ACH-2026-010'), 'test')->>'stock_lines')::int = 1);
+SELECT pg_temp.ok('achat repris annulé : stock de A revenu à 10', (SELECT qty FROM public.stock_valuation() WHERE product_id = 'A') = 10);
 SELECT pg_temp.ok('reprise : ligne sans produit → charge « Autre »', (SELECT lines->0->>'nature' = 'expense' AND lines->0->>'category' = 'Autre' FROM public.purchase_list(NULL, NULL, NULL, 50, 0) WHERE supplier_name = 'Ancien' AND total_ht = 2000));
 SELECT pg_temp.ok('reprise : le compteur ne redonnera jamais 010 (prochain = 011 ou plus)', (public.purchase_record('{"key":"k-after","supplier_name":"X","date":"2026-11-21","lines":[{"nature":"expense","category":"Autre","description":"x","qty":1,"unit_price":1,"tva_rate":0}]}'::jsonb)->>'number') >= 'ACH-2026-011');
 -- Isolation

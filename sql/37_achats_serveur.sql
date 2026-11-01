@@ -256,10 +256,11 @@ BEGIN
     IF public.fin_purchase_paid(v, r.id) > 0 THEN RAISE EXCEPTION 'ACHAT_REGLE: annulez d''abord ses règlements'; END IF;
     -- sorties inverses des entrées réellement enregistrées, au coût de l'achat
     FOR m IN SELECT s.product_id, s.product_name, s.unit, s.qty, s.unit_cost, s.idem_key FROM public.stock_movements s
-              WHERE s.user_id = v AND s.idem_key LIKE 'pur:' || r.id || ':%' AND s.move_type = 'in' LOOP
+              WHERE s.user_id = v AND s.move_type = 'in'
+                AND (s.idem_key LIKE 'pur:' || r.id || ':%' OR (r.legacy_id IS NOT NULL AND s.idem_key LIKE 'pur:' || r.legacy_id || ':%')) LOOP   -- achat repris : clés de l'ancienne version
         moves := moves || jsonb_build_array(jsonb_build_object('product_id', m.product_id, 'product_name', m.product_name, 'unit', m.unit, 'type', 'out', 'qty', m.qty,
             'date', current_date, 'source', 'purchase', 'unit_cost', m.unit_cost, 'ref', r.number, 'ref_id', r.id::text,
-            'note', 'Annulation ' || r.number, 'key', 'pur-cancel:' || substr(m.idem_key, 5)));
+            'note', 'Annulation ' || r.number, 'key', 'pur-cancel:' || r.id || ':' || substr(m.idem_key, length(split_part(m.idem_key, ':', 1) || ':' || split_part(m.idem_key, ':', 2)) + 2)));
     END LOOP;
     IF jsonb_array_length(moves) > 0 THEN PERFORM public.stock_record(moves); END IF;
     UPDATE public.purchases SET status = 'cancelled', cancelled_at = now(), cancel_reason = left(NULLIF(btrim(p_reason), ''), 200) WHERE id = r.id;
