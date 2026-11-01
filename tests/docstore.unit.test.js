@@ -32,11 +32,11 @@ const mk = (over = {}) => {
 (async () => {
   // ---------- verrous de build / compte / serveur ----------
   ck('build : URL de préproduction acceptée', DS.buildAllowsDocuments(PRE));
-  ck('build : URL de PRODUCTION refusée', !DS.buildAllowsDocuments(PROD));
+  ck('build : URL de PRODUCTION acceptée (le serveur décide compte par compte)', DS.buildAllowsDocuments(PROD));
   ck('build : URL inconnue, vide ou factice refusée', !DS.buildAllowsDocuments('https://fake.supabase.test') && !DS.buildAllowsDocuments('') && !DS.buildAllowsDocuments(PRE + '.evil.com'));
   ck('compte : seuls les e-mails @facturapro-test.invalid sont admis', DS.isTestEmail('x@facturapro-test.invalid') && !DS.isTestEmail('x@gmail.com') && !DS.isTestEmail('x@facturapro-test.invalid.com') && !DS.isTestEmail('x@facturapro-ordinary.invalid'));
-  { const t = mk({ url: PROD }); const m = await t.st.detect(); ck('build de production : mode legacy, get_doc_mode JAMAIS appelé', m === 'legacy' && t.client.calls.length === 0); }
-  { const t = mk({ email: 'x@gmail.com' }); const m = await t.st.detect(); ck('compte ordinaire : mode legacy, get_doc_mode JAMAIS appelé', m === 'legacy' && t.client.calls.length === 0); }
+  { const t = mk({ url: 'https://aaaaaaaaaaaaaaaaaaaa.supabase.co' }); const m = await t.st.detect(); ck('projet Supabase inconnu : mode legacy, get_doc_mode JAMAIS appelé', m === 'legacy' && t.client.calls.length === 0); }
+  { const t = mk({ url: PROD, email: 'x@gmail.com' }); const m = await t.st.detect(); ck('build de production, compte ordinaire : le serveur décide (get_doc_mode appelé)', t.client.calls.length === 1); }
   { const t = mk({ client: fakeClient({ get_doc_mode: { data: 'legacy', error: null } }) }); t.storage.setItem('fpd_hint_u1', 'documents');
     const m = await t.st.detect(); ck('indicateur local « documents » + serveur « legacy » → legacy (le local ne peut pas autoriser)', m === 'legacy' && t.storage.getItem('fpd_hint_u1') === null); }
   { const t = mk({ client: fakeClient({ get_doc_mode: { data: null, error: { message: 'TypeError: Failed to fetch' } } }) });

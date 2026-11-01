@@ -25,7 +25,7 @@ INSERT INTO auth.users(id, email) VALUES
  ('c8000000-0000-0000-0000-000000000008', 't8@facturapro-test.invalid'),
  ('c9000000-0000-0000-0000-000000000009', 't9@facturapro-test.invalid'),
  ('ca000000-0000-0000-0000-00000000000a', 't10@facturapro-test.invalid');
-INSERT INTO public.doc_store_testers(user_id) SELECT id FROM auth.users WHERE id::text <> 'c6000000-0000-0000-0000-000000000006' AND (email LIKE '%@facturapro-test.invalid' OR email = 'ordinaire@example.com');   -- y compris le compte ordinaire (l'e-mail est refusé quand même)
+INSERT INTO public.doc_store_testers(user_id) SELECT id FROM auth.users WHERE id::text <> 'c6000000-0000-0000-0000-000000000006' AND email LIKE '%@facturapro-test.invalid';   -- le compte ordinaire n'est PAS autorisé (la liste est le seul verrou depuis le 01/11/2026)   -- y compris le compte ordinaire (l'e-mail est refusé quand même)
 INSERT INTO public.licenses(user_id, type, status, expires_at) SELECT id, 'annual', 'active', now() + interval '200 days' FROM auth.users WHERE (email LIKE '%@facturapro-test.invalid' OR email = 'ordinaire@example.com');
 INSERT INTO public.doc_counters(user_id, doc_type, last_value) SELECT id, 'invoice', 1 FROM auth.users WHERE (email LIKE '%@facturapro-test.invalid' OR email = 'ordinaire@example.com');
 INSERT INTO public.user_data(user_id, key, value)
@@ -71,8 +71,8 @@ SET ROLE anon; SELECT pg_temp.ok('anon : get_doc_mode / append_history / fp_doc_
   AND pg_temp.refuse($$SELECT public.append_history('[]'::jsonb)$$, 'permission denied') AND pg_temp.refuse($$SELECT public.fp_doc_mode_set('c1000000-0000-0000-0000-000000000001','documents')$$, 'permission denied')); RESET ROLE;
 
 -- ====== 3. contrôle d'accès SERVEUR : l'e-mail seul ne suffit pas, la liste seule non plus ======
-SELECT pg_temp.ok('compte ordinaire (même autorisé dans la liste) : COMPTE_NON_TEST, mode inchangé',
-  pg_temp.refuse($$SELECT public.fp_doc_mode_set('c4000000-0000-0000-0000-000000000004','documents', NULL, 0)$$, 'COMPTE_NON_TEST') AND public.fp_doc_mode('c4000000-0000-0000-0000-000000000004') = 'legacy');
+SELECT pg_temp.ok('compte ordinaire absent de la liste : COMPTE_NON_AUTORISE, mode inchangé',
+  pg_temp.refuse($$SELECT public.fp_doc_mode_set('c4000000-0000-0000-0000-000000000004','documents', NULL, 0)$$, 'COMPTE_NON_AUTORISE') AND public.fp_doc_mode('c4000000-0000-0000-0000-000000000004') = 'legacy');
 SELECT pg_temp.ok('e-mail de test MAIS absent de la liste : COMPTE_NON_AUTORISE, mode inchangé',
   pg_temp.refuse($$SELECT public.fp_doc_mode_set('c6000000-0000-0000-0000-000000000006','documents', NULL, 0)$$, 'COMPTE_NON_AUTORISE') AND public.fp_doc_mode('c6000000-0000-0000-0000-000000000006') = 'legacy');
 SELECT pg_temp.ok('même par écriture SQL directe dans doc_store_mode : refus (déclencheur de la table) pour le compte non autorisé et le compte ordinaire',

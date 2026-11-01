@@ -21,8 +21,9 @@ const serve = (port, url) => http.createServer((q, r) => {
     r.end(body);
   });
 }).listen(port);
-const PRE = serve(8161, PRE_URL), PROD = serve(8162, PROD_URL);
-const BASE_PRE = 'http://localhost:8161', BASE_PROD = 'http://localhost:8162';
+const OLD_URL = 'https://aaaaaaaaaaaaaaaaaaaa.supabase.co';   // projet inconnu : simule une ancienne version / un build non reconnu (mode legacy forcé côté client)
+const PRE = serve(8161, PRE_URL), PROD = serve(8162, PROD_URL), OLD = serve(8163, OLD_URL);
+const BASE_PRE = 'http://localhost:8161', BASE_PROD = 'http://localhost:8162', BASE_OLD = 'http://localhost:8163';
 
 const results = [];
 const check = (name, cond, extra = '') => results.push([!!cond, name, extra]);
@@ -265,14 +266,19 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
 
     // ================= S7. Garde-fous : build de production, compte ordinaire, indicateur local =================
     await flipTo(T, 'documents');
-    const P = await newDevice('P', { base: BASE_PROD });
+    const PP = await newDevice('PP', { base: BASE_PROD });
+    await login(PP, T); await PP.p.waitForTimeout(800);
+    const pp7 = await PP.E(() => ({ m: DocStoreGlue.mode, st: DocStoreGlue.store && DocStoreGlue.store.status() }));
+    check('S7 build de PRODUCTION, serveur en « documents » : le serveur décide, mode documents (généralisation 01/11/2026)', pp7.m === 'documents' && (await rpcCount(PP, 'get_doc_mode')) >= 1, JSON.stringify(pp7));
+    await PP.ctx.close();
+    const P = await newDevice('P', { base: BASE_OLD });
     await login(P, T); await P.p.waitForTimeout(800);
     const p7 = await P.E(() => ({ m: DocStoreGlue.mode, st: DocStoreGlue.store && DocStoreGlue.store.status() }));
-    check('S7 build de PRODUCTION, serveur en « documents » : get_doc_mode jamais appelé, mode legacy côté client', p7.m === 'legacy' && p7.st.reason === 'build_non_preprod' && (await rpcCount(P, 'get_doc_mode')) === 0, JSON.stringify(p7));
+    check('S7 build non reconnu (ancienne version), serveur en « documents » : get_doc_mode jamais appelé, mode legacy côté client', p7.m === 'legacy' && p7.st.reason === 'projet_inconnu' && (await rpcCount(P, 'get_doc_mode')) === 0, JSON.stringify(p7));
     const fp7 = await legacyFp(T);
     await P.E(async () => { newInvoice(); document.getElementById('editorClient').value = 'c1'; const r = document.querySelector('#itemsBody tr'); r.querySelector('.item-desc').value = 'Prod refusé'; r.querySelector('.item-qty').value = '1'; r.querySelector('.item-price').value = '5'; updateTotals(); await saveInvoice('draft'); });
     await P.p.waitForTimeout(1500);
-    check('S7 build de production : l\'écriture ancien format est refusée par le serveur (MODE_NOUVEAU_STOCKAGE), l\'ancien stockage reste intact', (await legacyFp(T)) === fp7);
+    check('S7 ancienne version : l\'écriture ancien format est refusée par le serveur (MODE_NOUVEAU_STOCKAGE), l\'ancien stockage reste intact', (await legacyFp(T)) === fp7);
     check('S7 refus explicite : bandeau MODE_NOUVEAU_STOCKAGE, pas une « licence expirée »', (await P.E(() => DocStoreGlue.refused)) === 'nouveau' && (await P.E(() => (document.getElementById('docstoreBanner') || {}).textContent || '')).includes('MODE_NOUVEAU_STOCKAGE'));
     const n7 = await P.E(() => window.__rpcLog.length);
     await P.E(() => { Storage.set('invoices', Storage.get('invoices', [])); Storage.set('quotes', []); window.dispatchEvent(new Event('online')); }); await P.p.waitForTimeout(1500);
@@ -283,7 +289,7 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
     // compte ordinaire sur build de préproduction
     const O = await newDevice('O'); await signup(O, ORD); await seedClient(O);
     await draft(O, 'Ordinaire', 7); await O.p.waitForTimeout(1000);
-    check('S7 compte ORDINAIRE (build de préproduction) : legacy, get_doc_mode jamais appelé', (await O.E(() => DocStoreGlue.mode)) === 'legacy' && (await rpcCount(O, 'get_doc_mode')) === 0 && (await legacyVal(ORD, 'invoices')).value.length === 1);
+    check('S7 compte ORDINAIRE non autorisé : le serveur répond legacy, écriture dans l\'ancien stockage', (await O.E(() => DocStoreGlue.mode)) === 'legacy' && (await legacyVal(ORD, 'invoices')).value.length === 1);
     // ----- REVUE DE CODE : file d'attente ANCIEN format (SyncManager.syncPending) sur un compte legacy -----
     const sentUp = () => be.log.filter(l => l.op === 'table' && l.table === 'user_data' && l.tableOp === 'upsert').length;
     const pend = () => O.E(() => SyncManager.pendingChanges.map(c => c.key));
@@ -354,6 +360,6 @@ const T = 'dsa@facturapro-test.invalid', T2 = 'dsb@facturapro-test.invalid', ORD
   let fail = 0;
   for (const [ok, name, extra] of results) { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || !extra ? '' : '  -> ' + extra)); }
   console.log(`\n${results.length - fail}/${results.length} tests navigateur du nouveau stockage réussis (SIMULATION locale : faux client + PostgreSQL local, PAS Supabase)`);
-  await browser.close(); PRE.close(); PROD.close(); await be.close(); dropDb(db);
+  await browser.close(); PRE.close(); PROD.close(); OLD.close(); await be.close(); dropDb(db);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('ERREUR HARNAIS', e); process.exit(2); });

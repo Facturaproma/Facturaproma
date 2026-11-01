@@ -1,9 +1,9 @@
 /* docstore.js — couche « nouveau stockage » (une ligne par document) de FacturaPro.
  *
- * STATUT : PRÉPARATION, PRÉPRODUCTION UNIQUEMENT. Ce module n'active rien tout seul : le mode « documents » n'est utilisé que si
- *   (1) l'URL Supabase du build est celle de la PRÉPRODUCTION (jamais la production),
- *   (2) l'e-mail du compte est *@facturapro-test.invalid,
- *   (3) le SERVEUR répond « documents » à get_doc_mode() (mode décidé par le serveur, autorisé par la liste doc_store_testers).
+ * STATUT : généralisable (01/11/2026). Ce module n'active rien tout seul : le mode « documents » n'est utilisé que si
+ *   (1) l'URL Supabase du build est celle d'un projet connu (préproduction ou production ; une URL inconnue ou factice est refusée),
+ *   (2) le SERVEUR répond « documents » à get_doc_mode() (mode décidé par le serveur, compte par compte, liste doc_store_testers posée
+ *       par l'opérateur après copie et vérification : fp_doc_mode_set, sql/17). Jusqu'au 01/11/2026 : comptes de test en préproduction seulement.
  * Un indicateur local (localStorage) ne peut JAMAIS activer le mode documents : il ne sert qu'à restreindre (lecture seule) hors ligne.
  *
  * Une seule source de vérité par compte :
@@ -27,7 +27,7 @@
 
   // ---------- fonctions pures (testables sans navigateur) ----------
   const projectRef = (url) => { const m = /^https:\/\/([a-z0-9]{20})\.supabase\.co\/?$/i.exec(String(url || '')); return m ? m[1].toLowerCase() : null; };
-  const buildAllowsDocuments = (url) => { const r = projectRef(url); return r === PREPROD_REF && r !== PROD_REF; };
+  const buildAllowsDocuments = (url) => { const r = projectRef(url); return r === PREPROD_REF || r === PROD_REF; };
   const isTestEmail = (email) => TEST_EMAIL_RE.test(String(email || ''));
   const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)) ? Object.keys(x).sort().reduce((o, kk) => (o[kk] = x[kk], o), {}) : x);
   const tms = (x) => { const t = x ? new Date(x).getTime() : 0; return Number.isFinite(t) ? t : 0; };   // ISO, Date ou absent
@@ -132,8 +132,7 @@
       // ----- détection : le serveur décide -----
       async detect() {
         S.halted = null;
-        if (!buildAllowsDocuments(url)) { S.mode = 'legacy'; S.reason = 'build_non_preprod'; return S.mode; }
-        if (!isTestEmail(email)) { S.mode = 'legacy'; S.reason = 'compte_non_test'; return S.mode; }
+        if (!buildAllowsDocuments(url)) { S.mode = 'legacy'; S.reason = 'projet_inconnu'; return S.mode; }
         let r;
         try { r = await client.rpc('get_doc_mode'); } catch (e) { r = { data: null, error: { message: String(e && e.message || e) } }; }
         if (r.error) {
