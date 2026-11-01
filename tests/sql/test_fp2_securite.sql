@@ -36,10 +36,21 @@ SET ROLE anon;
 SELECT pg_temp.ok('anon : aucune lecture directe des tables FP2',
   (SELECT bool_and(pg_temp.err(format('SELECT 1 FROM public.%I LIMIT 1', t)) LIKE '%permission denied%') FROM _fp2_tables));
 RESET ROLE;
+-- authenticated : sans droit direct (REVOKE des scripts) ; et même si un droit était accordé (défaut Supabase, ou autre test de la suite),
+-- la RLS sans politique ne laisse rien voir ni rien modifier. Les deux cas sont acceptés, aucune ligne ne doit être visible ou touchée.
+CREATE OR REPLACE FUNCTION pg_temp.visible(t text) RETURNS bigint LANGUAGE plpgsql AS
+$$ DECLARE n bigint; BEGIN EXECUTE format('SELECT count(*) FROM public.%I', t) INTO n; RETURN n; EXCEPTION WHEN insufficient_privilege THEN RETURN 0; END $$;
+CREATE OR REPLACE FUNCTION pg_temp.touched(q text) RETURNS bigint LANGUAGE plpgsql AS
+$$ DECLARE n bigint; BEGIN EXECUTE q; GET DIAGNOSTICS n = ROW_COUNT; RETURN n; EXCEPTION WHEN insufficient_privilege THEN RETURN 0; END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.visible(text) TO PUBLIC; GRANT EXECUTE ON FUNCTION pg_temp.touched(text) TO PUBLIC;
+INSERT INTO auth.users(id, email, email_confirmed_at) VALUES ('5ec05ec0-0000-4000-8000-000000000001', 'sec-a@test.invalid', now()), ('5ec05ec0-0000-4000-8000-000000000002', 'sec-b@test.invalid', now());
+SELECT set_config('request.jwt.claim.sub', '5ec05ec0-0000-4000-8000-000000000001', false);
 SET ROLE authenticated;
-SELECT pg_temp.ok('authenticated : aucune lecture ni écriture directe des tables FP2 (tout passe par les fonctions)',
-  (SELECT bool_and(pg_temp.err(format('SELECT 1 FROM public.%I LIMIT 1', t)) LIKE '%permission denied%') FROM _fp2_tables)
-  AND pg_temp.err($$DELETE FROM public.cash_movements$$) LIKE '%permission denied%' AND pg_temp.err($$UPDATE public.purchases SET total_ttc = 0$$) LIKE '%permission denied%');
+SELECT public.cash_account_create('{"name":"Banque","kind":"bank","opening_balance":100,"opening_date":"2026-10-01"}'::jsonb);
+SELECT pg_temp.ok('authenticated : même son propre compte n''est pas lisible ni modifiable en direct (tout passe par les fonctions)',
+  (SELECT sum(pg_temp.visible(t)) FROM _fp2_tables) = 0 AND pg_temp.touched($$DELETE FROM public.cash_accounts$$) = 0 AND pg_temp.touched($$UPDATE public.cash_accounts SET opening_balance = 0$$) = 0);
+RESET ROLE;
+SELECT pg_temp.ok('le compte créé par la fonction existe bien et reste intact', (SELECT opening_balance FROM public.cash_accounts WHERE user_id = '5ec05ec0-0000-4000-8000-000000000001') = 100);
 RESET ROLE;
 SELECT pg_temp.ok('suppression d''un compte : toutes ses données FP2 suivent (ON DELETE CASCADE vers auth.users)',
   (SELECT count(*) FROM pg_constraint k JOIN pg_class c ON c.oid = k.conrelid JOIN _fp2_tables x ON x.t = c.relname

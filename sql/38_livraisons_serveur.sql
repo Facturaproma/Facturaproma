@@ -96,10 +96,8 @@ BEGIN
     RETURN NEW;
 END; $$;
 REVOKE ALL ON FUNCTION public.fin_delivery_guard() FROM PUBLIC, anon, authenticated;
-DROP TRIGGER IF EXISTS trg_delivery_guard ON public.deliveries;
-CREATE TRIGGER trg_delivery_guard BEFORE UPDATE ON public.deliveries FOR EACH ROW EXECUTE FUNCTION public.fin_delivery_guard();
-DROP TRIGGER IF EXISTS trg_delivery_lines_guard ON public.delivery_lines;
-CREATE TRIGGER trg_delivery_lines_guard BEFORE UPDATE ON public.delivery_lines FOR EACH ROW EXECUTE FUNCTION public.fin_lines_guard();
+CREATE OR REPLACE TRIGGER trg_delivery_guard BEFORE UPDATE ON public.deliveries FOR EACH ROW EXECUTE FUNCTION public.fin_delivery_guard();
+CREATE OR REPLACE TRIGGER trg_delivery_lines_guard BEFORE UPDATE ON public.delivery_lines FOR EACH ROW EXECUTE FUNCTION public.fin_lines_guard();
 
 -- Statut d'une facture du compte, LU dans user_data (clé 'invoices') : 'draft', 'issued' ou NULL si absente. Aucune écriture.
 CREATE OR REPLACE FUNCTION public.fin_invoice_status(p_uid UUID, p_invoice_id TEXT) RETURNS TEXT
