@@ -72,14 +72,14 @@ CREATE TABLE IF NOT EXISTS public.doc_store_mode (
 ALTER TABLE public.doc_store_mode ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.doc_store_mode FROM anon, authenticated;     -- lu uniquement via get_doc_mode()
 
--- Règle imposée au niveau de la table : 'documents' seulement pour un compte autorisé ET dont l'e-mail est un e-mail de test
+-- Règle imposée au niveau de la table : 'documents' seulement pour un compte AUTORISÉ par l'opérateur (doc_store_testers).
+-- (Jusqu'au 01/11/2026 : comptes de test uniquement. Généralisation autorisée par le propriétaire : la liste d'autorisation reste le seul verrou,
+--  posé compte par compte par l'opérateur, jamais par l'API.)
 CREATE OR REPLACE FUNCTION public.guard_doc_store_mode() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
 BEGIN
-    IF NEW.mode = 'documents' AND NOT (
-        EXISTS (SELECT 1 FROM public.doc_store_testers t WHERE t.user_id = NEW.user_id)
-        AND EXISTS (SELECT 1 FROM auth.users u WHERE u.id = NEW.user_id AND u.email LIKE '%@facturapro-test.invalid')) THEN
-        RAISE EXCEPTION 'COMPTE_NON_AUTORISE: le nouveau stockage exige une autorisation explicite et un compte de test';
+    IF NEW.mode = 'documents' AND NOT EXISTS (SELECT 1 FROM public.doc_store_testers t WHERE t.user_id = NEW.user_id) THEN
+        RAISE EXCEPTION 'COMPTE_NON_AUTORISE: le nouveau stockage exige une autorisation explicite (doc_store_testers)';
     END IF;
     RETURN NEW;
 END;
@@ -194,9 +194,6 @@ BEGIN
     IF v_cur = p_mode THEN RETURN jsonb_build_object('ok', true, 'unchanged', true, 'mode', p_mode); END IF;
 
     IF p_mode = 'documents' THEN
-        IF v_email NOT LIKE '%@facturapro-test.invalid' THEN
-            RAISE EXCEPTION 'COMPTE_NON_TEST: le nouveau stockage n''est activable que pour les comptes *@facturapro-test.invalid';
-        END IF;
         IF NOT EXISTS (SELECT 1 FROM public.doc_store_testers WHERE user_id = p_user) THEN
             RAISE EXCEPTION 'COMPTE_NON_AUTORISE: compte absent de doc_store_testers';
         END IF;

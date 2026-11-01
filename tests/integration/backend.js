@@ -28,6 +28,7 @@ function createDb(opts = {}) {
     psql(db, ['-c', 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated']);
     for (const f of ['15_documents', '16_migration_donnees', '17_mode_stockage'].concat(opts.plafond ? ['26_plafond_paiements_legacy'] : [])) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
     psql(db, ['-c', 'GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated']);
+    if (opts.ventes) psql(db, ['-f', path.join(ROOT, 'sql', '45_ventes_documents.sql')]);   // sql/45 : FacturaPro 2.0 en mode documents (exige opts.stock)
   }
   return db;
 }
