@@ -113,6 +113,8 @@ BEGIN
     IF v IS NULL THEN RAISE EXCEPTION 'NON_AUTHENTIFIE' USING ERRCODE = '42501'; END IF;
     IF NOT public.has_active_license(v) THEN RAISE EXCEPTION 'LICENCE_INACTIVE'; END IF;
     v_key := left(NULLIF(btrim(p->>'key'), ''), 200);
+    -- Même clé envoyée deux fois en même temps (nouvel essai réseau) : la 2e attend la 1re puis renvoie la même pièce, sans erreur
+    IF v_key IS NOT NULL THEN PERFORM pg_advisory_xact_lock(hashtextextended('fp_idem:' || v::text || ':' || v_key, 0)); END IF;
     IF v_key IS NOT NULL THEN SELECT * INTO r FROM public.cash_accounts WHERE user_id = v AND idem_key = v_key; IF FOUND THEN RETURN jsonb_build_object('id', r.id, 'duplicate', true); END IF; END IF;
     v_name := left(btrim(COALESCE(p->>'name', '')), 60); v_kind := p->>'kind';
     IF v_name = '' THEN RAISE EXCEPTION 'NOM_INVALIDE'; END IF;
@@ -165,6 +167,8 @@ BEGIN
     IF v IS NULL THEN RAISE EXCEPTION 'NON_AUTHENTIFIE' USING ERRCODE = '42501'; END IF;
     IF NOT public.has_active_license(v) THEN RAISE EXCEPTION 'LICENCE_INACTIVE'; END IF;
     v_key := left(NULLIF(btrim(p->>'key'), ''), 200);
+    -- Même clé envoyée deux fois en même temps (nouvel essai réseau) : la 2e attend la 1re puis renvoie la même pièce, sans erreur
+    IF v_key IS NOT NULL THEN PERFORM pg_advisory_xact_lock(hashtextextended('fp_idem:' || v::text || ':' || v_key, 0)); END IF;
     IF v_key IS NOT NULL THEN SELECT * INTO m FROM public.cash_movements WHERE user_id = v AND idem_key = v_key; IF FOUND THEN RETURN jsonb_build_object('id', m.id, 'duplicate', true); END IF; END IF;
     v_kind := p->>'kind';
     IF v_kind IS NULL OR v_kind NOT IN ('owner_in', 'owner_out', 'tax_payment', 'other_in', 'other_out', 'adjustment_in', 'adjustment_out', 'transfer') THEN RAISE EXCEPTION 'TYPE_MOUVEMENT_INVALIDE'; END IF;
@@ -200,6 +204,8 @@ BEGIN
     IF v IS NULL THEN RAISE EXCEPTION 'NON_AUTHENTIFIE' USING ERRCODE = '42501'; END IF;
     IF NOT public.has_active_license(v) THEN RAISE EXCEPTION 'LICENCE_INACTIVE'; END IF;
     v_key := left(NULLIF(btrim(p->>'key'), ''), 200);
+    -- Même clé envoyée deux fois en même temps (nouvel essai réseau) : la 2e attend la 1re puis renvoie la même pièce, sans erreur
+    IF v_key IS NOT NULL THEN PERFORM pg_advisory_xact_lock(hashtextextended('fp_idem:' || v::text || ':' || v_key, 0)); END IF;
     IF v_key IS NOT NULL THEN SELECT * INTO m FROM public.cash_movements WHERE user_id = v AND idem_key = v_key; IF FOUND THEN RETURN jsonb_build_object('id', m.id, 'duplicate', true); END IF; END IF;
     BEGIN v_date := (p->>'date')::date; v_amt := round((p->>'amount')::numeric, 2); v_acc := (p->>'account_id')::uuid;
     EXCEPTION WHEN OTHERS THEN RAISE EXCEPTION 'REGLEMENT_INVALIDE'; END;
