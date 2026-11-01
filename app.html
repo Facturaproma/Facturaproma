@@ -10780,7 +10780,7 @@ async function renderTreasury() {
         if (isPay) { const py = pays.find(x => 'pay:' + x.id === m.id), inv = py && invs.find(i => i.id === py.invoiceId); label = (inv ? dn(inv.number) + ' · ' : '') + (inv ? inv.clientName || '' : '') + (m.label ? ' · ' + m.label : ''); }
         const canReverse = !isPay && m.kind !== 'reversal' && !m.reversed;
         return `<div class="stk-row"${m.reversed ? ' style="opacity:0.55;"' : ''}><div class="stk-main"><strong>${escapeHtml(CASH_KINDS[m.kind] || m.kind)}</strong><div class="stk-sub">${formatDate(m.move_date)} · ${escapeHtml(m.account_id ? (accName[m.account_id] || '—') : 'sans compte')}${label ? ' · ' + escapeHtml(label) : ''}${m.reversed ? ' · annulé' : ''}</div></div>
-            <div style="display:flex; gap:6px; align-items:center;"><div class="stk-qty" style="color:${m.direction === 'in' ? 'var(--success)' : 'var(--danger)'};">${m.direction === 'in' ? '+' : '−'}${formatCurrency(m.amount)}</div>${canReverse ? `<button class="btn btn-ghost btn-sm" title="Annuler ce mouvement (ligne inverse)" onclick="reverseCashMove(${jsArg(m.id)})">↩️</button>` : ''}</div></div>`;
+            <div style="display:flex; gap:6px; align-items:center;"><div class="stk-qty" style="color:${(m.direction === 'in') === (Number(m.amount) >= 0) ? 'var(--success)' : 'var(--danger)'};">${(m.direction === 'in') === (Number(m.amount) >= 0) ? '+' : '−'}${formatCurrency(Math.abs(Number(m.amount)))}</div>${canReverse ? `<button class="btn btn-ghost btn-sm" title="Annuler ce mouvement (ligne inverse)" onclick="reverseCashMove(${jsArg(m.id)})">↩️</button>` : ''}</div></div>`;
     }).join('') : '<div style="padding:16px; color:var(--ink-mute);">Aucun mouvement sur cette période.</div>';
 }
 function openCashAccount() {
@@ -14845,6 +14845,7 @@ function renderPayments() {
     
     // History list
     const historyEl = document.getElementById('paymentsHistoryList');
+    const reversedIds = new Set(payments.filter(x => x && x.reversesId).map(x => x.reversesId));
     const sortedPaymentsAll = [...payments].sort((a, b) => new Date(b.date) - new Date(a.date));
     const pgHist = fpPaginate('payHist', sortedPaymentsAll, String(sortedPaymentsAll.length), renderPayments);
     const sortedPayments = pgHist.items;
@@ -14882,7 +14883,7 @@ function renderPayments() {
                                 <td>${formatDate(p.date)}</td>
                                 <td>${inv ? `<a href="#" onclick="editInvoice(${jsArg(inv.id)}); return false;" style="color: inherit; font-weight: 700; text-decoration: underline dotted;" title="Ouvrir la facture">${escapeHtml(dn(inv.number))}</a>` : '<strong>—</strong>'}</td>
                                 <td>${escapeHtml(inv?.clientName || '—')}</td>
-                                <td><strong style="color: var(--success);">+${formatCurrency(p.amount)}</strong><br><button class="btn btn-secondary btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="generatePaymentReceiptPDF(${jsArg(p.id)})" title="Télécharger le reçu de paiement (PDF)">🧾 Reçu</button>${inv && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
+                                <td>${Number(p.amount) < 0 ? `<strong style="color: var(--danger);">−${formatCurrency(Math.abs(p.amount))}</strong><br><span style="font-size: 11px; color: var(--ink-mute);">Annulation de paiement</span>` : `<strong style="color: var(--success);${reversedIds.has(p.id) ? ' text-decoration: line-through;' : ''}">+${formatCurrency(p.amount)}</strong>${reversedIds.has(p.id) ? '<br><span style="font-size: 11px; color: var(--ink-mute);">annulé</span>' : `<br><button class="btn btn-ghost btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="reversePayment(${jsArg(p.id)})" title="Annuler ce paiement (erreur de saisie) : une ligne inverse est enregistrée">↩️ Annuler</button>`}`}${Number(p.amount) < 0 || reversedIds.has(p.id) ? '' : `<br><button class="btn btn-secondary btn-sm" style="margin-top: 4px; font-size: 11px; padding: 3px 8px;" onclick="generatePaymentReceiptPDF(${jsArg(p.id)})" title="Télécharger le reçu de paiement (PDF)">🧾 Reçu</button>`}${inv && Number(p.amount) > 0 && paymentSituation(inv, payments, invoices).remaining > 0 ? `<br><span style="font-size: 11px; color: var(--ink-soft);">reste ${formatCurrency(paymentSituation(inv, payments, invoices).remaining)}</span>` : ''}</td>
                                 <td>${methodLabels[p.method] || p.method}</td>
                                 <td>${escapeHtml(p.reference || '—')}</td>
                             </tr>
@@ -14891,6 +14892,35 @@ function renderPayments() {
                 </tbody>
             </table>${pgHist.html}`;
     }
+}
+
+// Annulation d'un paiement saisi par erreur : les paiements sont immuables (sql/26), on enregistre donc une ligne INVERSE
+// (montant négatif, rattachée par reversesId), datée du jour. Trésorerie, créances, pilotage et journaux la lisent comme les autres.
+function reversePayment(id) {
+    if (Storage._blockedByLicense('payments')) return showToast('🔒 Licence expirée : lecture seule.', 'error');
+    const payments = Storage.get('payments', []) || [], p = payments.find(x => x && x.id === id);
+    if (!p || !(Number(p.amount) > 0)) return showToast('Paiement introuvable', 'error');
+    if (payments.some(x => x && x.reversesId === id)) return showToast('Ce paiement est déjà annulé', 'error');
+    const date = todayISO();
+    if (finIsClosed(date)) return showToast(finClosedMsg(), 'error');
+    const inv = (Storage.get('invoices', []) || []).find(i => i.id === p.invoiceId);
+    const reason = prompt(`Annuler le paiement de ${formatCurrency(p.amount)}${inv ? ' sur ' + dn(inv.number) : ''} ?\n\nUne ligne d'annulation (montant négatif) sera enregistrée aujourd'hui ; le paiement d'origine reste visible.\n\nMotif :`, '');
+    if (reason === null) return;
+    if (reason.trim().length < 3) return showToast('Motif obligatoire (3 caractères au moins).', 'error');
+    payments.push({ id: uuid(), invoiceId: p.invoiceId, date, amount: -money2(p.amount), method: p.method, reference: p.reference || '', notes: 'Annulation : ' + reason.trim().slice(0, 150),
+        reversesId: p.id, ...(p.accountId ? { accountId: p.accountId } : {}), createdAt: new Date().toISOString() });
+    Storage.set('payments', payments);
+    _lastPaymentKey = null;   // le bon paiement peut être ressaisi aussitôt (même montant, même date)
+    const invoices = Storage.get('invoices', []) || [], idx = invoices.findIndex(i => i.id === p.invoiceId);
+    if (idx >= 0) {
+        const paid = money2(payments.filter(x => x.invoiceId === p.invoiceId).reduce((t, x) => t + (Number(x.amount) || 0), 0));
+        invoices[idx].paidAmount = paid;
+        if (invoices[idx].status === 'paid' && paid + 0.01 < (invoices[idx].totalTTC || 0)) { invoices[idx].status = 'sent'; delete invoices[idx].paidAt; }
+        Storage.set('invoices', invoices);
+        logDoc('paiement annulé', invoices[idx], `${formatCurrency(p.amount)} — ${reason.trim().slice(0, 80)}`);
+    }
+    showToast('Paiement annulé ✓ (ligne inverse enregistrée)', 'success');
+    ['renderPayments', 'renderInvoices', 'renderDashboard'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {} });
 }
 
 let editingPaymentInvoiceId = null;
