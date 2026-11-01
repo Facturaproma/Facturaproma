@@ -6,7 +6,8 @@ const http = require('http'), fs = require('fs'), path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const srv = http.createServer((q, r) => {
-  const f = path.join(ROOT, q.url.split('?')[0] === '/' ? 'app.html' : q.url.split('?')[0]);
+  const f = path.resolve(ROOT, '.' + (q.url.split('?')[0] === '/' ? '/app.html' : q.url.split('?')[0]));
+  if (!f.startsWith(ROOT + path.sep)) { r.writeHead(403); return r.end(); }   // reste dans le dossier du projet
   fs.readFile(f, (e, d) => {
     if (e) { r.writeHead(404); return r.end(); }
     let body = d;
