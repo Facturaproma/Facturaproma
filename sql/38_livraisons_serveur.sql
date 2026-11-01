@@ -125,6 +125,8 @@ BEGIN
     IF NOT public.has_active_license(v) THEN RAISE EXCEPTION 'LICENCE_INACTIVE'; END IF;
     IF p IS NULL OR jsonb_typeof(p) <> 'object' THEN RAISE EXCEPTION 'BL_INVALIDE'; END IF;
     v_key := left(NULLIF(btrim(p->>'key'), ''), 200);
+    -- Même clé envoyée deux fois en même temps (nouvel essai réseau) : la 2e attend la 1re puis renvoie la même pièce, sans erreur
+    IF v_key IS NOT NULL THEN PERFORM pg_advisory_xact_lock(hashtextextended('fp_idem:' || v::text || ':' || v_key, 0)); END IF;
     IF v_key IS NOT NULL THEN
         SELECT * INTO r FROM public.deliveries WHERE user_id = v AND idem_key = v_key;
         IF FOUND THEN RETURN jsonb_build_object('id', r.id, 'number', r.number, 'total_ht', r.total_ht, 'total_tva', r.total_tva, 'total_ttc', r.total_ttc, 'duplicate', true); END IF;
