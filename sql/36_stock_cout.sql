@@ -195,18 +195,18 @@ END; $$;
 REVOKE ALL ON FUNCTION public.stock_valuation(DATE) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.stock_valuation(DATE) TO authenticated;
 
--- 5) stock_list : mêmes colonnes que sql/34 + coût unitaire, CMUP après, coût connu (le type de retour change : DROP puis CREATE)
+-- 5) stock_list : mêmes colonnes que sql/34 + coût unitaire, CMUP après, coût connu, clé, sortie d'origine d'un retour (le type de retour change : DROP puis CREATE)
 DROP FUNCTION IF EXISTS public.stock_list(DATE, DATE, INT, INT);
 CREATE FUNCTION public.stock_list(p_from DATE, p_to DATE, p_limit INT DEFAULT 200, p_offset INT DEFAULT 0)
 RETURNS TABLE (id UUID, product_id TEXT, product_name TEXT, unit TEXT, move_type TEXT, qty NUMERIC, move_date DATE, source TEXT, ref TEXT, note TEXT,
-               created_at TIMESTAMPTZ, unit_cost NUMERIC, cmup_after NUMERIC, cost_known BOOLEAN, idem_key TEXT)
+               created_at TIMESTAMPTZ, unit_cost NUMERIC, cmup_after NUMERIC, cost_known BOOLEAN, idem_key TEXT, return_of TEXT)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, auth AS $$
 DECLARE v UUID := public.stock_uid();
 BEGIN
     IF v IS NULL THEN RAISE EXCEPTION 'NON_AUTHENTIFIE' USING ERRCODE = '42501'; END IF;
     RETURN QUERY
     SELECT m.id, m.product_id, m.product_name, m.unit, m.move_type, m.qty, m.move_date, m.source, m.ref, m.note, m.created_at,
-           m.unit_cost, m.cmup_after, m.cost_known, m.idem_key
+           m.unit_cost, m.cmup_after, m.cost_known, m.idem_key, m.return_of
       FROM public.stock_movements m
      WHERE m.user_id = v AND (p_from IS NULL OR m.move_date >= p_from) AND (p_to IS NULL OR m.move_date <= p_to)
      ORDER BY m.move_date DESC, m.seq DESC

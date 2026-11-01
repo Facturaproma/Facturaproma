@@ -50,13 +50,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('Top clients : la facture annulée par avoir de « Client Un » est exclue', !/Client Un/.test(tc));
   ok('Top clients : seule « Client Deux » (facture payée) est comptée', /Client Deux/.test(tc) && /\|1$/.test(tc.trim()));
   // Suppression de client : refusée s'il a un devis ou une récurrence
-  await p.evaluate(() => deleteClient('c4'));
+  await p.evaluate(async () => { await deleteClient('c4'); });
   ok('client avec un devis : suppression refusée', await p.evaluate(() => Storage.get('clients', []).some(c => c.id === 'c4')));
-  await p.evaluate(() => { Storage.set('quotes', []); Storage.set('recurring', [{ id: 'r1', clientId: 'c4', clientName: 'Client Quatre', frequency: 'monthly', nextDate: todayISO(), items: [], totalTTC: 1 }]); deleteClient('c4'); });
+  await p.evaluate(async () => { Storage.set('quotes', []); Storage.set('recurring', [{ id: 'r1', clientId: 'c4', clientName: 'Client Quatre', frequency: 'monthly', nextDate: todayISO(), items: [], totalTTC: 1 }]); await deleteClient('c4'); });
   ok('client avec une récurrence : suppression refusée', await p.evaluate(() => Storage.get('clients', []).some(c => c.id === 'c4')));
-  await p.evaluate(() => { Storage.set('recurring', []); deleteClient('c4'); });
+  await p.evaluate(async () => { Storage.set('recurring', []); await deleteClient('c4'); });
   ok('client sans lien : supprimé', await p.evaluate(() => !Storage.get('clients', []).some(c => c.id === 'c4')));
-  await p.evaluate(() => deleteClient('c2'));
+  await p.evaluate(async () => { await deleteClient('c2'); });
   ok('client avec facture : suppression refusée', await p.evaluate(() => Storage.get('clients', []).some(c => c.id === 'c2')));
   // Brouillon supprimé : le devis d'origine perd son lien
   await p.evaluate(() => { Storage.set('quotes', [{ id: 'q1', number: 'DEV-1', clientId: 'c3', clientName: 'Client Trois', items: [], totalTTC: 100, status: 'accepted', convertedTo: 'd1', convertedInvoiceNumber: 'brouillon' }]); deleteInvoice('d1'); });

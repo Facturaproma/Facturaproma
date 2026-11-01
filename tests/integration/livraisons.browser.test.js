@@ -49,11 +49,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const mkBl = (client, lines) => p.evaluate(async ([c, ls]) => {
     openDelivery(); document.getElementById('blClient').value = c; document.getElementById('blLines').innerHTML = '';
     ls.forEach(([pid, qty, desc]) => { addDeliveryLine(); const r = [...document.querySelectorAll('#blLines .pur-line')].pop(); if (pid) { r.querySelector('.pl-prod').value = pid; onDeliveryProduct(r.querySelector('.pl-prod')); } else r.querySelector('.pl-desc').value = desc; r.querySelector('.pl-qty').value = String(qty); });
-    await saveDelivery(); return blList().slice(-1)[0];
+    await saveDelivery(); return blList()[0];
   }, [client, lines]);
+  // Reprise d'un ancien BL JSON au premier chargement
+  await p.evaluate(async () => { Storage.set('deliveries', [{ id: 'oldbl', number: 'BL-2026-040', date: '2026-10-01', clientId: 'c2', clientName: 'Café Atlas', items: [{ description: 'Ancien', quantity: 1, price: 10, tva: 20 }], invoiceId: null }]); Storage.set('deliveriesMigrated', false); await blLoad(true); });
+  ok('reprise : l\'ancien BL JSON est repris par le serveur (numéro conservé)', await p.evaluate(() => blList().some(d => d.number === 'BL-2026-040' && d.legacyId === 'oldbl')));
+  await p.evaluate(async (id) => { await cancelDelivery(blList().find(d => d.number === 'BL-2026-040').id); }); await sleep(300);
   // BL 1 : 10 farine + 1 transport (non suivi)
   const b1 = await mkBl('c1', [['pf', 10], ['ps', 1]]); await sleep(300);
-  ok('BL enregistré : n° BL-AAAA-001, prix repris du produit', /^BL-\d{4}-001$/.test(b1.number) && b1.items[0].price === 100 && b1.items.length === 2, b1.number);
+  ok('BL enregistré : n° serveur BL-AAAA-041 (après le BL repris), prix repris du produit', /^BL-\d{4}-041$/.test(b1.number) && b1.items[0].price === 100 && b1.items.length === 2, b1.number);
   ok('BL : le stock sort tout de suite (50 → 40), le service non suivi n\'a pas d\'effet', (await p.evaluate(() => stockLevel('pf'))) === 40);
   const mv = await be.sql("SELECT qty::float q, move_type t, ref FROM stock_movements WHERE source = 'delivery'");
   ok('serveur : mouvement « delivery » (sortie de 10)', mv.length === 1 && mv[0].q === 10 && mv[0].t === 'out' && mv[0].ref === b1.number, JSON.stringify(mv));
@@ -75,34 +79,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('facture émise avec un n° officiel ; les lignes BL gardent leur marque après passage dans l\'éditeur', issued && !String(issued.number).startsWith('BRO-') && issued.items.filter(i => i.fromDelivery).length === 3 && issued.items.filter(i => !i.fromDelivery).length === 1, issued && issued.number);
   ok('émission : AUCUNE double sortie pour les lignes BL (farine reste 38, huile 20−5−2 = 13)', (await p.evaluate(() => stockLevel('pf'))) === 38 && (await p.evaluate(() => stockLevel('ph'))) === 13, JSON.stringify(await p.evaluate(() => [stockLevel('pf'), stockLevel('ph')])));
   ok('serveur : une seule sortie « invoice » (la ligne ajoutée à la main)', (await be.sql("SELECT count(*)::int n FROM stock_movements WHERE source='invoice'"))[0].n === 1);
-  ok('BL : n° officiel de la facture reporté', await p.evaluate((id) => blList().find(d => d.id === id).invoiceNumber === Storage.get('invoices', []).find(i => i.deliveryIds).number, b1.id));
+  await sleep(500);
+  ok('BL : n° officiel de la facture reporté (écran et serveur)', await p.evaluate((id) => blList().find(d => d.id === id).invoiceNumber === Storage.get('invoices', []).find(i => i.deliveryIds).number, b1.id) && (await be.sql('SELECT invoice_number FROM deliveries WHERE id = $1', [b1.id]))[0].invoice_number === (await p.evaluate(() => Storage.get('invoices', []).find(i => i.deliveryIds).number)));
   // BL facturé : suppression refusée
-  await p.evaluate((id) => deleteDelivery(id), b1.id);
-  ok('BL facturé : suppression refusée', await p.evaluate((id) => blList().some(d => d.id === id), b1.id));
+  await p.evaluate(async (id) => { await cancelDelivery(id); }, b1.id);
+  ok('BL facturé : annulation refusée', await p.evaluate((id) => blList().find(d => d.id === id).status === 'active', b1.id));
   // BL non facturé : suppression = remise en stock
-  await p.evaluate(async (id) => { await deleteDelivery(id); }, b3.id); await sleep(300);
-  ok('BL non facturé supprimé : stock remis (38 → 40)', (await p.evaluate(() => stockLevel('pf'))) === 40 && !(await p.evaluate((id) => blList().some(d => d.id === id), b3.id)));
+  await p.evaluate(async (id) => { await cancelDelivery(id); }, b3.id); await sleep(300);
+  ok('BL non facturé annulé : stock remis (38 → 40), BL conservé « annulé »', (await p.evaluate(() => stockLevel('pf'))) === 40 && (await p.evaluate((id) => blList().find(d => d.id === id).status, b3.id)) === 'cancelled');
+  ok('serveur : remise en stock au coût de la sortie du BL, rattachée à elle', (await be.sql("SELECT count(*)::int n FROM stock_movements WHERE idem_key LIKE 'bl-cancel:%' AND return_of LIKE 'bl:%'"))[0].n === 1);
   // Brouillon depuis BL supprimé : BL redevient « à facturer »
   const b4 = await mkBl('c2', [['pf', 1]]); await p.evaluate((id) => createInvoiceFromDeliveries([id]), b4.id); await sleep(300);
-  await p.evaluate(() => { const d = Storage.get('invoices', []).find(i => i.status === 'draft' && i.deliveryIds); deleteInvoice(d.id); });
-  ok('brouillon supprimé : le BL redevient « à facturer »', await p.evaluate((id) => !blList().find(d => d.id === id).invoiceId, b4.id));
+  await p.evaluate(() => { const d = Storage.get('invoices', []).find(i => i.status === 'draft' && i.deliveryIds); deleteInvoice(d.id); }); await sleep(600);
+  ok('brouillon supprimé : le BL redevient « à facturer » (écran et serveur)', await p.evaluate((id) => !blList().find(d => d.id === id).invoiceId, b4.id) && (await be.sql('SELECT invoice_id FROM deliveries WHERE id = $1', [b4.id]))[0].invoice_id === null);
   // Devis → BL
   await p.evaluate(() => { Storage.set('quotes', [{ id: 'q1', number: 'DEV-2026-001', clientId: 'c2', clientName: 'Café Atlas', status: 'sent', items: [{ productId: 'ph', description: 'Huile 5L', quantity: 3, price: 55, tva: 20, totalHT: 165, totalTVA: 33, totalTTC: 198 }], totalTTC: 198 }]); navTo('quotes'); });
   ok('devis : bouton « 🚚 BL »', /🚚 BL/.test(await p.innerText('#page-quotes')));
   await p.evaluate(async () => { openDelivery('q1'); await saveDelivery(); }); await sleep(300);
-  const b5 = await p.evaluate(() => blList().slice(-1)[0]);
+  const b5 = await p.evaluate(() => blList()[0]);
   ok('BL depuis devis : lignes et prix du devis repris, devis lié et accepté', b5.sourceQuote === 'q1' && b5.items[0].quantity === 3 && b5.items[0].price === 55 && (await p.evaluate(() => Storage.get('quotes', [])[0].status)) === 'accepted');
   // Duplication d'une facture issue de BL : la copie déduira bien le stock
   ok('duplication : la marque BL n\'est pas recopiée', await p.evaluate(() => { duplicateInvoice(Storage.get('invoices', []).find(i => i.deliveryIds && i.status !== 'draft').id); return !getCurrentItems().some(i => i.fromDelivery); }));
   // Client avec BL : suppression refusée
-  await p.evaluate(() => { navTo('deliveries'); deleteClient('c2'); });
+  await p.evaluate(async () => { navTo('deliveries'); await deleteClient('c2'); });
   ok('client avec BL : suppression refusée', await p.evaluate(() => Storage.get('clients', []).some(c => c.id === 'c2')));
   // PDF
   const dl = p.waitForEvent('download'); await p.evaluate((id) => generateDeliveryPDF(id), b1.id); const f = await dl;
-  ok('PDF du BL téléchargé (n° du BL)', /^BL-\d{4}-001\.pdf$/.test(f.suggestedFilename()) && fs.statSync(await f.path()).size > 3000, f.suggestedFilename());
+  ok('PDF du BL téléchargé (n° du BL)', /^BL-\d{4}-041\.pdf$/.test(f.suggestedFilename()) && fs.statSync(await f.path()).size > 3000, f.suggestedFilename());
   ok('page Stock : origine « BL »', await p.evaluate(async () => { navTo('stock'); setStockPeriod('month'); await renderStock(); return /BL BL-/.test(document.getElementById('stockMoves').innerText); }));
-  ok('injection : nom de client échappé', await p.evaluate(() => { const ds = blList(); ds[0].clientName = '<img src=x onerror=window.__x=1>'; Storage.set('deliveries', ds); navTo('deliveries'); return !document.querySelector('#deliveriesList img') && !window.__x; }));
-  if (process.env.SHOT_DIR) { await p.evaluate(() => { const ds = blList(); ds[0].clientName = 'Épicerie Nour'; Storage.set('deliveries', ds); renderDeliveries(); }); await sleep(300); await p.screenshot({ path: process.env.SHOT_DIR + '/bl-liste.png', fullPage: true, animations: 'disabled' }); fs.copyFileSync(await f.path(), process.env.SHOT_DIR + '/bl.pdf'); }
+  ok('injection : nom de client échappé', await p.evaluate(async () => { blList()[0].clientName = '<img src=x onerror=window.__x=1>'; await renderDeliveries(); return !document.querySelector('#deliveriesList img') && !window.__x; }));
+  if (process.env.SHOT_DIR) { await p.evaluate(async () => { await blLoad(true); await renderDeliveries(); }); await sleep(300); await p.screenshot({ path: process.env.SHOT_DIR + '/bl-liste.png', fullPage: true, animations: 'disabled' }); fs.copyFileSync(await f.path(), process.env.SHOT_DIR + '/bl.pdf'); }
   await browser.close(); srv.close(); try { dropDb(db); } catch (e) {}
   const n = R_.filter(Boolean).length; console.log(`\n${n === R_.length ? 'OK' : 'ÉCHEC'} : ${n}/${R_.length} contrôles (bons de livraison)`); process.exit(n === R_.length ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(1); });

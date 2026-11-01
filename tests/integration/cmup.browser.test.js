@@ -69,10 +69,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // BL puis suppression : remise au coût de la sortie du BL
   await p.evaluate(async () => { openDelivery(); document.getElementById('blClient').value = 'c1'; const r = document.querySelector('#blLines .pur-line'); r.querySelector('.pl-prod').value = 'pa'; onDeliveryProduct(r.querySelector('.pl-prod')); r.querySelector('.pl-qty').value = '3'; await saveDelivery(); });
   await sleep(400);
-  const bl = await p.evaluate(() => blList().slice(-1)[0]);
-  await p.evaluate(async (id) => { await deleteDelivery(id); }, bl.id); await sleep(500);
-  const back = await mv(`bl-del:${bl.id}:0`);
-  ok('BL supprimé : remise en stock au coût de sa sortie (56), rattachée à la sortie', back && back.c === 56 && back.r === `bl:${bl.id}:0`, JSON.stringify(back));
+  const bl = await p.evaluate(() => blList()[0]);
+  await p.evaluate(async (id) => { await cancelDelivery(id); }, bl.id); await sleep(500);
+  const back = await mv(`bl-cancel:${bl.id}:0`);
+  ok('BL annulé : remise en stock au coût de sa sortie (56), rattachée à la sortie', back && back.c === 56 && back.r === `bl:${bl.id}:0`, JSON.stringify(back));
   // Achat avec TVA non déductible : coût TTC
   await buy(1, 100, false); await sleep(400);
   const nd = (await be.sql("SELECT unit_cost::float c FROM stock_movements WHERE source='purchase' AND move_type='in' ORDER BY seq DESC LIMIT 1"))[0];
