@@ -1,4 +1,4 @@
-// Achats & fournisseurs : entrées de stock automatiques, TVA déductible, suppression avec correction du stock. SIMULATION locale, aucune donnée réelle.
+// Achats et dépenses côté serveur (sql/37) : natures, stock au coût, charges, TVA déductible, annulation, reprise des achats JSON, fournisseurs. SIMULATION locale, aucune donnée réelle.
 const { chromium } = require('playwright-core');
 const http = require('http'), fs = require('fs'), path = require('path');
 const R = path.join(__dirname, '..', '..');
@@ -40,60 +40,69 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const level = (id) => p.evaluate((i) => stockLevel(i), id);
   const pid = async (n) => p.evaluate((nm) => (Storage.get('products', []).find(x => x.name === nm) || {}).id, n);
 
-  await p.evaluate(() => { Storage.set('products', [{ id: 'pf', name: 'Farine 25kg', price: 100, tva: 20, unit: 'sac', trackStock: true }, { id: 'ps', name: 'Transport', price: 50, tva: 20 }]); });
-  // Fournisseur depuis la saisie d'achat
-  await p.evaluate(() => { navTo('purchases'); openPurchase(); openSupplierModal(null, true); });
+  await p.evaluate(() => { Storage.set('products', [{ id: 'pf', name: 'Farine 25kg', price: 100, tva: 20, unit: 'sac', trackStock: true }, { id: 'pz', name: 'Emballages', price: 1, tva: 20 }]); });
+  // Reprise d'un ancien achat JSON (version précédente) au premier chargement
+  await p.evaluate(() => { Storage.set('purchases', [{ id: 'old-1', number: 'ACH-2026-001', date: '2026-10-01', supplierName: 'Ancien fournisseur', includeVat: true, lines: [{ productId: 'pf', description: 'Farine', qty: 2, price: 40, tva: 20 }] }]); Storage.set('purchasesMigrated', false); });
+  await p.evaluate(async () => { navTo('purchases'); await purLoad(true); });
+  ok('reprise : l\'ancien achat JSON est repris par le serveur (numéro conservé), une seule fois', (await p.evaluate(() => purList().filter(x => x.number === 'ACH-2026-001').length)) === 1 && (await be.sql("SELECT count(*)::int n FROM purchases WHERE legacy_id = 'old-1'"))[0].n === 1);
+  await p.evaluate(async () => { Storage.set('purchasesMigrated', false); await purLoad(true); });
+  ok('reprise rejouée : aucun doublon', (await be.sql("SELECT count(*)::int n FROM purchases"))[0].n === 1);
+  ok('reprise : aucun mouvement de stock recréé', (await be.sql("SELECT count(*)::int n FROM stock_movements"))[0].n === 0);
+  // Fournisseur depuis la saisie
+  await p.evaluate(() => { openPurchase(); openSupplierModal(null, true); });
   await p.fill('#supName', 'Minoterie Atlas'); await p.fill('#supICE', '1234'); await p.evaluate(() => saveSupplier());
   ok('ICE fournisseur invalide refusé (15 chiffres)', (await p.evaluate(() => purSuppliers().length)) === 0);
   await p.fill('#supICE', '001122334455667'); await p.evaluate(() => saveSupplier());
-  ok('fournisseur créé et sélectionné dans l\'achat', await p.evaluate(() => purSuppliers().length === 1 && document.getElementById('purSupplier').value === purSuppliers()[0].id));
-  // Achat : 1 ligne produit suivi + 1 ligne libre
+  ok('fournisseur créé et sélectionné', await p.evaluate(() => purSuppliers().length === 1 && document.getElementById('purSupplier').value === purSuppliers()[0].id));
+  // Achat mixte : marchandise suivie + frais de port (charge) + marchandise non suivie
   await p.evaluate(() => {
-    const r1 = document.querySelector('#purLines .pur-line'); r1.querySelector('.pl-prod').value = 'pf'; onPurchaseProduct(r1.querySelector('.pl-prod'));
-    r1.querySelector('.pl-qty').value = '12'; r1.querySelector('.pl-price').value = '8';
-    addPurchaseLine(); const r2 = document.querySelectorAll('#purLines .pur-line')[1];
-    r2.querySelector('.pl-desc').value = 'Frais de port'; r2.querySelector('.pl-qty').value = '1'; r2.querySelector('.pl-price').value = '100'; r2.querySelector('.pl-tva').value = '10';
-    addPurchaseLine(); updatePurchaseTotals();   // 3e ligne vide : ignorée
-    document.getElementById('purRef').value = 'FA-118';
+    const r1 = document.querySelector('#purLines .pur-line'); r1.querySelector('.pl-prod').value = 'pf'; onPurchaseProduct(r1.querySelector('.pl-prod')); r1.querySelector('.pl-qty').value = '12'; r1.querySelector('.pl-price').value = '8';
+    addPurchaseLine('expense'); const r2 = document.querySelectorAll('#purLines .pur-line')[1]; r2.querySelector('.pl-cat').value = 'Carburant et transport'; r2.querySelector('.pl-desc').value = 'Frais de port'; r2.querySelector('.pl-price').value = '100'; setTvaSelect(r2.querySelector('.pl-tva'), 10);
+    addPurchaseLine('goods'); const r3 = document.querySelectorAll('#purLines .pur-line')[2]; r3.querySelector('.pl-prod').value = 'pz'; onPurchaseProduct(r3.querySelector('.pl-prod')); r3.querySelector('.pl-qty').value = '50'; r3.querySelector('.pl-price').value = '1';
+    addPurchaseLine(); updatePurchaseTotals();
+    document.getElementById('purRef').value = 'FA-118'; document.getElementById('purDue').value = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
   });
-  ok('totaux en direct : HT 196, TVA 29,20, TTC 225,20', /196,00/.test(await p.innerText('#purTotals')) && /29,20/.test(await p.innerText('#purTotals')) && /225,20/.test(await p.innerText('#purTotals')), await p.innerText('#purTotals'));
+  ok('ligne « Charge » : catégorie visible, produit masqué', await p.evaluate(() => { const r = document.querySelectorAll('#purLines .pur-line')[1]; return r.querySelector('.pl-cat').style.display === '' && r.querySelector('.pl-prod').style.display === 'none'; }));
+  ok('totaux en direct : HT 246, TVA 39,20 (19,20 + 10 + 10), TTC 285,20', /246,00/.test(await p.innerText('#purTotals')) && /39,20/.test(await p.innerText('#purTotals')) && /285,20/.test(await p.innerText('#purTotals')), await p.innerText('#purTotals'));
   if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + '/achat-saisie.png', fullPage: false, animations: 'disabled' });
   await p.evaluate(() => savePurchase()); await sleep(900);
-  const pur = await p.evaluate(() => purList()[0]);
-  ok('achat enregistré : n° ACH-AAAA-001, 2 lignes, totaux exacts', /^ACH-\d{4}-001$/.test(pur.number) && pur.lines.length === 2 && pur.totalHT === 196 && pur.totalTVA === 29.2 && pur.totalTTC === 225.2, JSON.stringify([pur.number, pur.totalHT, pur.totalTVA, pur.totalTTC]));
-  ok('stock du produit suivi : +12 (ligne libre sans effet)', (await p.evaluate(() => stockLevel('pf'))) === 12);
-  const mv = await be.sql("SELECT source, qty::float q, ref FROM stock_movements WHERE source = 'purchase'");
-  ok('serveur : 1 mouvement « purchase » de 12, référence ACH', mv.length === 1 && mv[0].q === 12 && /^ACH-/.test(mv[0].ref), JSON.stringify(mv));
-  ok('liste des achats : fournisseur, n° et total TTC', /Minoterie Atlas/.test(await p.innerText('#purchasesList')) && /225,20/.test(await p.innerText('#purchasesList')));
+  const pur = await p.evaluate(() => purList().find(x => x.supplierName === 'Minoterie Atlas'));
+  ok('achat enregistré par le serveur : n° ACH-2026-002 (après l\'achat repris), 3 lignes, totaux exacts', pur && pur.number === 'ACH-2026-002' && pur.lines.length === 3 && pur.totalHT === 246 && pur.totalTVA === 39.2 && pur.totalTTC === 285.2, JSON.stringify(pur && [pur.number, pur.totalHT, pur.totalTVA, pur.totalTTC]));
+  ok('natures enregistrées : marchandise suivie / charge « Carburant et transport » / marchandise non suivie', pur.lines[0].nature === 'goods' && pur.lines[0].trackStock && pur.lines[1].nature === 'expense' && pur.lines[1].category === 'Carburant et transport' && pur.lines[2].nature === 'goods' && !pur.lines[2].trackStock);
+  ok('stock : seule la farine suivie entre (+12 au coût 8)', (await p.evaluate(() => stockLevel('pf'))) === 12 && (await be.sql("SELECT count(*)::int n, max(unit_cost)::float c FROM stock_movements"))[0].c === 8);
+  ok('liste : fournisseur, n°, natures et total TTC', /Minoterie Atlas/.test(await p.innerText('#purchasesList')) && /285,20/.test(await p.innerText('#purchasesList')) && /Marchandise \+ Charge/.test(await p.innerText('#purchasesList')));
+  // Double clic / renvoi : un seul achat
+  ok('double envoi de la même saisie : un seul achat', await p.evaluate(async () => { openPurchase(); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); onPurchaseNature(Object.assign(r.querySelector('.pl-nature'), { value: 'asset' })); r.querySelector('.pl-desc').value = 'Balance'; r.querySelector('.pl-qty').value = '1'; r.querySelector('.pl-price').value = '1500'; const a = savePurchase(), b = savePurchase(); await a; await b; return purList().filter(x => x.lines.some(l => l.description === 'Balance')).length === 1; }));
+  ok('investissement : ni stock ni charge (nature asset)', await p.evaluate(() => purList().find(x => x.lines.some(l => l.description === 'Balance')).lines[0].nature === 'asset'));
+  // Dépense rapide (+ Dépense) avec TVA non déductible
+  await p.evaluate(async () => { openPurchase('expense'); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-cat').value = 'Carburant et transport'; r.querySelector('.pl-desc').value = 'Gasoil'; r.querySelector('.pl-price').value = '500'; document.getElementById('purVat').checked = false; await savePurchase(); });
+  ok('« + Dépense » : ligne charge par défaut, quantité 1, enregistrée', await p.evaluate(() => { const x = purList().find(y => y.lines.some(l => l.description === 'Gasoil')); return x && x.lines[0].nature === 'expense' && x.lines[0].qty === 1 && !x.includeVat; }));
   // TVA déductible
-  await p.evaluate(() => { navTo('taxes'); try { renderVatReport(true); } catch (e) {} });
-  const vat = await p.evaluate(() => allVatPurchases().filter(x => x.fromPurchase).map(x => x.tva));
-  ok('TVA déductible : l\'achat est repris (29,20)', vat.length === 1 && vat[0] === 29.2, JSON.stringify(vat));
-  ok('liste TVA : ligne « Achats » non supprimable depuis la TVA', await p.evaluate(() => { const t = document.getElementById('vatPurchasesBody'); return /ACH-/.test(t.innerText) && /Achats/.test(t.innerText); }));
-  // Achat sans TVA déductible
-  await p.evaluate(async () => { navTo('purchases'); openPurchase(); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-desc').value = 'Ticket'; r.querySelector('.pl-qty').value = '1'; r.querySelector('.pl-price').value = '10'; document.getElementById('purVat').checked = false; await savePurchase(); });
-  ok('achat « TVA non déduite » : exclu de la TVA déductible, n° 002', await p.evaluate(() => allVatPurchases().filter(x => x.fromPurchase).length === 1 && purList().some(x => /-002$/.test(x.number))));
-  // Validation
-  await p.evaluate(async () => { openPurchase(); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-desc').value = 'X'; r.querySelector('.pl-qty').value = '0'; await savePurchase(); closeModal('purchaseModal'); });
-  ok('quantité 0 refusée', (await p.evaluate(() => purList().length)) === 2);
-  // Stock page : origine « Achat »
-  await p.evaluate(async () => { navTo('stock'); setStockPeriod('month'); }); await sleep(900);
-  ok('page Stock : mouvement affiché avec l\'origine « Achat »', /Achat ACH-/.test(await p.innerText('#stockMoves')));
+  await p.evaluate(async () => { navTo('taxes'); await purLoad(); try { renderVatReport(true); } catch (e) {} });
+  const vat = await p.evaluate(() => allVatPurchases().filter(x => x.fromPurchase).map(x => x.tva).sort((a, b) => a - b));
+  ok('TVA déductible : achats actifs à TVA déductible seulement (reprise 16, achat 39,20, balance 300 ; gasoil exclu)', JSON.stringify(vat) === '[16,39.2,300]', JSON.stringify(vat));
+  ok('liste TVA : lignes « Achats » non supprimables depuis la TVA', await p.evaluate(() => /ACH-/.test(document.getElementById('vatPurchasesBody').innerText) && /Achats/.test(document.getElementById('vatPurchasesBody').innerText)));
+  // Validations
+  ok('marchandise sans produit : refusée avant envoi', await p.evaluate(async () => { navTo('purchases'); openPurchase(); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-desc').value = 'X'; r.querySelector('.pl-qty').value = '1'; r.querySelector('.pl-price').value = '1'; const n = purList().length; await savePurchase(); const ok_ = purList().length === n && document.getElementById('purchaseModal').classList.contains('active'); closeModal('purchaseModal'); return ok_; }));
+  ok('charge sans catégorie : refusée', await p.evaluate(async () => { openPurchase('expense'); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-desc').value = 'X'; r.querySelector('.pl-price').value = '1'; const n = purList().length; await savePurchase(); const ok_ = purList().length === n; closeModal('purchaseModal'); return ok_; }));
+  // Erreur réseau : la fenêtre reste ouverte, rien n'est créé, un nouvel essai avec la même clé fonctionne
+  await p.evaluate(async () => { openPurchase('expense'); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-cat').value = 'Loyer'; r.querySelector('.pl-desc').value = 'Loyer novembre'; r.querySelector('.pl-price').value = '2000'; setTvaSelect(r.querySelector('.pl-tva'), 0); window.__net.down = true; await savePurchase(); });
+  ok('hors ligne : rien d\'enregistré, la saisie reste ouverte', await p.evaluate(() => document.getElementById('purchaseModal').classList.contains('active') && !purList().some(x => x.lines.some(l => l.description === 'Loyer novembre'))));
+  await p.evaluate(async () => { window.__net.down = false; await savePurchase(); });
+  ok('connexion revenue : même saisie enregistrée une fois', (await be.sql("SELECT count(*)::int n FROM purchase_lines WHERE description = 'Loyer novembre'"))[0].n === 1);
   // Fournisseur avec achats : suppression refusée
-  await p.evaluate(() => { openSuppliersList(); deleteSupplier(purSuppliers()[0].id); });
+  await p.evaluate(async () => { await openSuppliersList(); await deleteSupplier(purSuppliers()[0].id); document.querySelectorAll('.modal-overlay.sup-list').forEach(m => m.remove()); });
   ok('fournisseur avec achats : suppression refusée', (await p.evaluate(() => purSuppliers().length)) === 1);
-  await p.evaluate(() => document.querySelectorAll('.modal-overlay.sup-list').forEach(m => m.remove()));
-  // Suppression de l'achat : stock corrigé, TVA retirée
-  await p.evaluate(async () => { navTo('purchases'); await deletePurchase(purList().find(x => /-001$/.test(x.number)).id); }); await sleep(500);
-  ok('suppression de l\'achat : stock revenu à 0', (await p.evaluate(() => stockLevel('pf'))) === 0);
-  ok('serveur : historique conservé (entrée + sortie d\'annulation)', (await be.sql("SELECT count(*)::int n FROM stock_movements WHERE source='purchase'"))[0].n === 2);
-  ok('achat supprimé et retiré de la TVA', await p.evaluate(() => purList().length === 1 && allVatPurchases().filter(x => x.fromPurchase).length === 0));
-  // Rattrapage d'un achat dont l'entrée de stock avait échoué
-  await p.evaluate(async () => { const all = purList(); all.push({ id: 'pz', number: 'ACH-2026-099', date: todayISO(), supplierId: purSuppliers()[0].id, supplierName: 'Minoterie Atlas', lines: [{ productId: 'pf', description: 'Farine', qty: 5, price: 8, tva: 20 }], totalHT: 40, totalTVA: 8, totalTTC: 48, stockMoves: [{ key: 'pur:pz:0', productId: 'pf', productName: 'Farine 25kg', unit: 'sac', qty: 5 }], stockOk: false }); Storage.set('purchases', all); await purSyncStock(); await purSyncStock(); });
-  ok('stock en attente : renvoyé automatiquement, une seule fois', (await p.evaluate(() => stockLevel('pf'))) === 5 && (await p.evaluate(() => purList().find(x => x.id === 'pz').stockOk)) === true);
+  // Annulation : stock corrigé au coût d'achat, retirée de la TVA, visible « annulée »
+  await p.evaluate(async () => { navTo('purchases'); await cancelPurchase(purList().find(x => x.supplierName === 'Minoterie Atlas' && x.lines.length === 3).id); }); await sleep(500);
+  ok('annulation : stock de farine revenu à 0', (await p.evaluate(() => stockLevel('pf'))) === 0);
+  ok('annulation : sortie au coût de l\'achat (8), historique conservé (entrée + sortie)', (await be.sql("SELECT count(*)::int n, min(unit_cost)::float c FROM stock_movements WHERE product_id = 'pf'"))[0].n === 2);
+  ok('annulation : pièce toujours visible, « annulée », retirée de la TVA déductible', await p.evaluate(() => { const x = purList().find(y => y.number === 'ACH-2026-002'); return x.status === 'cancelled' && !allVatPurchases().some(v => v.ref.startsWith('ACH-2026-002')); }));
+  ok('filtre « Annulés » : 1 pièce', await p.evaluate(async () => { document.getElementById('purFilter').value = 'cancelled'; await renderPurchases(); const n = document.querySelectorAll('#purchasesList .pur-detail').length; document.getElementById('purFilter').value = 'all'; return n === 1; }));
+  ok('filtre « Charges » : pièces contenant une charge', await p.evaluate(async () => { document.getElementById('purFilter').value = 'expense'; await renderPurchases(); const n = document.querySelectorAll('#purchasesList .pur-detail').length; document.getElementById('purFilter').value = 'all'; return n === 2; }));   // gasoil, loyer (l'achat mixte annulé est exclu)
   // Injection
-  ok('injection : nom de fournisseur échappé', await p.evaluate(() => { const s = purSuppliers(); s[0].name = '<img src=x onerror=window.__x=1>'; Storage.set('suppliers', s); const pl = purList(); pl.forEach(x => { x.supplierName = s[0].name; }); Storage.set('purchases', pl); renderPurchases(); openSuppliersList(); const okk = !document.querySelector('#purchasesList img, .sup-list img') && !window.__x; document.querySelectorAll('.modal-overlay.sup-list').forEach(m => m.remove()); return okk; }));
-  if (process.env.SHOT_DIR) { await p.evaluate(() => { const s = purSuppliers(); s[0].name = 'Minoterie Atlas'; Storage.set('suppliers', s); const pl = purList(); pl.forEach(x => { x.supplierName = 'Minoterie Atlas'; }); Storage.set('purchases', pl); renderPurchases(); togglePurchaseDetail('pz'); }); await sleep(300); await p.screenshot({ path: process.env.SHOT_DIR + '/achats-liste.png', fullPage: true, animations: 'disabled' }); }
+  ok('injection : nom de fournisseur échappé', await p.evaluate(async () => { const s = purSuppliers(); s[0].name = '<img src=x onerror=window.__x=1>'; Storage.set('suppliers', s); openPurchase('expense'); document.getElementById('purSupplier').value = s[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-cat').value = 'Autre'; r.querySelector('.pl-desc').value = '<b>x</b>'; r.querySelector('.pl-price').value = '1'; await savePurchase(); await renderPurchases(); await openSuppliersList(); const okk = !document.querySelector('#purchasesList img, .sup-list img') && !window.__x && document.getElementById('purchasesList').textContent.includes('<b>x</b>'); document.querySelectorAll('.modal-overlay.sup-list').forEach(m => m.remove()); return okk; }));
+  if (process.env.SHOT_DIR) { await p.evaluate(async () => { const s = purSuppliers(); s[0].name = 'Minoterie Atlas'; Storage.set('suppliers', s); await renderPurchases(); }); await sleep(300); await p.screenshot({ path: process.env.SHOT_DIR + '/achats-liste.png', fullPage: true, animations: 'disabled' }); }
   await browser.close(); srv.close(); try { dropDb(db); } catch (e) {}
-  const n = R_.filter(Boolean).length; console.log(`\n${n === R_.length ? 'OK' : 'ÉCHEC'} : ${n}/${R_.length} contrôles (achats et fournisseurs)`); process.exit(n === R_.length ? 0 : 1);
+  const n = R_.filter(Boolean).length; console.log(`\n${n === R_.length ? 'OK' : 'ÉCHEC'} : ${n}/${R_.length} contrôles (achats et dépenses, serveur)`); process.exit(n === R_.length ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(1); });
