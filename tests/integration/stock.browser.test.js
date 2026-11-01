@@ -82,7 +82,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.evaluate(async (i) => { const v = Storage.get('invoices', []).find(x => x.id === i); await stockOnInvoiceIssued(v); await stockOnInvoiceIssued(v); }, inv1);
   ok('ré-application sur la même facture : pas de double déduction', (await level(F)) === 7);
   // 6) Avoir : remise en stock
-  await p.evaluate((i) => createCreditFromInvoice(i), inv1); await sleep(900);
+  // Avoir COMMERCIAL (pas de retour) : stock inchangé — vérifié sur une facture à part, puis avoir AVEC retour sur inv1
+  await p.evaluate((i) => { createCreditFromInvoice(i); }, inv1); await sleep(500);
+  ok('avoir : la fenêtre « retour de marchandise » s\'ouvre, case décochée par défaut', await p.evaluate(() => !!document.querySelector('.cr-return') && !document.querySelector('.cr-ret-on').checked));
+  await p.evaluate(() => { const m = document.querySelector('.cr-return'); m.querySelector('.cr-ret-on').click(); m.querySelector('.cr-ret-ok').click(); }); await sleep(1200);
   ok('avoir sur la facture : stock 7 → 10', (await level(F)) === 10, String(await level(F)));
   // 7) Période
   await p.evaluate(async (f) => { const d = new Date(); d.setMonth(d.getMonth() - 2); await stockRecord([{ key: 'old1', productId: f, productName: 'Farine 25kg', unit: 'kg', type: 'in', qty: 5, date: d.toISOString().slice(0, 10), source: 'manual', ref: '', refId: '', note: 'ancien' }]); navTo('stock'); setStockPeriod('month'); }, F);
