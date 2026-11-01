@@ -95,6 +95,8 @@ Uniquement après validation en préproduction et **par vous** :
 | Recette de bout en bout | parcours complet (comptes temporaires, transaction annulée) : CMUP 56, CA 1 000, coût des ventes 280, marge 720, charges 2 000, résultat −1 280, créances 600, dettes 744, stock 840, trésorerie 8 000 ; plafonds, clôture et isolation vérifiés | même parcours, mêmes résultats |
 | Application | — | PR #126 → #134 fusionnées dans `main`, publiées par GitHub Pages |
 
+**Validation du 01/11 (voir `docs/VALIDATION-2.0.md`)** : migration complémentaire `fp2_42_idempotence_concurrente` (préproduction, puis production). Elle reprend à l'identique les fonctions `purchase_record`, `delivery_record`, `cash_account_create`, `cash_movement_record` et `supplier_settle` de sql/37–39, désormais verrouillées par clé d'idempotence. Pour un nouvel environnement, les scripts 37 à 39 suffisent.
+
 Les migrations ont été appliquées sans aucune instruction `DROP` : les déclencheurs utilisent `CREATE OR REPLACE TRIGGER` et l'ancienne `stock_list` a été **renommée** `stock_list_pre36`, sans droits.
 
 Les schémas `fp_backup_20261101` et `fp_restore_test` restent en base. Ils sont sans aucun droit pour `anon` et `authenticated`, et ne sont pas exposés par l'API. Supprimez-les à la main quand la version est validée :
@@ -152,7 +154,11 @@ ALTER TABLE public.user_data ENABLE TRIGGER USER;
 | Clôture (sql/40) | `test_cloture.sql` (38) | `cloture` (17) |
 | Indicateurs (sql/41) | `test_indicateurs.sql` (21) | `pilotage` (14) |
 | Journaux | — | `journaux` (12) |
-| Sécurité transversale 36–41 | `test_fp2_securite.sql` (7) | — |
+| Sécurité transversale 36–41 | `test_fp2_securite.sql` (8) | — |
+| Recette §6 complète | — | `recette` (24) |
+| Opérations simultanées | — | `concurrence-fp2` (15) |
+| Annulation de paiement | — | `paiement-annulation` (13) |
+| Déconnexion / copie locale | — | `deconnexion-locale` (5) |
 | Chiffres / avoirs | — | `chiffres` (11), `avoir-retour` (13) |
 
 ## 8. Limites connues (à traiter après 2.0)
