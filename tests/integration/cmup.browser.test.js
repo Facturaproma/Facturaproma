@@ -48,7 +48,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const buy = (qty, price, vat = true) => p.evaluate(async ([q, pr, v]) => {
     openPurchase(); document.getElementById('purSupplier').value = 's1'; const r = document.querySelector('#purLines .pur-line');
     r.querySelector('.pl-prod').value = 'pa'; onPurchaseProduct(r.querySelector('.pl-prod')); r.querySelector('.pl-qty').value = String(q); r.querySelector('.pl-price').value = String(pr);
-    document.getElementById('purVat').checked = v; await savePurchase(); return purList().slice(-1)[0].id;
+    document.getElementById('purVat').checked = v; await savePurchase(); return purList()[0].id;
   }, [qty, price, vat]);
   const mv = (key) => be.sql("SELECT unit_cost::float c, cost_known k, cmup_after::float m, return_of r, move_type t, qty::float q FROM stock_movements WHERE idem_key = $1", [key]).then(r => r[0]);
   const cmup = () => p.evaluate(async () => { await stockRefreshLevels(); const v = stockValOf('pa'); return v && v.cmup; });
@@ -91,8 +91,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('écran Stock : colonnes Coût moyen et Valeur, total, avertissement de coût estimé', /Coût moyen/i.test(txt) && /Valeur totale du stock/.test(txt) && /\*/.test(txt), txt.replace(/\s+/g, ' ').slice(0, 200));
   ok('détail des mouvements : coût affiché, « (estimé) » pour l\'entrée sans coût', /coût 56,00/.test(await p.innerText('#stockMoves')) && /\(estimé\)/.test(await p.innerText('#stockMoves')));
   // Suppression du 1er achat : sortie au coût de l'achat (50)
-  await p.evaluate(async (id) => { navTo('purchases'); await deletePurchase(id); }, p1); await sleep(500);
-  const del = await mv(`pur-del:${p1}:0`);
+  await p.evaluate(async (id) => { navTo('purchases'); await purLoad(); await cancelPurchase(id); }, p1); await sleep(500);
+  const del = await mv(`pur-cancel:${p1}:0`);
   ok('achat supprimé : sortie au coût de l\'achat (50), pas au CMUP', del && del.c === 50 && del.t === 'out', JSON.stringify(del));
   // Cohérence finale : état serveur = somme des mouvements ; valeur = qté × CMUP
   const fin = (await be.sql("SELECT s.qty::float q, s.cmup::float c, (SELECT sum(CASE WHEN move_type='in' THEN qty ELSE -qty END)::float FROM stock_movements) sm FROM stock_cost_state s"))[0];
