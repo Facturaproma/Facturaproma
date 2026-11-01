@@ -116,13 +116,14 @@ Uniquement après validation en préproduction et **par vous** :
 
 | Domaine | Tests SQL | Contrôles navigateur |
 |---|---|---|
-| CMUP (sql/36) | `test_stock_cout.sql` (36) | `cmup` (15) |
+| CMUP (sql/36) | `test_stock_cout.sql` (33) | `cmup` (15) |
 | Achats (sql/37) | `test_achats.sql` (48) | `achats` (27) |
 | BL (sql/38) | `test_livraisons.sql` (33) | `livraisons` (24) |
 | Trésorerie (sql/39) | `test_tresorerie.sql` (34) | `tresorerie` (21) |
 | Clôture (sql/40) | `test_cloture.sql` (38) | `cloture` (17) |
 | Indicateurs (sql/41) | `test_indicateurs.sql` (21) | `pilotage` (14) |
 | Journaux | — | `journaux` (12) |
+| Sécurité transversale 36–41 | `test_fp2_securite.sql` (7) | — |
 | Chiffres / avoirs | — | `chiffres` (11), `avoir-retour` (13) |
 
 ## 8. Limites connues (à traiter après 2.0)

@@ -24,7 +24,8 @@
 --   DROP TRIGGER IF EXISTS trg_fin_closure_delivery ON public.deliveries;    DROP TRIGGER IF EXISTS trg_fin_closure_cash ON public.cash_movements;
 --   DROP TRIGGER IF EXISTS trg_fin_closure_account ON public.cash_accounts;
 --   DROP FUNCTION IF EXISTS public.period_close(TEXT, TEXT), public.period_reopen(TEXT, TEXT), public.period_status(), public.period_check(TEXT),
---     public.fin_lock_date(UUID), public.fin_closure_row_guard(), public.fin_closure_userdata_guard();
+--     public.fin_lock_date(UUID), public.fin_closure_row_guard(), public.fin_closure_userdata_guard(), public.fin_month_end(TEXT);
+--   DROP TRIGGER IF EXISTS trg_closure_guard ON public.period_closures;  DROP FUNCTION IF EXISTS public.fin_closure_guard();
 --   recoller la version « vide » de fin_assert_open de sql/37 ;  DROP TABLE IF EXISTS public.period_closures;
 -- ============================================================================================================
 
@@ -58,6 +59,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END; $$;
+REVOKE ALL ON FUNCTION public.fin_closure_guard() FROM PUBLIC, anon, authenticated;
 DROP TRIGGER IF EXISTS trg_closure_guard ON public.period_closures;
 CREATE TRIGGER trg_closure_guard BEFORE UPDATE ON public.period_closures FOR EACH ROW EXECUTE FUNCTION public.fin_closure_guard();
 
