@@ -16,10 +16,21 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: app.html
+          sparse-checkout-cone-mode: false
       - name: Ping Supabase
+        # Appelle la seule fonction publique (lien client) avec un jeton inexistant : requête réelle sur la base,
+        # aucune donnée renvoyée (null). La lecture anonyme de user_data est interdite depuis le durcissement des droits.
+        # La clé publique (anon) est lue dans app.html au lieu d'être recopiée ici.
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-            "https://mdozjptoecygmpkjlohr.supabase.co/rest/v1/user_data?select=id&limit=1" \
-            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q")
+          KEY=$(grep -oP "const SUPABASE_ANON_KEY = '\K[^']+" app.html)
+          test -n "$KEY"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST \
+            "https://mdozjptoecygmpkjlohr.supabase.co/rest/v1/rpc/get_shared_invoice" \
+            -H "Content-Type: application/json" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -d '{"p_token":"0000000000000000000000000000000000000000000000000000000000000000"}')
           echo "HTTP $code"
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then exit 1; fi
