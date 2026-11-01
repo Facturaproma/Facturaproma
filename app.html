@@ -6721,7 +6721,7 @@ const Auth = {
                 throw new Error('Cet email est déjà utilisé');
             }
             const passwordHash = await this._hashPassword(password);
-            const userId = 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+            const userId = 'user_' + ((window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '').slice(0, 16) : Date.now().toString(36) + Math.random().toString(36).substr(2, 6));
             users.push({ id: userId, email, passwordHash, createdAt: new Date().toISOString() });
             this._saveLocalUsers(users);
             this._createLocalSession(userId, email);
@@ -7301,6 +7301,7 @@ let clientFromInvoice = false;
 // HELPERS
 // ============================================
 function uuid() {
+    if (window.crypto && crypto.getRandomValues) { const r = new Uint32Array(2); crypto.getRandomValues(r); return Date.now().toString(36) + r[0].toString(36) + r[1].toString(36).slice(0, 3); }
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
@@ -7781,9 +7782,9 @@ async function submitForgotPassword() {
         await Auth.resetPassword(email);
         
         if (USE_SUPABASE) {
-            showOk(`✓ Email envoyé à <strong>${email}</strong><br><br>📬 Vérifiez votre boîte de réception (et les spams).<br>Le lien est valable 1 heure.`);
+            showOk(`✓ Email envoyé à <strong>${escapeHtml(email)}</strong><br><br>📬 Vérifiez votre boîte de réception (et les spams).<br>Le lien est valable 1 heure.`);
         } else {
-            showOk(`✓ Si un compte existe avec <strong>${email}</strong>, vous recevrez un email de réinitialisation.<br><br>⚠️ Mode local : contactez le support via WhatsApp si pas reçu.`);
+            showOk(`✓ Si un compte existe avec <strong>${escapeHtml(email)}</strong>, vous recevrez un email de réinitialisation.<br><br>⚠️ Mode local : contactez le support via WhatsApp si pas reçu.`);
         }
         
         // Fermer après 4 secondes
@@ -12745,7 +12746,8 @@ function generateInvitationCode() {
     
     // Generate code
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const segment = (n) => Array.from({length: n}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    // Code d'invitation = jeton : tirage cryptographique (crypto.getRandomValues), pas Math.random
+    const segment = (n) => { const r = new Uint32Array(n); crypto.getRandomValues(r); return Array.from(r, (x) => chars[x % chars.length]).join(''); };
     const code = `TEAM-${segment(4)}-${segment(4)}`;
     
     const session = Storage.get('_session', {});
