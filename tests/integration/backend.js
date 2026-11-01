@@ -21,7 +21,7 @@ function createDb(opts = {}) {
   psql(db, ['-c', 'GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated; REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.doc_counters, public.doc_events FROM authenticated;']);
   if (opts.messagerie) for (const f of ['28_admin_nom_societe', '29_messagerie_support']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   if (opts.paiementCode) for (const f of ['20_formules_configurables', '32_paiement_lie_au_code'].concat(opts.documentsVente ? ['33_documents_vente'] : [])) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
-  if (opts.stock) for (const f of ['34_stock', '35_stock_achats_livraisons', '36_stock_cout', '37_achats_serveur', '38_livraisons_serveur', '39_tresorerie', '40_cloture', '41_indicateurs', '43_avoir_partiel']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
+  if (opts.stock) for (const f of ['34_stock', '35_stock_achats_livraisons', '36_stock_cout', '37_achats_serveur', '38_livraisons_serveur', '39_tresorerie', '40_cloture', '41_indicateurs', '43_avoir_partiel', '44_avoir_fournisseur']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   if (opts.partage) psql(db, ['-f', path.join(ROOT, 'sql', '30_lien_client_facture.sql')]);
   if (opts.docs) {
     // comme Supabase : privilèges par défaut larges, puis les scripts 15/16/17 retirent ce qui doit l'être
@@ -60,13 +60,14 @@ function makeBackend(db) {
     share_invoice: ['p_invoice_id', 'p_snapshot', 'p_days'], admin_confirm_payment: ['p_id', 'p_amount', 'p_mode', 'p_date', 'p_note'], revoke_invoice_share: ['p_invoice_id'], my_invoice_shares: [],
     stock_record: ['p_moves'], stock_levels: [], stock_period: ['p_from', 'p_to'], stock_list: ['p_from', 'p_to', 'p_limit', 'p_offset'], stock_valuation: ['p_date'],
     purchase_record: ['p'], purchase_cancel: ['p_id', 'p_reason'], purchase_list: ['p_from', 'p_to', 'p_status', 'p_limit', 'p_offset'], fin_import_legacy_purchases: ['p_items'],
+    purchase_credit_record: ['p'], purchase_credit_list: ['p_purchase'],
     delivery_record: ['p'], delivery_cancel: ['p_id', 'p_reason'], delivery_link_invoice: ['p_ids', 'p_invoice_id'], delivery_unlink_invoice: ['p_invoice_id'],
     delivery_invoice_issued: ['p_invoice_id', 'p_number'], delivery_list: ['p_from', 'p_to', 'p_status', 'p_limit', 'p_offset'], fin_import_legacy_deliveries: ['p_items'],
     cash_account_create: ['p'], cash_account_archive: ['p_id', 'p_archived'], cash_accounts_list: [], cash_movement_record: ['p'], supplier_settle: ['p'],
     cash_movement_reverse: ['p_id', 'p_reason'], cash_balances: ['p_date'], cash_list: ['p_from', 'p_to', 'p_account', 'p_limit', 'p_offset'],
     period_status: [], period_check: ['p_month'], period_close: ['p_month', 'p_note'], period_reopen: ['p_month', 'p_reason'],
     fin_summary: ['p_from', 'p_to'], fin_monthly: ['p_from', 'p_to'] };
-  const RPC_SET = ['my_invoice_shares', 'support_my_messages', 'admin_support_threads', 'admin_support_messages', 'stock_levels', 'stock_period', 'stock_list', 'stock_valuation', 'purchase_list', 'delivery_list', 'cash_accounts_list', 'cash_balances', 'cash_list', 'fin_monthly'];   // fonctions qui renvoient une table
+  const RPC_SET = ['my_invoice_shares', 'support_my_messages', 'admin_support_threads', 'admin_support_messages', 'stock_levels', 'stock_period', 'stock_list', 'stock_valuation', 'purchase_list', 'purchase_credit_list', 'delivery_list', 'cash_accounts_list', 'cash_balances', 'cash_list', 'fin_monthly'];   // fonctions qui renvoient une table
   const GENERIC = ['subscription_requests', 'admin_codes', 'admin_settings', 'licenses', 'admins', 'admin_payments', 'plans', 'admin_documents'];
   const JSONB_PARAMS = ['p', 'p_items', 'p_moves', 'p_doc', 'p_payment', 'p_entries', 'p_snapshot'];
   const DOC_TABLES = { documents: 'doc_type, id, version, body, created_at', doc_payments: 'id, body, created_at', doc_history: 'seq, ts, body' };
