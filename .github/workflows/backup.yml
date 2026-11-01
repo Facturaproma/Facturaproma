@@ -1,7 +1,7 @@
 name: Sauvegarde Supabase (chiffrée)
 
 # Sauvegarde hebdomadaire de la base, CHIFFRÉE avant d'être déposée comme
-# "artifact" GitHub (conservé 14 jours). Ce dépôt est public : sans chiffrement,
+# "artifact" GitHub (conservé 30 jours). Ce dépôt est public : sans chiffrement,
 # les données clients seraient lisibles par n'importe qui. Ne jamais retirer l'étape de chiffrement.
 #
 # Secrets à créer (Settings > Secrets and variables > Actions > New repository secret) :
@@ -10,7 +10,7 @@ name: Sauvegarde Supabase (chiffrée)
 #   BACKUP_PASSPHRASE   phrase secrète longue, à noter dans un gestionnaire de mots de passe
 on:
   schedule:
-    - cron: '23 3 * * 1'   # chaque lundi à 03:23 UTC
+    - cron: '23 3 * * *'   # chaque jour à 03:23 UTC (offre Supabase gratuite : aucune sauvegarde côté Supabase)
   workflow_dispatch:
 
 # Moindre privilège : le jeton du workflow ne peut que lire le dépôt
@@ -99,5 +99,5 @@ jobs:
         with:
           name: sauvegarde-supabase
           path: "*.gpg"
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: error
