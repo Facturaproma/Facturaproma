@@ -10331,10 +10331,18 @@ async function purLoad(force) {
         const { data, error } = await supaClient.rpc('purchase_list', { p_from: null, p_to: null, p_status: null, p_limit: 5000, p_offset: 0 });
         if (error) throw new Error(error.message || 'erreur');
         _purCache = (data || []).map(purFromServer);
+        // Avoirs fournisseurs (sql/44) : rattachés à leur achat ; serveur sans sql/44 → aucun avoir
+        const cr = await supaClient.rpc('purchase_credit_list', { p_purchase: null });
+        const credits = cr.error ? [] : (cr.data || []);
+        _purCache.forEach(pu => { pu.credits = credits.filter(c => c.purchase_id === pu.id).map(c => ({ id: c.id, number: c.number, date: c.doc_date, supplierRef: c.supplier_ref || '', reason: c.reason,
+            totalHT: Number(c.total_ht), totalTVA: Number(c.total_tva), totalTTC: Number(c.total_ttc), lines: (c.lines || []).map(l => ({ lineNo: l.line_no, qty: Number(l.qty), price: Number(l.unit_price), totalHT: Number(l.total_ht), totalTVA: Number(l.total_tva), returned: Number(l.returned_qty) || 0, description: l.description, nature: l.nature, category: l.category, tva: Number(l.tva_rate) })) }));
+            pu.credited = purR2(pu.credits.reduce((t, c) => t + c.totalTTC, 0)); });
         return _purCache;
     })();
     try { return await _purLoading; } finally { _purLoading = null; }
 }
+// Reste dû à un fournisseur : TTC − règlements − avoirs fournisseurs (jamais négatif)
+function purDue(p) { return p ? Math.max(0, purR2(p.totalTTC - (p.paid || 0) - (p.credited || 0))) : 0; }
 function purTotals(lines) {
     let ht = 0, tva = 0;
     (lines || []).forEach(l => { const h = purR2((Number(l.qty) || 0) * (Number(l.price) || 0)); ht += h; tva += purR2(h * (Number(l.tva) || 0) / 100); });
@@ -10344,8 +10352,11 @@ function purTotals(lines) {
 // Achats dans la TVA déductible (forme attendue par vatDeductible) : achats ACTIFS dont la TVA est déclarée déductible
 function allVatPurchases() {
     const manual = Storage.get('vatPurchases', []) || [];
-    const mod = purList().filter(p => p.status !== 'cancelled' && p.includeVat !== false).map(p => ({ id: 'pur:' + p.id, date: p.date, supplier: p.supplierName || '', ref: [p.number, p.supplierRef].filter(Boolean).join(' / '), ht: p.totalHT, tva: p.totalTVA, fromPurchase: true }));
-    return manual.concat(mod);
+    const act = purList().filter(p => p.status !== 'cancelled' && p.includeVat !== false);
+    const mod = act.map(p => ({ id: 'pur:' + p.id, date: p.date, supplier: p.supplierName || '', ref: [p.number, p.supplierRef].filter(Boolean).join(' / '), ht: p.totalHT, tva: p.totalTVA, fromPurchase: true }));
+    // Avoirs fournisseurs : TVA déductible diminuée à la date de l'avoir
+    const crs = act.flatMap(p => (p.credits || []).map(c => ({ id: 'pcr:' + c.id, date: c.date, supplier: p.supplierName || '', ref: [c.number, c.supplierRef].filter(Boolean).join(' / '), ht: -c.totalHT, tva: -c.totalTVA, fromPurchase: true })));
+    return manual.concat(mod, crs);
 }
 const purNatureMix = (p) => { const n = new Set((p.lines || []).map(l => l.nature)); return [...n].map(x => PUR_NATURES[x] || x).join(' + '); };
 let _purRenderTok = 0;
@@ -10378,11 +10389,12 @@ async function renderPurchases() {
     el.innerHTML = list.map(p => {
         const cancelled = p.status === 'cancelled';
         const lines = p.lines.map(l => `<div class="stk-row" style="padding:6px 0; border:0;"><div class="stk-main">${escapeHtml(l.description || '—')}<div class="stk-sub">${escapeHtml(PUR_NATURES[l.nature] || '')}${l.category ? ' · ' + escapeHtml(l.category) : ''}${l.trackStock ? ' · 🏬 en stock' : ''} · ${stockFmt(l.qty)} ${escapeHtml(l.unit || '')} × ${formatCurrency(l.price)} HT · TVA ${l.tva}%</div></div><div class="stk-qty" style="font-size:13px;">${formatCurrency(l.totalHT)}</div></div>`).join('');
-        return `<div class="stk-row" style="cursor:pointer;${cancelled ? ' opacity:0.55;' : ''}" onclick="togglePurchaseDetail(${jsArg(p.id)})"><div class="stk-main"><strong>${escapeHtml(p.supplierName || '—')}</strong><div class="stk-sub">${escapeHtml(p.number || '')} · ${formatDate(p.date)}${p.supplierRef ? ' · réf. ' + escapeHtml(p.supplierRef) : ''} · ${escapeHtml(purNatureMix(p))}${cancelled ? ' · <span style="color:var(--danger);">annulé</span>' : (p.totalTTC - p.paid > 0.005 ? ' · <span style="color:var(--warning);">à payer</span>' : ' · <span style="color:var(--success);">soldé</span>')}</div></div><div class="stk-qty">${formatCurrency(p.totalTTC)}<div class="stk-sub">TTC</div></div></div>
+        return `<div class="stk-row" style="cursor:pointer;${cancelled ? ' opacity:0.55;' : ''}" onclick="togglePurchaseDetail(${jsArg(p.id)})"><div class="stk-main"><strong>${escapeHtml(p.supplierName || '—')}</strong><div class="stk-sub">${escapeHtml(p.number || '')} · ${formatDate(p.date)}${p.supplierRef ? ' · réf. ' + escapeHtml(p.supplierRef) : ''} · ${escapeHtml(purNatureMix(p))}${cancelled ? ' · <span style="color:var(--danger);">annulé</span>' : (purDue(p) > 0.005 ? ' · <span style="color:var(--warning);">à payer</span>' : ' · <span style="color:var(--success);">soldé</span>')}${p.credited > 0 ? ' · avoir ' + formatCurrency(p.credited) : ''}</div></div><div class="stk-qty">${formatCurrency(p.totalTTC)}<div class="stk-sub">TTC</div></div></div>
         <div class="pur-detail" data-pur="${escapeHtml(p.id)}" style="display:none; padding:4px 16px 12px; background:var(--surface-soft); border-bottom:1px solid var(--border);">${lines}
             <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:13px; margin-top:6px;"><span>HT <b>${formatCurrency(p.totalHT)}</b> · TVA <b>${formatCurrency(p.totalTVA)}</b>${p.includeVat ? '' : ' (non déductible)'}</span>
-            ${cancelled ? `<span class="stk-sub">Annulé${p.cancelReason ? ' : ' + escapeHtml(p.cancelReason) : ''}</span>` : `<span style="display:flex; gap:6px; flex-wrap:wrap;">${p.totalTTC - p.paid > 0.005 ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openSettle(${jsArg(p.id)})">💳 Régler</button>` : ''}<button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="event.stopPropagation(); cancelPurchase(${jsArg(p.id)})">↩️ Annuler l'achat</button></span>`}</div>
-            ${cancelled ? '' : `<div class="stk-sub" style="margin-top:4px;">${p.paid > 0.005 ? 'Réglé ' + formatCurrency(p.paid) + ' · ' : ''}${p.totalTTC - p.paid > 0.005 ? `<span style="color:${p.dueDate && p.dueDate < todayISO() ? 'var(--danger)' : 'var(--warning)'};">reste à payer ${formatCurrency(p.totalTTC - p.paid)}${p.dueDate ? ' (échéance ' + formatDate(p.dueDate) + ')' : ''}</span>` : '<span style="color:var(--success);">soldé</span>'}</div>`}
+            ${cancelled ? `<span class="stk-sub">Annulé${p.cancelReason ? ' : ' + escapeHtml(p.cancelReason) : ''}</span>` : `<span style="display:flex; gap:6px; flex-wrap:wrap;">${purDue(p) > 0.005 ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openSettle(${jsArg(p.id)})">💳 Régler</button>` : ''}${purCreditable(p).length ? `<button class="btn btn-ghost btn-sm" style="color:var(--warning);" onclick="event.stopPropagation(); openSupplierCredit(${jsArg(p.id)})">🧾 Avoir fournisseur</button>` : ''}${(p.credits || []).length ? '' : `<button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="event.stopPropagation(); cancelPurchase(${jsArg(p.id)})">↩️ Annuler l'achat</button>`}</span>`}</div>
+            ${(p.credits || []).map(c => `<div class="stk-sub" style="margin-top:4px; color:var(--warning);">🧾 ${escapeHtml(c.number)} · ${formatDate(c.date)}${c.supplierRef ? ' · réf. ' + escapeHtml(c.supplierRef) : ''} · −${formatCurrency(c.totalTTC)} TTC · ${escapeHtml(c.reason)}${c.lines.some(l => l.returned > 0) ? ' · 🏬 retour en stock' : ''}</div>`).join('')}
+            ${cancelled ? '' : `<div class="stk-sub" style="margin-top:4px;">${p.paid > 0.005 ? 'Réglé ' + formatCurrency(p.paid) + ' · ' : ''}${purDue(p) > 0.005 ? `<span style="color:${p.dueDate && p.dueDate < todayISO() ? 'var(--danger)' : 'var(--warning)'};">reste à payer ${formatCurrency(purDue(p))}${p.dueDate ? ' (échéance ' + formatDate(p.dueDate) + ')' : ''}</span>` : '<span style="color:var(--success);">soldé</span>'}${p.paid + (p.credited || 0) > p.totalTTC + 0.005 ? ` · <span style="color:var(--danger);">trop-payé ${formatCurrency(p.paid + p.credited - p.totalTTC)} : remboursement à obtenir du fournisseur</span>` : ''}</div>`}
             ${p.note ? `<div class="stk-sub" style="margin-top:4px;">${escapeHtml(p.note)}</div>` : ''}</div>`;
     }).join('');
 }
@@ -10506,6 +10518,84 @@ async function savePurchase() {
         const nStock = lines.filter(l => l.trackStock).length;
         showToast(`${data.number} enregistré ✓` + (nStock ? ` — stock : +${nStock} ligne${nStock > 1 ? 's' : ''}` : '') + payMsg, payMsg.includes('⚠️') ? 'error' : 'success');
     } finally { _purSaving = false; }
+}
+// ---- Avoir fournisseur (sql/44) ----
+// Lignes encore créditables d'un achat actif : [{ l, htLeft, qtyLeft }] (marchandise suivie : quantité restant à retourner)
+function purCreditable(p) {
+    if (!p || p.status === 'cancelled' || !Array.isArray(p.credits)) return [];
+    return (p.lines || []).map(l => {
+        const done = p.credits.flatMap(c => c.lines).filter(x => x.lineNo === l.lineNo);
+        const htLeft = purR2(l.totalHT - done.reduce((t, x) => t + x.totalHT, 0));
+        const qtyLeft = l.trackStock ? stockRound(l.qty - done.reduce((t, x) => t + x.returned, 0)) : l.qty;
+        return { l, htLeft, qtyLeft };
+    }).filter(x => x.htLeft > 0.005 && x.qtyLeft > 0);
+}
+let _pcrKey = null;
+function openSupplierCredit(id) {
+    if (Storage._blockedByLicense('purchases')) return showToast('🔒 Licence expirée : lecture seule. Activez votre licence pour enregistrer.', 'error');
+    const p = purList().find(x => x.id === id);
+    const lines = purCreditable(p);
+    if (!lines.length) return showToast('Cet achat est déjà entièrement couvert par des avoirs.', 'error');
+    _pcrKey = 'pcr:' + uuid();
+    document.querySelectorAll('.modal-overlay.pcr-modal').forEach(m => m.remove());
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay active pcr-modal'; modal.style.zIndex = '5000';
+    modal.innerHTML = `<div class="modal-content" style="max-width: 620px;" onclick="event.stopPropagation()">
+        <h2>Avoir fournisseur sur ${escapeHtml(p.number)}</h2>
+        <p style="font-size:13px; color: var(--ink-mute);">${escapeHtml(p.supplierName)} · achat ${formatCurrency(p.totalTTC)} TTC${p.credited > 0 ? ' · avoirs déjà reçus ' + formatCurrency(p.credited) : ''}. L'achat n'est pas modifié : l'avoir vient en déduction de la dette, des charges et de la TVA déductible.</p>
+        <div class="pcr-lines">${lines.map(x => `<div class="pcr-line" data-no="${x.l.lineNo}" style="border-bottom:1px solid var(--border); padding:8px 0;">
+            <div style="font-weight:600;">${escapeHtml(x.l.description)}</div>
+            <div class="stk-sub">${escapeHtml(PUR_NATURES[x.l.nature] || '')}${x.l.category ? ' · ' + escapeHtml(x.l.category) : ''} · acheté ${stockFmt(x.l.qty)} × ${formatCurrency(x.l.price)} HT · reste ${formatCurrency(x.htLeft)} HT${x.l.trackStock ? ` · 🏬 retour au fournisseur (au prix d'achat), au plus ${stockFmt(x.qtyLeft)}` : ''}</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+                <label style="font-size:12px;">${x.l.trackStock ? 'Quantité retournée' : 'Quantité'}<input type="number" class="pcr-qty" min="0" max="${x.qtyLeft}" step="0.001" value="0" style="width:110px; display:block;"></label>
+                <label style="font-size:12px;">Prix unitaire HT<input type="number" class="pcr-price" min="0" max="${x.l.price}" step="0.01" value="${x.l.price}" ${x.l.trackStock ? 'disabled' : ''} style="width:120px; display:block;"></label>
+            </div></div>`).join('')}</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            <label style="font-size:13px;">Date<input type="date" class="pcr-date" value="${todayISO()}" min="${escapeHtml(String(p.date).slice(0, 10))}" style="display:block;"></label>
+            <label style="font-size:13px;">N° d'avoir du fournisseur<input type="text" class="pcr-ref" maxlength="60" placeholder="facultatif" style="display:block;"></label>
+        </div>
+        <label style="font-size:13px; font-weight:600; display:block; margin-top:8px;">Motif (obligatoire)<input type="text" class="pcr-reason" maxlength="200" placeholder="Ex. : 3 sacs abîmés retournés, remise sur le loyer" style="display:block; width:100%;"></label>
+        <p class="pcr-total" style="font-weight:700; margin:10px 0;">Total de l'avoir : ${formatCurrency(0)}</p>
+        <div class="modal-actions"><button class="btn btn-ghost pcr-cancel">Annuler</button><button class="btn btn-primary pcr-ok">Enregistrer l'avoir</button></div></div>`;
+    const read = () => [...modal.querySelectorAll('.pcr-line')].map(r => ({ line_no: Number(r.dataset.no), qty: stockRound(parseFloat(r.querySelector('.pcr-qty').value) || 0), unit_price: Math.round((parseFloat(r.querySelector('.pcr-price').value) || 0) * 10000) / 10000 })).filter(x => x.qty > 0);
+    const refresh = () => { const sel = read(); let ht = 0, tva = 0; sel.forEach(x => { const l = p.lines.find(y => y.lineNo === x.line_no); const h = purR2(x.qty * x.unit_price); ht += h; tva += purR2(h * (l ? l.tva : 0) / 100); });
+        modal.querySelector('.pcr-total').textContent = `Total de l'avoir : ${formatCurrency(purR2(ht + tva))} TTC`; };
+    modal.addEventListener('input', refresh);
+    modal.querySelector('.pcr-cancel').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    let busy = false;
+    modal.querySelector('.pcr-ok').addEventListener('click', async () => {
+        if (busy) return;
+        const sel = read(), date = modal.querySelector('.pcr-date').value, reason = modal.querySelector('.pcr-reason').value.trim();
+        if (!sel.length) return showToast('Indiquez au moins une quantité', 'error');
+        for (const x of sel) {
+            const c = lines.find(y => y.l.lineNo === x.line_no);
+            if (x.qty > c.qtyLeft + 0.0005) return showToast(`« ${c.l.description} » : au plus ${stockFmt(c.qtyLeft)}`, 'error');
+            if (x.unit_price > c.l.price + 0.00005) return showToast(`« ${c.l.description} » : le prix ne peut pas dépasser le prix d'achat`, 'error');
+            if (purR2(x.qty * x.unit_price) > c.htLeft + 0.01) return showToast(`« ${c.l.description} » : montant supérieur au reste (${formatCurrency(c.htLeft)} HT)`, 'error');
+        }
+        if (!date || date < String(p.date).slice(0, 10)) return showToast('Date invalide (pas avant la date de l\'achat)', 'error');
+        if (reason.length < 3) return showToast('Indiquez le motif (3 caractères minimum)', 'error');
+        await finLoadLock();
+        if (finIsClosed(date)) return showToast(finClosedMsg(), 'error');
+        busy = true;
+        const { data, error } = await supaClient.rpc('purchase_credit_record', { p: { key: _pcrKey, purchase_id: p.id, date, reason, supplier_ref: modal.querySelector('.pcr-ref').value.trim(), lines: sel } });
+        busy = false;
+        if (error) {
+            const m = String(error.message || '');
+            const msg = /REMISE_STOCK_NON_GEREE/.test(m) ? 'Marchandise suivie en stock : seul un retour au prix d\'achat est possible.'
+                : /RETOUR_SUPERIEUR|AVOIR_SUPERIEUR|QUANTITE_INVALIDE|PRIX_INVALIDE/.test(m) ? 'Montant ou quantité supérieur à ce qui reste sur l\'achat.'
+                : /PERIODE_CLOTUREE/.test(m) ? finClosedMsg() : /LICENCE_INACTIVE/.test(m) ? '🔒 Licence expirée : lecture seule.'
+                : /STOCK|INSUFFISANT/.test(m) ? 'Stock insuffisant pour ce retour.' : 'Avoir non enregistré : ' + m.slice(0, 120);
+            return showToast(msg, 'error');
+        }
+        modal.remove();
+        showToast(`✓ Avoir ${data.number} enregistré (−${formatCurrency(data.total_ttc)})${data.stock_lines ? ' · stock mis à jour' : ''}${Number(data.overpaid) > 0 ? ' · trop-payé ' + formatCurrency(data.overpaid) + ' à vous faire rembourser' : ''}`, 'success');
+        await purLoad(true).catch(() => {});
+        if (typeof stockRefreshLevels === 'function') stockRefreshLevels().catch(() => {});
+        renderPurchases();
+    });
+    document.body.appendChild(modal);
 }
 async function cancelPurchase(id) {
     const p = purList().find(x => x.id === id);
@@ -10932,11 +11022,11 @@ async function renderTreasury() {
           + (accounts.some(r => !r.archived && r.kind === 'cash' && Number(r.balance) < -0.005) ? `<div style="padding:0 16px 10px; font-size:12px; color:var(--danger);">⚠️ Une caisse ne peut pas être négative : un encaissement manque ou une sortie a été saisie sur le mauvais compte. Vérifiez le journal ci-dessous.</div>` : '')
           + (unassigned && Number(unassigned.customer_in) > 0 ? `<div style="padding:0 16px 12px; font-size:12px; color:var(--warning);">⚠️ ${formatCurrency(unassigned.customer_in)} d'encaissements clients enregistrés sans compte (paiements anciens) : non comptés dans les soldes. Corrigez si besoin par un « Ajustement (+) ».</div>` : '');
     // Dettes fournisseurs
-    const debts = purList().filter(p => p.status !== 'cancelled' && p.totalTTC - p.paid > 0.005);
-    const owed = debts.reduce((t, p) => t + (p.totalTTC - p.paid), 0), late = debts.filter(p => p.dueDate && p.dueDate < todayISO());
+    const debts = purList().filter(p => p.status !== 'cancelled' && purDue(p) > 0.005);
+    const owed = debts.reduce((t, p) => t + purDue(p), 0), late = debts.filter(p => p.dueDate && p.dueDate < todayISO());
     dEl.innerHTML = debts.length
         ? `<div style="padding:10px 16px; font-size:13px;">Reste à payer aux fournisseurs : <strong>${formatCurrency(owed)}</strong> (${debts.length} pièce${debts.length > 1 ? 's' : ''})${late.length ? ` · <span style="color:var(--danger);">${late.length} en retard</span>` : ''}</div>`
-          + debts.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).slice(0, 20).map(p => `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(p.supplierName)}</strong><div class="stk-sub">${escapeHtml(p.number)} · ${p.dueDate ? 'échéance ' + formatDate(p.dueDate) : 'sans échéance'}${p.dueDate && p.dueDate < todayISO() ? ' · <span style="color:var(--danger);">en retard</span>' : ''}</div></div><div style="display:flex; gap:8px; align-items:center;"><div class="stk-qty">${formatCurrency(p.totalTTC - p.paid)}</div><button class="btn btn-secondary btn-sm" onclick="openSettle(${jsArg(p.id)})">💳 Régler</button></div></div>`).join('')
+          + debts.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).slice(0, 20).map(p => `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(p.supplierName)}</strong><div class="stk-sub">${escapeHtml(p.number)} · ${p.dueDate ? 'échéance ' + formatDate(p.dueDate) : 'sans échéance'}${p.dueDate && p.dueDate < todayISO() ? ' · <span style="color:var(--danger);">en retard</span>' : ''}</div></div><div style="display:flex; gap:8px; align-items:center;"><div class="stk-qty">${formatCurrency(purDue(p))}</div><button class="btn btn-secondary btn-sm" onclick="openSettle(${jsArg(p.id)})">💳 Régler</button></div></div>`).join('')
         : '<div style="padding:12px 16px; font-size:13px; color:var(--ink-mute);">Aucune dette fournisseur.</div>';
     // Journal
     const accName = Object.fromEntries((_cashAccounts || []).map(a => [a.id, a.name]));
@@ -11015,8 +11105,8 @@ async function openSettle(purchaseId) {
     await cashLoadAccounts().catch(() => {});
     if (!cashActive().length) { showToast('Créez d\'abord un compte (banque ou caisse) dans « Trésorerie »', 'error'); return openCashAccount(); }
     _settleId = purchaseId; _cashKey = 'st:' + uuid();
-    const rest = Math.round((p.totalTTC - p.paid) * 100) / 100;
-    document.getElementById('stInfo').textContent = `${p.number} · ${p.supplierName} · TTC ${formatCurrency(p.totalTTC)} · déjà réglé ${formatCurrency(p.paid)} · reste ${formatCurrency(rest)}`;
+    const rest = purDue(p);
+    document.getElementById('stInfo').textContent = `${p.number} · ${p.supplierName} · TTC ${formatCurrency(p.totalTTC)} · déjà réglé ${formatCurrency(p.paid)}${p.credited > 0 ? ' · avoirs ' + formatCurrency(p.credited) : ''} · reste ${formatCurrency(rest)}`;
     document.getElementById('stAccount').innerHTML = cashAccountOptions(cashDefaultAccount('virement'));
     document.getElementById('stAmount').value = rest > 0 ? rest : '';
     document.getElementById('stDate').value = todayISO();
@@ -13574,6 +13664,14 @@ async function exportJournals() {
     purchases.slice().sort((a, b) => String(a.doc_date).localeCompare(String(b.doc_date))).forEach(p => (Array.isArray(p.lines) ? p.lines : []).forEach(l => {
         R.push(['ACHATS', String(p.doc_date).slice(0, 10), p.number, p.supplier_name, p.supplier_ice, NAT[l.nature] || l.nature, l.category || '', l.description, n(l.total_ht), n(l.total_tva), n(Number(l.total_ht) + Number(l.total_tva)), p.vat_deductible === false ? 'non' : 'oui', '', '', p.status === 'cancelled' ? 'annulé' + (p.cancel_reason ? ' : ' + p.cancel_reason : '') : 'actif']);
     }));
+    if (stockServer()) {
+        const crl = await supaClient.rpc('purchase_credit_list', { p_purchase: null });
+        const pv = Object.fromEntries(purList().map(p => [p.id, p]));
+        (crl.error ? [] : (crl.data || [])).filter(c => inP(c.doc_date)).sort((a, b) => String(a.doc_date).localeCompare(String(b.doc_date))).forEach(c => (c.lines || []).forEach(l => {
+            const pu = pv[c.purchase_id] || {};
+            R.push(['ACHATS', String(c.doc_date).slice(0, 10), c.number, c.supplier_name, pu.supplierICE || '', 'Avoir fournisseur · ' + (NAT[l.nature] || l.nature), l.category || '', (l.description || '') + ' · sur ' + c.purchase_number, n(-l.total_ht), n(-l.total_tva), n(-(Number(l.total_ht) + Number(l.total_tva))), pu.includeVat === false ? 'non' : 'oui', '', '', 'actif']);
+        }));
+    }
     pays.filter(x => x && inP(x.date)).sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(x => {
         const i = invs.find(y => y.id === x.invoiceId) || {};
         R.push(['ENCAISSEMENTS', x.date, i.number ? dn(i.number) : '', i.clientName || '', i.clientICE || '', 'Encaissement client', '', x.reference || '', '', '', n(x.amount), '', x.accountId ? (accName[x.accountId] || '') : 'sans compte', x.method || '', '']);

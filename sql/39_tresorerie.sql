@@ -217,6 +217,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.cash_accounts WHERE id = v_acc AND user_id = v AND NOT archived) THEN RAISE EXCEPTION 'COMPTE_INTROUVABLE'; END IF;
     PERFORM public.fin_assert_open(v, v_date);
     v_paid := public.fin_purchase_paid(v, pu.id);
+    v_paid := v_paid + public.fin_purchase_credited(v, pu.id, NULL);      -- les avoirs fournisseurs (sql/44) réduisent la dette
     IF v_paid + v_amt > pu.total_ttc + 0.005 THEN RAISE EXCEPTION 'REGLEMENT_SUPERIEUR_A_LA_DETTE: reste %', pu.total_ttc - v_paid; END IF;
     INSERT INTO public.cash_movements (user_id, account_id, move_date, direction, amount, kind, purchase_id, label, idem_key)
     VALUES (v, v_acc, v_date, 'out', v_amt, 'supplier_payment', pu.id, left(COALESCE(NULLIF(btrim(p->>'label'), ''), pu.number || ' · ' || pu.supplier_name), 200), v_key)

@@ -83,6 +83,11 @@ DO $$ BEGIN
         EXECUTE 'CREATE FUNCTION public.fin_assert_open(p_uid UUID, p_date DATE) RETURNS VOID LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $f$ BEGIN RETURN; END; $f$';
     END IF;
     EXECUTE 'REVOKE ALL ON FUNCTION public.fin_assert_open(UUID, DATE) FROM PUBLIC, anon, authenticated';
+    -- Avoirs fournisseurs : version « 0 » remplacée par sql/44
+    IF to_regprocedure('public.fin_purchase_credited(uuid,uuid,date)') IS NULL THEN
+        EXECUTE 'CREATE FUNCTION public.fin_purchase_credited(p_uid UUID, p_purchase UUID, p_to DATE DEFAULT NULL) RETURNS NUMERIC LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $f$ SELECT 0::numeric $f$';
+        EXECUTE 'REVOKE ALL ON FUNCTION public.fin_purchase_credited(UUID, UUID, DATE) FROM PUBLIC, anon, authenticated';
+    END IF;
     IF to_regprocedure('public.fin_purchase_paid(uuid,uuid)') IS NULL THEN
         EXECUTE 'CREATE FUNCTION public.fin_purchase_paid(p_uid UUID, p_purchase UUID) RETURNS NUMERIC LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $f$ SELECT 0::numeric $f$';
         EXECUTE 'REVOKE ALL ON FUNCTION public.fin_purchase_paid(UUID, UUID) FROM PUBLIC, anon, authenticated';
@@ -256,6 +261,7 @@ BEGIN
     IF r.status = 'cancelled' THEN RETURN jsonb_build_object('id', r.id, 'number', r.number, 'already', true); END IF;
     PERFORM public.fin_assert_open(v, r.doc_date);
     IF public.fin_purchase_paid(v, r.id) > 0 THEN RAISE EXCEPTION 'ACHAT_REGLE: annulez d''abord ses règlements'; END IF;
+    IF public.fin_purchase_credited(v, r.id, NULL) > 0 THEN RAISE EXCEPTION 'ACHAT_AVEC_AVOIR: un avoir fournisseur existe sur cet achat'; END IF;
     -- sorties inverses des entrées réellement enregistrées, au coût de l'achat
     FOR m IN SELECT s.product_id, s.product_name, s.unit, s.qty, s.unit_cost, s.idem_key FROM public.stock_movements s
               WHERE s.user_id = v AND s.move_type = 'in'

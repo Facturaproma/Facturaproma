@@ -106,7 +106,7 @@ Dans Supabase › Authentication, activer la **protection des mots de passe divu
 ### 5.2 Limites à annoncer aux clients pilotes
 
 - **Avoir** : total, ou partiel par ligne (quantité et/ou prix), plusieurs avoirs par facture ; le cumul ne peut pas dépasser le TTC de la facture (contrôlé aussi par le serveur, sql/43). Ajouté le 01/11/2026 (PR avoir partiel).
-- **Achats** : pas d'avoir fournisseur. Une erreur se corrige par annulation puis nouvelle saisie, et un achat réglé doit d'abord voir ses règlements annulés.
+- **Achats** : avoir fournisseur par ligne (quantité, prix), en déduction de la dette, des charges et de la TVA déductible (sql/44, 01/11/2026). Marchandise suivie en stock : retour au prix d'achat uniquement (pas de remise de prix). Un achat avec avoir ne peut plus être annulé ; un trop-payé est signalé (remboursement à obtenir hors application).
 - **Connexion obligatoire** pour achats, BL, trésorerie, clôture et pilotage. Les factures et paiements fonctionnent hors ligne.
 - **Pilotage** : résultat de gestion **estimé**. Ni impôt, ni amortissements, ni charges sociales ; ce n'est pas un bilan ni une liasse fiscale.
 - **Journaux CSV** : pas une comptabilité générale (aucun numéro de compte du plan comptable), à remettre au comptable.
@@ -116,7 +116,7 @@ Dans Supabase › Authentication, activer la **protection des mots de passe divu
 ### 5.3 Indispensable avant une diffusion large
 
 1. **Ventes et paiements en tables dédiées.** Aujourd'hui ils sont en JSON dans `user_data` : volume limité par compte, protections assurées par des déclencheurs. La migration est préparée (sql/15–17) mais demande votre accord.
-2. ~~Avoir partiel~~ (fait le 01/11/2026) et avoir fournisseur.
+2. ~~Avoir partiel~~ et ~~avoir fournisseur~~ (faits le 01/11/2026).
 3. **Recette au clic** sur plusieurs appareils et **tests de charge réels**, avec un compte volumineux (milliers de factures).
 4. **Sauvegardes automatiques** : vérifier le plan Supabase (sauvegardes quotidiennes, restauration à un instant donné) et prévoir un export régulier.
 5. **Validations juridiques et fiscales** (§5.5).

@@ -52,12 +52,20 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
 $$;
 REVOKE ALL ON FUNCTION public.fin_sales_docs(UUID) FROM PUBLIC, anon, authenticated;
 
+-- Avoirs fournisseurs de la période par nature : version « 0 » remplacée par sql/44 (créée seulement si absente)
+DO $$ BEGIN
+    IF to_regprocedure('public.fin_purchase_credit_figures(uuid,date,date)') IS NULL THEN
+        EXECUTE 'CREATE FUNCTION public.fin_purchase_credit_figures(p_uid UUID, p_from DATE, p_to DATE) RETURNS JSONB LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $f$ SELECT ''{"untracked":0,"charges":0,"assets":0}''::jsonb $f$';
+        EXECUTE 'REVOKE ALL ON FUNCTION public.fin_purchase_credit_figures(UUID, DATE, DATE) FROM PUBLIC, anon, authenticated';
+    END IF;
+END $$;
+
 -- Chiffres de gestion d'une période (fonction interne)
 CREATE OR REPLACE FUNCTION public.fin_figures(p_uid UUID, p_from DATE, p_to DATE) RETURNS JSONB
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
 DECLARE
     v_sales NUMERIC; v_inv NUMERIC; v_cred NUMERIC; v_coll NUMERIC; v_exits NUMERIC; v_returns NUMERIC; v_untracked NUMERIC;
-    v_charges NUMERIC; v_assets NUMERIC; v_cmv NUMERIC; v_unknown INT; v_drafts INT;
+    v_charges NUMERIC; v_assets NUMERIC; v_cmv NUMERIC; v_unknown INT; v_drafts INT; v_pcr JSONB;
 BEGIN
     -- Ventes
     WITH s AS (SELECT * FROM public.fin_sales_docs(p_uid)),
@@ -89,6 +97,11 @@ BEGIN
       INTO v_untracked, v_charges, v_assets
       FROM public.purchases p JOIN public.purchase_lines l ON l.purchase_id = p.id
      WHERE p.user_id = p_uid AND p.status = 'active' AND p.doc_date BETWEEN p_from AND p_to;
+    -- Avoirs fournisseurs de la période (sql/44) : en déduction, selon la nature de la ligne d'achat
+    v_pcr := public.fin_purchase_credit_figures(p_uid, p_from, p_to);
+    v_untracked := v_untracked - COALESCE((v_pcr->>'untracked')::numeric, 0);
+    v_charges := v_charges - COALESCE((v_pcr->>'charges')::numeric, 0);
+    v_assets := v_assets - COALESCE((v_pcr->>'assets')::numeric, 0);
     v_cmv := v_exits - v_returns + v_untracked;
     RETURN jsonb_build_object(
         'from', p_from, 'to', p_to,
@@ -117,8 +130,8 @@ BEGIN
     SELECT COALESCE(sum(GREATEST(i.total_ttc - COALESCE(pay.a, 0) - COALESCE(cr.a, 0), 0)), 0) INTO v_recv
       FROM s i LEFT JOIN pay ON pay.invoice_id = i.id LEFT JOIN cr ON cr.related_id = i.id
      WHERE i.doc_type = 'invoice' AND i.status <> 'cancelled' AND i.total_ttc > 0;
-    -- Dettes fournisseurs à p_to : TTC des achats actifs datés ≤ p_to − règlements nets (règlements − annulations) datés ≤ p_to
-    SELECT COALESCE(sum(GREATEST(p.total_ttc - COALESCE((
+    -- Dettes fournisseurs à p_to : TTC des achats actifs datés ≤ p_to − règlements nets (règlements − annulations) − avoirs fournisseurs, datés ≤ p_to
+    SELECT COALESCE(sum(GREATEST(p.total_ttc - public.fin_purchase_credited(v, p.id, p_to) - COALESCE((
                SELECT sum(CASE WHEN m.direction = 'out' THEN m.amount ELSE -m.amount END) FROM public.cash_movements m
                 WHERE m.user_id = v AND m.purchase_id = p.id AND m.move_date <= p_to AND m.kind IN ('supplier_payment', 'reversal')), 0), 0)), 0)
       INTO v_pay
