@@ -6608,7 +6608,9 @@ const SessionPolicy = {
 };
 
 async function forceLogout(reason) {
+    const uid = Storage._currentUserId;
     try { await Auth.logout(); } catch (e) { console.warn('logout', e); }
+    Storage.purgeLocalCopy(uid);
     SessionPolicy.clear();
     try { localStorage.setItem(SessionPolicy.K_MSG, reason); } catch {}
     Storage._cache = {};
@@ -7262,6 +7264,19 @@ const Storage = {
         }
     },
     
+    // À la déconnexion : retire de l'appareil la copie locale des données du compte (factures, clients, paiements…), pour qu'un
+    // appareil partagé ne garde rien de lisible. Jamais si des modifications ne sont pas encore envoyées au serveur (elles seraient perdues).
+    purgeLocalCopy(userId) {
+        if (!userId) return 0;
+        if (typeof SyncManager !== 'undefined' && SyncManager.pendingChanges && SyncManager.pendingChanges.length) return -1;
+        let n = 0;
+        try {
+            Object.keys(localStorage).filter(k => k.startsWith(`fp_${userId}_`) || k.startsWith(`fpd_${userId}_`) || k.startsWith(`fp_refused_${userId}_`) || k === `fp_lic_${userId}`)
+                .forEach(k => { localStorage.removeItem(k); n++; });
+        } catch (e) {}
+        return n;
+    },
+
     // Clear current user data
     async clearAll() {
         if (!this._currentUserId) return;
@@ -7959,12 +7974,15 @@ async function handleLogout() {
         return;
     }
     
+    const uid = Storage._currentUserId;
+    if (SyncManager.pendingChanges.length && SyncManager.isOnline) { try { await SyncManager.syncPending(); } catch (e) {} }
     await Auth.logout();
     SessionPolicy.clear();
+    const purged = Storage.purgeLocalCopy(uid);
     Storage._cache = {};
     Storage._currentUserId = null;
     DocStoreGlue.reset();
-    showToast('Déconnexion réussie', 'success');
+    showToast(purged < 0 ? 'Déconnecté. Des modifications non encore envoyées restent sur cet appareil : reconnectez-vous en ligne pour les envoyer.' : 'Déconnexion réussie', purged < 0 ? 'warning' : 'success');
     
     setTimeout(() => {
         // Reset forms
@@ -14240,7 +14258,10 @@ async function showHowToBuy() {
 
 async function logoutFromLicense() {
     if (!confirm('Se déconnecter de FacturaPro ?')) return;
+    const uid = Storage._currentUserId;
+    if (SyncManager.pendingChanges.length && SyncManager.isOnline) { try { await SyncManager.syncPending(); } catch (e) {} }
     await Auth.logout();
+    Storage.purgeLocalCopy(uid);
     Storage._cache = {};
     Storage._currentUserId = null;
     DocStoreGlue.reset();
