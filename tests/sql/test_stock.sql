@@ -108,3 +108,13 @@ RESET ROLE;
 DELETE FROM auth.users WHERE id = 'd4d4d4d4-0000-0000-0000-000000000001';
 SELECT pg_temp.ok('suppression du compte A : plus aucun mouvement de A', (SELECT count(*) FROM public.stock_movements WHERE user_id = 'd4d4d4d4-0000-0000-0000-000000000001') = 0);
 SELECT pg_temp.ok('suppression du compte A : les mouvements de B sont intacts', (SELECT count(*) FROM public.stock_movements WHERE user_id = 'd4d4d4d4-0000-0000-0000-000000000002') = 1);
+
+-- ===== sql/35 : origines « purchase » et « delivery » acceptées, les autres toujours refusées =====
+INSERT INTO auth.users(id, email, email_confirmed_at) VALUES ('5a5a5a5a-3500-4000-8000-000000000035', 'stock-35@test.invalid', now());
+SET ROLE authenticated; SELECT pg_temp.as_user('5a5a5a5a-3500-4000-8000-000000000035');
+SELECT pg_temp.ok('sql/35 : mouvement d''achat (purchase) accepté', (public.stock_record('[{"product_id":"p35","product_name":"Achat","type":"in","qty":4,"date":"2026-10-02","source":"purchase","key":"t35-pur"}]'::jsonb)->>'inserted')::int = 1);
+SELECT pg_temp.ok('sql/35 : mouvement de bon de livraison (delivery) accepté', (public.stock_record('[{"product_id":"p35","product_name":"Achat","type":"out","qty":1,"date":"2026-10-03","source":"delivery","key":"t35-bl"}]'::jsonb)->>'inserted')::int = 1);
+SELECT pg_temp.ok('sql/35 : origine inconnue toujours refusée', pg_temp.err($$SELECT public.stock_record('[{"product_id":"p35","product_name":"x","type":"in","qty":1,"date":"2026-10-01","source":"vol"}]'::jsonb)$$) LIKE '%SOURCE_INVALIDE%');
+SELECT pg_temp.ok('sql/35 : niveau p35 = 3', (SELECT level FROM public.stock_levels() WHERE product_id = 'p35') = 3);
+RESET ROLE;
+SELECT pg_temp.ok('sql/35 : la contrainte de table refuse aussi une origine inconnue', pg_temp.err($$INSERT INTO public.stock_movements(user_id, product_id, product_name, move_type, qty, move_date, source) VALUES ('5a5a5a5a-3500-4000-8000-000000000035', 'x', 'x', 'in', 1, current_date, 'vol')$$) <> '');
