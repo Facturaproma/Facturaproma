@@ -8528,7 +8528,8 @@ function renderInvoices() {
                    <button class="btn btn-ghost btn-sm" onclick="sendDocWhatsApp(${jsArg(i.id)}, 'invoice')" style="color: #25D366;">💬 WhatsApp</button>
                    <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice(${jsArg(i.id)})">📋 Dupliquer</button>
                    ${!isCredit ? `<button class="btn btn-ghost btn-sm" onclick="makeInvoiceRecurring(${jsArg(i.id)})">🔁 Rendre récurrente</button>` : ''}
-                   ${!isCredit && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice(${jsArg(i.id)})" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
+                   ${!isCredit && !isDraft && !hasCredit ? `<button class="btn btn-ghost btn-sm" onclick="createCreditFromInvoice(${jsArg(i.id)})" style="color: var(--warning);">↩️ Créer un avoir</button>` : ''}
+                   ${!isCredit && !isDraft && (hasCredit ? invoiceCreditableTTC(i, invoices) > 0.005 : money2(i.totalTTC) > 0) ? `<button class="btn btn-ghost btn-sm" onclick="createPartialCredit(${jsArg(i.id)})" style="color: var(--warning);">✂️ ${hasCredit ? 'Avoir sur le reste' : 'Avoir partiel'}</button>` : ''}
                </details>`;
         return `
             <tr class="inv-row inv-row-${kind}">
@@ -8609,7 +8610,9 @@ function applyEditorLock() {
     ban.innerHTML = `<strong>🔒 ${isCredit ? 'Avoir' : 'Facture'} ${escapeHtml(editingInvoice.number)} émis : non modifiable.</strong><br>`
         + (isCredit ? '' : `Pour corriger une erreur, créez un avoir ; pour refaire une facture proche, utilisez « Dupliquer ». `)
         + `<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">`
-        + (isCredit ? '' : `<button type="button" class="btn btn-secondary btn-sm" onclick="createCreditFromInvoice(${jsArg(editingInvoice.id)})">↩️ Créer un avoir</button>`)
+        + (isCredit ? '' : `${(() => { const all = Storage.get('invoices', []), done = invoiceCreditedAmount(editingInvoice, all) > 0, left = invoiceCreditableTTC(editingInvoice, all) > 0.005;
+            return (done ? '' : `<button type="button" class="btn btn-secondary btn-sm" onclick="createCreditFromInvoice(${jsArg(editingInvoice.id)})">↩️ Créer un avoir</button> `)
+                + (left ? `<button type="button" class="btn btn-secondary btn-sm" onclick="createPartialCredit(${jsArg(editingInvoice.id)})">✂️ ${done ? 'Avoir sur le reste' : 'Avoir partiel'}</button>` : ''); })()}`)
         + `<button type="button" class="btn btn-secondary btn-sm" onclick="duplicateInvoice(${jsArg(editingInvoice.id)})">📋 Dupliquer</button></div>`
         + (hist ? `<ul style="margin:8px 0 0 18px; font-size:12px;">${hist}</ul>` : '');
     ban.style.display = 'block';
@@ -8876,7 +8879,7 @@ async function createCreditFromInvoice(id) {
     }
     const already = invoices.find(i => i.type === 'credit' && i.relatedInvoiceId === original.id);
     if (already) {
-        showToast(`Un avoir existe déjà pour cette facture (${already.number}).`, 'error');
+        showToast(`Un avoir existe déjà pour cette facture (${already.number}). Utilisez « Avoir sur le reste ».`, 'error');
         return;
     }
     
@@ -8935,6 +8938,152 @@ async function createCreditFromInvoice(id) {
     
     showToast(`✓ Avoir ${creditNumber} créé`, 'success');
     renderInvoices();
+}
+
+// ---- Avoir partiel ---------------------------------------------------------
+// Avoirs émis sur une facture (brouillons exclus)
+function creditsOfInvoice(inv, invoices) {
+    return (invoices || []).filter(c => c && c.type === 'credit' && c.status !== 'draft' &&
+        ((c.relatedInvoiceId && c.relatedInvoiceId === inv.id) || (!c.relatedInvoiceId && c.relatedInvoiceNumber && c.relatedInvoiceNumber === inv.number)));
+}
+// Déjà crédité par ligne de la facture : rang de ligne → { qty, ht } (valeurs positives).
+// Un avoir sans « srcIdx » (avoir total, ancien format) reprend les lignes dans le même ordre que la facture.
+function creditedByLine(inv, invoices) {
+    const out = new Map();
+    creditsOfInvoice(inv, invoices).forEach(c => (c.items || []).forEach((it, idx) => {
+        const k = Number.isInteger(it.srcIdx) ? it.srcIdx : idx;
+        const cur = out.get(k) || { qty: 0, ht: 0 };
+        cur.qty = stockRound(cur.qty + Math.abs(Number(it.quantity) || 0));
+        cur.ht = money2(cur.ht + Math.abs(Number(it.totalHT) || 0));
+        out.set(k, cur);
+    }));
+    return out;
+}
+// Lignes encore créditables : [{ idx, it, qtyLeft, htLeft }]
+function creditableLines(inv, invoices) {
+    const done = creditedByLine(inv, invoices);
+    return (inv.items || []).map((it, idx) => {
+        const d = done.get(idx) || { qty: 0, ht: 0 };
+        // Le reste se mesure en montant (un avoir peut porter sur une quantité ou sur un prix) ; la quantité d'un avoir reste au plus la quantité facturée
+        const qtyMax = stockRound(Math.abs(Number(it.quantity) || 0)), htLeft = money2(Math.max(0, Math.abs(Number(it.totalHT) || 0) - d.ht));
+        const origPrice = Number(it.price != null ? it.price : it.unitPrice) || 0, full = htLeft >= money2(Math.abs(Number(it.totalHT) || 0)) - 0.005;
+        // Prix qui crédite exactement le reste sur toute la quantité (bouton « Tout le reste »)
+        const restPrice = full ? origPrice : Math.round(htLeft / (qtyMax * (1 - Math.min(Math.max(Number(it.discount) || 0, 0), 100) / 100) || 1) * 10000) / 10000;
+        return { idx, it, qtyLeft: qtyMax, htLeft, origPrice, restPrice: Math.min(origPrice, restPrice) };
+    }).filter(x => x.qtyLeft > 0 && x.htLeft > 0.005);
+}
+// Reste créditable (TTC) d'une facture
+function invoiceCreditableTTC(inv, invoices) {
+    return money2(Math.max(0, Math.abs(money2(inv.totalTTC)) - invoiceCreditedAmount(inv, invoices)));
+}
+// Calcule les lignes d'un avoir partiel à partir des saisies [{ idx, qty, price, ret }] ; renvoie { items, returnLines, totals } ou { error }
+function buildPartialCredit(inv, invoices, input) {
+    const lines = creditableLines(inv, invoices), items = [], returnLines = [];
+    const products = Storage.get('products', []) || [];
+    for (const x of input) {
+        const qty = stockRound(Number(x.qty) || 0);
+        if (!(qty > 0)) continue;
+        const l = lines.find(y => y.idx === x.idx);
+        if (!l) return { error: 'Ligne déjà entièrement créditée' };
+        const orig = l.it, origPrice = Number(orig.price != null ? orig.price : orig.unitPrice) || 0;
+        const price = x.price === undefined || x.price === '' ? origPrice : Math.round((Number(x.price) || 0) * 10000) / 10000;
+        if (qty > l.qtyLeft + 0.0005) return { error: `« ${orig.description || 'ligne'} » : au plus ${stockFmt(l.qtyLeft)} (quantité facturée)` };
+        if (!(price >= 0) || price > origPrice + 0.00005) return { error: `« ${orig.description || 'ligne'} » : le prix ne peut pas dépasser le prix facturé` };
+        const t = computeLine(qty, price, orig.tva, orig.discount);
+        if (t.totalHT <= 0) continue;
+        if (t.totalHT > l.htLeft + 0.01) return { error: `« ${orig.description || 'ligne'} » : montant supérieur au reste à créditer sur cette ligne` };
+        const p = orig.productId && products.find(y => y.id === orig.productId);
+        const ret = stockRound(Number(x.ret) || 0);
+        if (ret > 0) {
+            if (!(p && p.trackStock)) return { error: 'Retour en stock impossible : produit non suivi' };
+            if (ret > qty + 0.0005) return { error: `« ${orig.description || 'ligne'} » : quantité revenue supérieure à la quantité créditée` };
+            returnLines.push({ idx: items.length, qty: ret });
+        }
+        items.push({ ...orig, srcIdx: l.idx, price, ...(orig.unitPrice !== undefined ? { unitPrice: price } : {}),
+            quantity: -qty, totalHT: -t.totalHT, totalTVA: -t.totalTVA, totalTTC: -t.totalTTC });
+    }
+    if (!items.length) return { error: 'Indiquez au moins une quantité à créditer' };
+    const pos = computeTotals(items.map(i => ({ totalHT: -i.totalHT, totalTVA: -i.totalTVA })));
+    if (pos.totalTTC > invoiceCreditableTTC(inv, invoices) + 0.01) return { error: 'Le total dépasse le reste à créditer de la facture' };
+    return { items, returnLines, totals: { totalHT: -pos.totalHT, totalTVA: -pos.totalTVA, totalTTC: -pos.totalTTC } };
+}
+// Fenêtre « Avoir partiel » : quantités (et prix) à créditer par ligne, retour en stock éventuel, motif obligatoire
+async function createPartialCredit(id) {
+    const invoices = Storage.get('invoices', []);
+    if (Storage._blockedByLicense('invoices')) return showToast('🔒 Licence expirée : lecture seule.', 'error');
+    const original = invoices.find(i => i.id === id);
+    if (!original || original.type === 'credit') return;
+    if (!isLockedDoc(original)) { showToast('Un avoir se crée sur une facture émise. Supprimez simplement ce brouillon.', 'error'); return; }
+    const lines = creditableLines(original, invoices);
+    if (!lines.length || invoiceCreditableTTC(original, invoices) <= 0.005) { showToast('Cette facture est déjà entièrement créditée.', 'error'); return; }
+    await finLoadLock();
+    if (finIsClosed(todayISO())) { showToast(finClosedMsg(), 'error'); return; }
+    const products = Storage.get('products', []) || [];
+    document.querySelectorAll('.modal-overlay.cr-partial').forEach(m => m.remove());
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay active cr-partial'; modal.style.zIndex = '5000';
+    const already = invoiceCreditedAmount(original, invoices);
+    modal.innerHTML = `<div class="modal-content" style="max-width: 620px;" onclick="event.stopPropagation()">
+        <h2>Avoir partiel sur ${escapeHtml(dn(original.number))}</h2>
+        <p style="font-size:13px; color: var(--gray-600);">Facture : ${formatCurrency(original.totalTTC)} TTC${already > 0 ? ` · déjà crédité : ${formatCurrency(already)}` : ''} · reste créditable : ${formatCurrency(invoiceCreditableTTC(original, invoices))}</p>
+        <div class="cr-p-lines">${lines.map(x => {
+            const p = x.it.productId && products.find(y => y.id === x.it.productId), tracked = !!(p && p.trackStock);
+            const price = Number(x.it.price != null ? x.it.price : x.it.unitPrice) || 0;
+            return `<div class="cr-p-line" data-idx="${x.idx}" style="border-bottom:1px solid var(--gray-200); padding:8px 0;">
+                <div style="font-weight:600;">${escapeHtml(x.it.description || 'Ligne')}</div>
+                <div style="font-size:12px; color: var(--gray-600);">facturé : ${stockFmt(Math.abs(Number(x.it.quantity) || 0))} × ${formatCurrency(price)} HT · reste à créditer : ${formatCurrency(x.htLeft)} HT</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+                    <label style="font-size:12px;">Quantité à créditer<input type="number" class="cr-p-qty" min="0" max="${x.qtyLeft}" step="0.001" value="0" style="width:110px; display:block;"></label>
+                    <label style="font-size:12px;">Prix unitaire HT<input type="number" class="cr-p-price" min="0" max="${price}" step="0.01" value="${price}" style="width:120px; display:block;"></label>
+                    ${tracked ? `<label style="font-size:12px;">Revenu en stock<input type="number" class="cr-p-ret" min="0" step="0.001" value="0" style="width:110px; display:block;"></label>` : ''}
+                </div></div>`; }).join('')}</div>
+        <div style="margin:10px 0;"><button type="button" class="btn btn-ghost btn-sm cr-p-all">Tout le reste</button></div>
+        <label style="font-size:13px; font-weight:600;">Motif (obligatoire)<input type="text" class="cr-p-reason" maxlength="200" placeholder="Ex. : retour de 2 articles, erreur de prix" style="display:block; width:100%;"></label>
+        <p class="cr-p-total" style="font-weight:700; margin:10px 0;">Total de l'avoir : ${formatCurrency(0)}</p>
+        <div class="modal-actions"><button class="btn btn-ghost cr-p-cancel">Annuler</button><button class="btn btn-primary cr-p-ok">Créer l'avoir</button></div></div>`;
+    const read = () => [...modal.querySelectorAll('.cr-p-line')].map(r => ({ idx: Number(r.dataset.idx), qty: r.querySelector('.cr-p-qty').value, price: r.querySelector('.cr-p-price').value, ret: r.querySelector('.cr-p-ret') ? r.querySelector('.cr-p-ret').value : 0 }));
+    const refresh = () => {
+        const b = buildPartialCredit(original, invoices, read());
+        modal.querySelector('.cr-p-total').textContent = b.error ? (read().some(x => Number(x.qty) > 0) ? '⚠️ ' + b.error : `Total de l'avoir : ${formatCurrency(0)}`) : `Total de l'avoir : ${formatCurrency(-b.totals.totalTTC)} TTC`;
+    };
+    modal.addEventListener('input', refresh);
+    modal.querySelector('.cr-p-all').addEventListener('click', () => {
+        modal.querySelectorAll('.cr-p-line').forEach(r => { const l = lines.find(y => y.idx === Number(r.dataset.idx)); if (!l) return; r.querySelector('.cr-p-qty').value = l.qtyLeft; r.querySelector('.cr-p-price').value = l.restPrice; });
+        refresh();
+    });
+    let busy = false;
+    modal.querySelector('.cr-p-cancel').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    modal.querySelector('.cr-p-ok').addEventListener('click', async () => {
+        if (busy) return;
+        const reason = modal.querySelector('.cr-p-reason').value.trim();
+        const all = Storage.get('invoices', []);
+        const b = buildPartialCredit(original, all, read());
+        if (b.error) return showToast(b.error, 'error');
+        if (reason.length < 3) return showToast('Indiquez le motif de l\'avoir (3 caractères minimum)', 'error');
+        busy = true;
+        let creditNumber;
+        try { creditNumber = await getNextNumber('credit'); }
+        catch (e) { busy = false; if (e instanceof NumberingError) { showToast(e.message, 'error'); return; } throw e; }
+        const credit = {
+            id: uuid(), number: creditNumber, type: 'credit', partial: true,
+            relatedInvoiceId: original.id, relatedInvoiceNumber: original.number,
+            clientId: original.clientId, clientName: original.clientName, clientICE: original.clientICE, clientAddress: original.clientAddress,
+            date: todayISO(), dueDate: todayISO(), items: b.items, ...b.totals, status: 'sent',
+            notes: `Avoir partiel relatif à la facture ${original.number}\nMotif : ${reason}`,
+            paymentTerms: '0', returnLines: b.returnLines, createdAt: new Date().toISOString()
+        };
+        const fresh = Storage.get('invoices', []);
+        fresh.push(credit);
+        Storage.set('invoices', fresh);
+        logDoc('avoir', credit, `partiel sur ${original.number}`);
+        modal.remove();
+        stockOnCreditIssued(credit).catch(e => console.warn('Stock :', e));
+        showToast(`✓ Avoir ${creditNumber} créé (${formatCurrency(-credit.totalTTC)})`, 'success');
+        renderInvoices();
+    });
+    document.body.appendChild(modal);
+    refresh();
 }
 
 // Lignes de la facture qui portent un produit suivi en stock (seules concernées par un retour physique)
@@ -14612,8 +14761,8 @@ function invoicePaidAmount(inv, payments) {
         .reduce((t, p) => t + money2(p.amount), 0);
     return Math.min(ttc, Math.max(0, money2(Math.max(sum, Number(inv.paidAmount) || 0))));
 }
-// Montant (positif) crédité par des avoirs émis sur cette facture. Règle interne : un avoir réduit la somme due ; l'application
-// n'émet qu'un avoir par facture, toujours égal au TTC (annulation totale).
+// Montant (positif) crédité par des avoirs émis sur cette facture. Règle interne : un avoir réduit la somme due.
+// Plusieurs avoirs possibles (avoir total, ou avoirs partiels dont le cumul ne dépasse pas le TTC de la facture).
 function invoiceCreditedAmount(inv, invoices) {
     if (!inv || inv.type === 'credit' || !Array.isArray(invoices)) return 0;
     return money2(invoices.filter(c => c && c.type === 'credit' && c.status !== 'draft' &&
