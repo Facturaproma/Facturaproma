@@ -10246,9 +10246,12 @@ function openPurchase(nature) {
     document.getElementById('purVat').checked = true;
     document.getElementById('purLines').innerHTML = '';
     document.getElementById('purModalTitle').textContent = nature === 'expense' ? 'Nouvelle dépense' : 'Nouvel achat';
-    const payRow = document.getElementById('purPayRow'), fillPay = () => { const act = cashActive(); payRow.style.display = act.length ? '' : 'none'; document.getElementById('purPayAccount').innerHTML = cashAccountOptions(cashDefaultAccount(nature === 'expense' ? 'especes' : 'virement')); };
+    // Rechargement des comptes en arrière-plan : on garde le compte déjà choisi par l'utilisateur (sinon le choix serait écrasé en silence)
+    const payRow = document.getElementById('purPayRow'), fillPay = (keep) => { const act = cashActive(), sel = document.getElementById('purPayAccount'), cur = keep ? sel.value : '';
+        payRow.style.display = act.length ? '' : 'none'; sel.innerHTML = cashAccountOptions(cashDefaultAccount(nature === 'expense' ? 'especes' : 'virement'));
+        if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur; };
     document.getElementById('purPaid').checked = false; document.getElementById('purPayAccount').style.display = 'none';
-    fillPay(); cashLoadAccounts().then(fillPay).catch(() => {});
+    fillPay(false); cashLoadAccounts().then(() => fillPay(true)).catch(() => {});
     addPurchaseLine(nature === 'expense' ? 'expense' : 'goods');
     updatePurchaseTotals();
     document.getElementById('purchaseModal').classList.add('active');
@@ -10759,6 +10762,7 @@ async function renderTreasury() {
         ? `<div class="empty-state"><div class="empty-icon">💰</div><h3>Aucun compte</h3><p>Créez votre compte bancaire et votre caisse avec leur solde à une date : chaque encaissement, règlement ou retrait les met ensuite à jour.</p><button class="btn btn-primary" onclick="openCashAccount()">+ Compte</button></div>`
         : accounts.map(r => `<div class="stk-row"${r.archived ? ' style="opacity:0.55;"' : ''}><div class="stk-main"><strong>${escapeHtml(r.name)}</strong><div class="stk-sub">${CASH_ACCOUNT_KINDS[r.kind] || ''} · ouverture ${formatCurrency(r.opening_balance)} le ${formatDate(r.opening_date)}${r.archived ? ' · archivé' : ''}</div></div><div class="stk-qty" style="color:${Number(r.balance) < 0 ? 'var(--danger)' : 'inherit'};">${formatCurrency(r.balance)}<div class="stk-sub">solde</div></div></div>`).join('')
           + `<div style="padding:10px 16px; font-size:14px;">Trésorerie disponible : <strong id="treTotal">${formatCurrency(total)}</strong></div>`
+          + (accounts.some(r => !r.archived && r.kind === 'cash' && Number(r.balance) < -0.005) ? `<div style="padding:0 16px 10px; font-size:12px; color:var(--danger);">⚠️ Une caisse ne peut pas être négative : un encaissement manque ou une sortie a été saisie sur le mauvais compte. Vérifiez le journal ci-dessous.</div>` : '')
           + (unassigned && Number(unassigned.customer_in) > 0 ? `<div style="padding:0 16px 12px; font-size:12px; color:var(--warning);">⚠️ ${formatCurrency(unassigned.customer_in)} d'encaissements clients enregistrés sans compte (paiements anciens) : non comptés dans les soldes. Corrigez si besoin par un « Ajustement (+) ».</div>` : '');
     // Dettes fournisseurs
     const debts = purList().filter(p => p.status !== 'cancelled' && p.totalTTC - p.paid > 0.005);
@@ -14911,9 +14915,11 @@ function recordPayment() {
     document.getElementById('paymentNotes').value = '';
     // Compte de trésorerie (sql/39) : proposé dès qu'un compte existe ; l'encaissement est lu par le serveur, jamais recopié
     const accRow = document.getElementById('paymentAccountRow');
-    const fillAcc = () => { const act = cashActive(); accRow.style.display = act.length ? '' : 'none'; if (act.length) { const sel = document.getElementById('paymentAccount'); sel.innerHTML = cashAccountOptions(cashDefaultAccount(document.getElementById('paymentMethod').value)); } };
-    fillAcc();
-    if (stockServer()) cashLoadAccounts().then(fillAcc).catch(() => {});
+    // Rechargement des comptes en arrière-plan : on garde le compte déjà choisi par l'utilisateur
+    const fillAcc = (keep) => { const act = cashActive(); accRow.style.display = act.length ? '' : 'none'; if (act.length) { const sel = document.getElementById('paymentAccount'), cur = keep ? sel.value : '';
+        sel.innerHTML = cashAccountOptions(cashDefaultAccount(document.getElementById('paymentMethod').value)); if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur; } };
+    fillAcc(false);
+    if (stockServer()) cashLoadAccounts().then(() => fillAcc(true)).catch(() => {});
     document.getElementById('paymentMethod').onchange = () => { if (cashActive().length) document.getElementById('paymentAccount').value = cashDefaultAccount(document.getElementById('paymentMethod').value); };
     
     document.getElementById('paymentModal').classList.add('active');
