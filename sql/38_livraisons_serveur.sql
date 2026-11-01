@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS public.delivery_lines (
     PRIMARY KEY (delivery_id, line_no),
     CHECK (track_stock = false OR product_id IS NOT NULL)
 );
+CREATE INDEX IF NOT EXISTS delivery_lines_user_idx ON public.delivery_lines (user_id);   -- clé étrangère vers auth.users (suppression de compte)
 ALTER TABLE public.delivery_lines ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.delivery_lines FROM PUBLIC, anon, authenticated;
 

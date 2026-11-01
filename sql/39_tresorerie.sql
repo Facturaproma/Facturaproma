@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.cash_movements (
     CHECK (kind NOT IN ('transfer_in', 'transfer_out') OR transfer_id IS NOT NULL)
 );
 CREATE INDEX IF NOT EXISTS cash_movements_account_idx ON public.cash_movements (user_id, account_id, move_date);
+CREATE INDEX IF NOT EXISTS cash_movements_account_fk_idx ON public.cash_movements (account_id);   -- clé étrangère vers cash_accounts
 CREATE INDEX IF NOT EXISTS cash_movements_purchase_idx ON public.cash_movements (purchase_id) WHERE purchase_id IS NOT NULL;
 ALTER TABLE public.cash_movements ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.cash_movements FROM PUBLIC, anon, authenticated;
