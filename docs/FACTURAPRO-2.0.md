@@ -49,7 +49,7 @@ sujets, les instructions SQL de `docs/DEPLOY.md`.
 
 ### 4.1 Préproduction (njjaomichdlnoscrnxlz)
 
-Dans l'éditeur SQL Supabase, collez **un script à la fois, dans cet ordre**, en prenant les fichiers de la **dernière branche** (`fp2/pr9-export-docs`). Deux scripts ont été retouchés dans des PR ultérieures :
+Procédure pour un nouvel environnement. Ce déploiement a déjà été fait le 01/11/2026 (voir §4.3). Dans l'éditeur SQL Supabase, collez **un script à la fois, dans cet ordre**, en prenant les fichiers de la **dernière branche** (`fp2/pr9-export-docs`). Deux scripts ont été retouchés dans des PR ultérieures :
 
 - `sql/36` a reçu la colonne `return_of` dans `stock_list` en PR 5 ;
 - `sql/37` a été rendu non destructif pour les points d'extension en PR 7.
@@ -84,6 +84,35 @@ Uniquement après validation en préproduction et **par vous** :
 
 État constaté en production (lecture seule, comptages) : 0 achat, 0 BL, 0 fournisseur dans les données JSON. La reprise des anciens achats et BL n'a donc rien à migrer, mais elle reste en place pour les comptes qui en auraient créé d'ici là. Les 3 mouvements de stock existants reçoivent un coût via la reprise de `sql/36` (CMUP estimé, signalé).
 
+### 4.3 Déploiement effectué le 1er novembre 2026
+
+| Étape | Préproduction | Production |
+|---|---|---|
+| Sauvegarde | schéma `fp_backup_20261101` : 30 tables, définitions des fonctions, politiques, déclencheurs, droits, empreintes MD5 | idem : 19 tables, 273 lignes |
+| Restauration vérifiée | les 30 tables restaurées dans `fp_restore_test` (même structure), empreintes identiques | les 19 tables restaurées, empreintes identiques (`user_data` 80/80, stock 3/3) |
+| Migrations | `fp2_36_stock_cout` → `fp2_41_indicateurs`, puis `fp2_index_cles_etrangeres` | idem |
+| Contrôle des droits | 10 tables fermées (RLS, aucune politique, aucun droit `anon`/`authenticated`) | idem ; `user_data` intacte (empreinte identique à la sauvegarde) |
+| Recette de bout en bout | parcours complet (comptes temporaires, transaction annulée) : CMUP 56, CA 1 000, coût des ventes 280, marge 720, charges 2 000, résultat −1 280, créances 600, dettes 744, stock 840, trésorerie 8 000 ; plafonds, clôture et isolation vérifiés | même parcours, mêmes résultats |
+| Application | — | PR #126 → #134 fusionnées dans `main`, publiées par GitHub Pages |
+
+Les migrations ont été appliquées sans aucune instruction `DROP` : les déclencheurs utilisent `CREATE OR REPLACE TRIGGER` et l'ancienne `stock_list` a été **renommée** `stock_list_pre36`, sans droits.
+
+Les schémas `fp_backup_20261101` et `fp_restore_test` restent en base. Ils sont sans aucun droit pour `anon` et `authenticated`, et ne sont pas exposés par l'API. Supprimez-les à la main quand la version est validée :
+
+```sql
+DROP SCHEMA fp_restore_test CASCADE;
+DROP SCHEMA fp_backup_20261101 CASCADE;
+```
+
+**Restaurer une table depuis la sauvegarde** (exemple `user_data`) :
+
+```sql
+ALTER TABLE public.user_data DISABLE TRIGGER USER;
+DELETE FROM public.user_data;
+INSERT INTO public.user_data OVERRIDING SYSTEM VALUE SELECT * FROM fp_backup_20261101.user_data;
+ALTER TABLE public.user_data ENABLE TRIGGER USER;
+```
+
 ## 5. Retour arrière
 
 - **Application** : revenir au commit `main` précédent (révocation de la fusion). L'ancienne application ignore les nouvelles tables.
@@ -91,7 +120,7 @@ Uniquement après validation en préproduction et **par vous** :
   - `41` : uniquement des fonctions, sans risque.
   - `40` : supprimer d'abord les déclencheurs, **indispensable avant de revenir à une application sans clôture**.
   - `39`, `38`, `37` : les `DROP TABLE` suppriment les pièces saisies. Exportez d'abord les journaux (Export comptable › Journaux de gestion).
-  - `36` : recoller `stock_record` (sql/35) et `stock_list` (sql/34). Les colonnes de coût peuvent rester : elles sont ignorées.
+  - `36` : recoller `stock_record` (sql/35). Pour `stock_list`, supprimer la nouvelle version puis renommer `stock_list_pre36` en `stock_list` et lui rendre le droit d'exécution. Les colonnes de coût peuvent rester : elles sont ignorées.
 - Ne supprimez pas les tables tant que des clients ont saisi des pièces : retirer l'application suffit à masquer les fonctions.
 
 ## 6. Parcours de recette conseillé (préproduction)
