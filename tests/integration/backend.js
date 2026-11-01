@@ -20,7 +20,7 @@ function createDb(opts = {}) {
   psql(db, ['-c', 'GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated; REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.doc_counters, public.doc_events FROM authenticated;']);
   if (opts.messagerie) for (const f of ['28_admin_nom_societe', '29_messagerie_support']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   if (opts.paiementCode) for (const f of ['20_formules_configurables', '32_paiement_lie_au_code'].concat(opts.documentsVente ? ['33_documents_vente'] : [])) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
-  if (opts.stock) psql(db, ['-f', path.join(ROOT, 'sql', '34_stock.sql')]);
+  if (opts.stock) for (const f of ['34_stock', '35_stock_achats_livraisons']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   if (opts.partage) psql(db, ['-f', path.join(ROOT, 'sql', '30_lien_client_facture.sql')]);
   if (opts.docs) {
     // comme Supabase : privilèges par défaut larges, puis les scripts 15/16/17 retirent ce qui doit l'être

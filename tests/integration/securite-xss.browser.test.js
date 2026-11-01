@@ -46,7 +46,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const names = ["L'Atelier", PAYLOAD, 'Société "Les Amis" <b>'];
     Storage.set('clients', names.map((n, i) => ({ id: 'c' + i, name: n, phone: '0661234567', createdAt: new Date().toISOString() })));
     Storage.set('invoices', names.map((n, i) => ({ id: 'f' + i, number: 'F-2026-00' + (i + 1), kind: 'issued', status: 'sent', clientId: 'c' + i, clientName: n, clientICE: '001234567000089', clientAddress: 'x',
-      date: iso(5), dueDate: iso(-20), items: [{ description: 'Câble 5" HDMI', quantity: 1, unitPrice: 100, tva: 20, discount: 0, totalHT: 100, totalTVA: 20, totalTTC: 120 }], totalHT: 100, totalTVA: 20, totalTTC: 120, createdAt: new Date().toISOString() })));
+      date: iso(0), dueDate: iso(-20), items: [{ description: 'Câble 5" HDMI', quantity: 1, unitPrice: 100, tva: 20, discount: 0, totalHT: 100, totalTVA: 20, totalTTC: 120 }], totalHT: 100, totalTVA: 20, totalTTC: 120, createdAt: new Date().toISOString() })));
   }, PAYLOAD);
 
   // 1. escapeHtml : tous les caractères dangereux

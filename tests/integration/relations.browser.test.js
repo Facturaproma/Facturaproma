@@ -35,10 +35,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const iso_ = (dd) => { const d = new Date(); d.setDate(d.getDate() - dd); return d.toISOString().slice(0, 10); };
     Storage.set('clients', [{ id: 'c1', name: 'Client Un' }, { id: 'c2', name: 'Client Deux' }, { id: 'c3', name: 'Client Trois' }, { id: 'c4', name: 'Client Quatre' }]);
     Storage.set('invoices', [
-      { id: 'i1', number: 'T-1', clientId: 'c1', clientName: 'Client Un', date: iso_(10), dueDate: iso_(5), totalHT: 1000, totalTTC: 1200, status: 'sent', items: [] },
-      { id: 'a1', number: 'AV-1', type: 'credit', relatedInvoiceId: 'i1', clientId: 'c1', clientName: 'Client Un', date: iso_(9), dueDate: iso_(9), totalHT: -1000, totalTTC: -1200, status: 'sent', items: [] },
-      { id: 'i2', number: 'T-2', clientId: 'c2', clientName: 'Client Deux', date: iso_(8), dueDate: iso_(30), totalHT: 500, totalTTC: 600, status: 'paid', items: [] },
-      { id: 'd1', number: 'BROUILLON-1', clientId: 'c3', clientName: 'Client Trois', date: iso_(60), dueDate: iso_(40), totalHT: 9000, totalTTC: 10800, status: 'draft', items: [] }
+      { id: 'i1', number: 'T-1', clientId: 'c1', clientName: 'Client Un', date: iso_(0), dueDate: iso_(5), totalHT: 1000, totalTTC: 1200, status: 'sent', items: [] },
+      { id: 'a1', number: 'AV-1', type: 'credit', relatedInvoiceId: 'i1', clientId: 'c1', clientName: 'Client Un', date: iso_(0), dueDate: iso_(9), totalHT: -1000, totalTTC: -1200, status: 'sent', items: [] },
+      { id: 'i2', number: 'T-2', clientId: 'c2', clientName: 'Client Deux', date: iso_(0), dueDate: iso_(30), totalHT: 500, totalTTC: 600, status: 'paid', items: [] },
+      { id: 'd1', number: 'BROUILLON-1', clientId: 'c3', clientName: 'Client Trois', date: iso_(0), dueDate: iso_(40), totalHT: 9000, totalTTC: 10800, status: 'draft', items: [] }
     ]);
     Storage.set('payments', []);
     Storage.set('quotes', [{ id: 'q1', number: 'DEV-1', clientId: 'c4', clientName: 'Client Quatre', items: [], totalTTC: 100, status: 'sent', convertedTo: 'd1' }]);
