@@ -12,7 +12,18 @@ function start(db) {
       const r = await fn(c); await c.query('COMMIT'); return r; }
     catch (e) { try { await c.query('ROLLBACK'); } catch {} throw e; } finally { c.release(); }
   };
-  const filters = (u, vals) => { const w = []; for (const [k, v] of u.searchParams) { if (['select', 'limit', 'on_conflict', 'order'].includes(k)) continue; const m = /^eq\.(.*)$/.exec(v); if (!ident.test(k) || !m) throw Object.assign(new Error('filtre non géré'), { http: 400 }); vals.push(m[1]); w.push(`${k}::text = $${vals.length}`); } return w.length ? ' WHERE ' + w.join(' AND ') : ''; };
+  // Les noms de tables et de colonnes viennent du schéma réel de la base, jamais de la requête (anti-injection SQL)
+  let SCHEMA = null;
+  const loadSchema = async () => {
+    if (SCHEMA) return SCHEMA;
+    const t = await pool.query("SELECT table_name AS n FROM information_schema.tables WHERE table_schema = 'public'");
+    const c = await pool.query("SELECT DISTINCT column_name AS n FROM information_schema.columns WHERE table_schema = 'public'");
+    SCHEMA = { tables: new Map(t.rows.map(x => [x.n, 'public."' + x.n + '"'])), cols: new Map(c.rows.map(x => [x.n, '"' + x.n + '"'])) };
+    return SCHEMA;
+  };
+  const bad = (msg) => Object.assign(new Error(msg), { http: 400 });
+  const col = (k) => { const q = SCHEMA.cols.get(k); if (!q) throw bad('colonne inconnue'); return q; };
+  const filters = (u, vals) => { const w = []; for (const [k, v] of u.searchParams) { if (['select', 'limit', 'on_conflict', 'order'].includes(k)) continue; const m = /^eq\.(.*)$/.exec(v); if (!m) throw bad('filtre non géré'); const qk = col(k); vals.push(m[1]); w.push(`${qk}::text = $${vals.length}`); } return w.length ? ' WHERE ' + w.join(' AND ') : ''; };
   const srv = http.createServer(async (req, res) => {
     let raw = ''; req.on('data', d => raw += d); await new Promise(r => req.on('end', r));
     const send = (s, b) => { res.writeHead(s, { 'content-type': 'application/json' }); res.end(JSON.stringify(b)); };
@@ -31,18 +42,18 @@ function start(db) {
       }
       m = /^\/rest\/v1\/([a-z_]+)$/.exec(u.pathname);
       if (m) {
-        const t = 'public.' + m[1]; const vals = [];
+        await loadSchema(); const t = SCHEMA.tables.get(m[1]); if (!t) throw Object.assign(new Error('table inconnue'), { http: 404 }); const vals = [];
         if (req.method === 'GET') {
-          const cols = (u.searchParams.get('select') || '*').split(',').map(x => x.trim()); cols.forEach(k => { if (k !== '*' && !ident.test(k)) throw new Error('col'); });
+          const cols = (u.searchParams.get('select') || '*').split(',').map(x => x.trim()).map(k => k === '*' ? '*' : col(k));
           const w = filters(u, vals); const lim = u.searchParams.get('limit') ? ` LIMIT ${parseInt(u.searchParams.get('limit'), 10)}` : '';
           return send(200, await withRole(who, async c => (await c.query(`SELECT ${cols.join(',')} FROM ${t}${w}${lim}`, vals)).rows));
         }
         if (req.method === 'DELETE') { const w = filters(u, vals); await withRole(who, c => c.query(`DELETE FROM ${t}${w}`, vals)); return send(204, {}); }
         if (req.method === 'POST') {
-          const oc = u.searchParams.get('on_conflict'); const merge = /merge-duplicates/.test(req.headers.prefer || '');
-          const cols = Object.keys(body); cols.forEach(k => { if (!ident.test(k)) throw new Error('col'); });
+          const oc = u.searchParams.get('on_conflict') ? u.searchParams.get('on_conflict').split(',').map(x => col(x.trim())) : null; const merge = /merge-duplicates/.test(req.headers.prefer || '');
+          const cols = Object.keys(body).map(col);
           let sql = `INSERT INTO ${t} (${cols.join(',')}) SELECT ${cols.join(',')} FROM jsonb_populate_record(null::${t}, $1::jsonb)`;
-          if (oc && merge) sql += ` ON CONFLICT (${oc}) DO UPDATE SET ${cols.filter(k => !oc.split(',').includes(k)).map(k => `${k}=EXCLUDED.${k}`).join(',')}`;
+          if (oc && merge) sql += ` ON CONFLICT (${oc.join(',')}) DO UPDATE SET ${cols.filter(k => !oc.includes(k)).map(k => `${k}=EXCLUDED.${k}`).join(',')}`;
           await withRole(who, c => c.query(sql, [JSON.stringify(body)])); return send(201, {});
         }
       }
