@@ -3640,6 +3640,7 @@
                         <option value="all">Tous</option>
                         <option value="todo">À facturer</option>
                         <option value="done">Facturés</option>
+                        <option value="cancelled">Annulés</option>
                     </select>
                     <div class="search-box"><span>🔍</span><input type="text" id="blSearch" placeholder="Client, n° BL..." oninput="renderDeliveries()"></div>
                 </div>
@@ -7952,8 +7953,9 @@ function navTo(page) {
     if (page === 'clients') renderClients();
     if (page === 'products') { renderProducts(); stockRefreshLevels().then(() => { if (document.getElementById('page-products').classList.contains('active')) renderProducts(); }).catch(() => {}); }
     if (page === 'stock') { initStockPeriod(); renderStock(); }
-    if (page === 'deliveries') { renderDeliveries(); stockRefreshLevels().catch(() => {}); }
-    if (page === 'purchases') { renderPurchases(); stockRefreshLevels().catch(() => {}); }
+    if (page === 'deliveries') { renderDeliveries(); blLoad(true).then(() => { if (document.getElementById('page-deliveries').classList.contains('active')) renderDeliveries(); }).catch(() => {}); stockRefreshLevels().catch(() => {}); }
+    if (page === 'invoices' && _blCache === null && stockServer()) blLoad().catch(() => {});
+    if (page === 'purchases') { renderPurchases(); purLoad(true).then(() => { if (document.getElementById('page-purchases').classList.contains('active')) renderPurchases(); }).catch(() => {}); stockRefreshLevels().catch(() => {}); }
     if (page === 'taxes') { purLoad().then(() => { if (document.getElementById('page-taxes').classList.contains('active')) renderVatReport(false); }).catch(() => {}); }
     if (page === 'payments') renderPayments();
     if (page === 'reminders') renderReminders();
@@ -8114,7 +8116,7 @@ function renderMonthCard(invoices) {
 function setMonthlyGoal(v) { const n = Math.max(0, Math.round(Number(v) || 0)); Storage.set('monthlyGoal', n); renderDashboard(); }
 
 function renderDashboard() {
-    try { const b = document.getElementById('badgeDeliveries'); if (b) b.textContent = blList().filter(d => !blInvoice(d)).length; } catch (e) {}
+    try { if (_blCache === null && stockServer()) blLoad().then(blUpdateBadge).catch(() => {}); else blUpdateBadge(); } catch (e) {}
     const allInvoices = Storage.get('invoices', []) || [];
     // Apply auto-overdue detection
     const invoices = allInvoices.map(getInvoiceWithStatus);
@@ -8621,8 +8623,11 @@ function deleteInvoice(id) {
     const qs = Storage.get('quotes', []) || [];
     const qLinked = qs.filter(q => q.convertedTo === id);
     if (qLinked.length) { qLinked.forEach(q => { delete q.convertedTo; delete q.convertedInvoiceNumber; delete q.convertedAt; }); Storage.set('quotes', qs); }
-    const dls = Storage.get('deliveries', []) || [];
-    if (dls.some(d => d.invoiceId === id)) { dls.forEach(d => { if (d.invoiceId === id) { delete d.invoiceId; delete d.invoiceNumber; } }); Storage.set('deliveries', dls); }
+    if (blList().some(d => d.invoiceId === id) && stockServer()) {
+        _blVer++; blList().forEach(d => { if (d.invoiceId === id) { d.invoiceId = null; d.invoiceNumber = null; } });
+        // le serveur vérifie que la facture n'est plus qu'un brouillon (ou absente) ; hors ligne, blLoad() le refera
+        supaClient.rpc('delivery_unlink_invoice', { p_invoice_id: id }).then(r => { if (r.error) console.warn('BL : retrait du lien en attente', r.error.message); });
+    }
     renderInvoices();
     showToast('Brouillon supprimé', 'success');
 }
@@ -9149,8 +9154,10 @@ async function _persistEditor(forceStatus = null) {
         const quotes = Storage.get('quotes', []);
         const q = quotes.find(x => x.convertedTo === data.id);
         if (q) { q.convertedInvoiceNumber = data.number; Storage.set('quotes', quotes); }
-        const dels = Storage.get('deliveries', []) || [];
-        if (dels.some(d => d.invoiceId === data.id)) { dels.forEach(d => { if (d.invoiceId === data.id) d.invoiceNumber = data.number; }); Storage.set('deliveries', dels); }
+        if (Array.isArray(data.deliveryIds) && data.deliveryIds.length && stockServer()) {
+            _blVer++; blList().forEach(d => { if (d.invoiceId === data.id) d.invoiceNumber = data.number; });
+            supaClient.rpc('delivery_invoice_issued', { p_invoice_id: data.id, p_number: data.number }).then(r => { if (r.error) console.warn('BL : numéro de facture non reporté', r.error.message); });
+        }
     }
     return issuanceBlocked ? Object.assign({}, data, { _issuanceBlocked: true }) : data;
 }
@@ -9525,7 +9532,8 @@ function saveClient() {
     }
 }
 
-function deleteClient(id) {
+async function deleteClient(id) {
+    if (stockServer()) { try { await blLoad(); } catch (e) { return showToast('Connexion requise pour vérifier les bons de livraison de ce client', 'error'); } }
     const invoices = Storage.get('invoices', []);
     const linked = invoices.filter(i => i.clientId === id);
     if (linked.length > 0) {
@@ -9537,7 +9545,7 @@ function deleteClient(id) {
         showToast(`Impossible : ${linkedQuotes.length} devis lié(s). Supprimez-les d'abord.`, 'error');
         return;
     }
-    const linkedBl = (Storage.get('deliveries', []) || []).filter(d => d.clientId === id);
+    const linkedBl = blList().filter(d => d.clientId === id);
     if (linkedBl.length > 0) {
         showToast(`Impossible : ${linkedBl.length} bon(s) de livraison lié(s).`, 'error');
         return;
@@ -9711,7 +9719,7 @@ function stockLines(doc, type, prefix) {
 // Ligne venue d'un BL → sortie du BL (même produit) ; sinon → sortie de la facture (même rang de ligne).
 function creditReturnOf(credit, it, idx) {
     if (it.fromDelivery) {
-        const bl = (Storage.get('deliveries', []) || []).find(d => d.id === it.fromDelivery);
+        const bl = blList().find(d => d.id === it.fromDelivery);
         const m = bl && (bl.stockMoves || []).find(x => x.productId === it.productId);
         if (m) return m.key;
     }
@@ -9950,7 +9958,7 @@ async function renderPurchases() {
     const el = document.getElementById('purchasesList');
     if (!stockServer()) { el.innerHTML = '<div style="padding:16px; color:var(--ink-mute);">Les achats sont enregistrés sur le serveur : connexion à votre compte requise.</div>'; return; }
     if (_purCache === null) el.innerHTML = '<div style="padding:16px; color:var(--ink-mute);">Chargement…</div>';
-    try { await purLoad(); } catch (e) { if (tok === _purRenderTok) el.innerHTML = '<div style="padding:16px; color:var(--danger);">Impossible de charger les achats (connexion). Réessayez.</div>'; return; }
+    if (_purCache === null) { try { await purLoad(); } catch (e) { if (tok === _purRenderTok) el.innerHTML = '<div style="padding:16px; color:var(--danger);">Impossible de charger les achats (connexion). Réessayez.</div>'; return; } }
     if (tok !== _purRenderTok) return;
     const q = (document.getElementById('purSearch')?.value || '').toLowerCase().trim();
     const f = document.getElementById('purFilter')?.value || 'all';
@@ -10162,42 +10170,87 @@ async function openSuppliersList() {
 // une ligne ajoutée à la main sur cette facture, ou une facture sans BL, déduit le stock comme avant.
 // Un BL facturé ne se supprime pas ; un BL non facturé supprimé remet le stock (entrées inverses), historique conservé.
 // ============================================
-function blList() { const s = Storage.get('deliveries', []); return Array.isArray(s) ? s : []; }
-function blNextNumber(date) {
-    const y = String(date || todayISO()).slice(0, 4), re = new RegExp('^BL-' + y + '-(\\d+)$');
-    const n = blList().reduce((m, d) => { const x = re.exec(d.number || ''); return x ? Math.max(m, parseInt(x[1], 10)) : m; }, 0);
-    return `BL-${y}-${String(n + 1).padStart(3, '0')}`;
+// BL enregistrés par le SERVEUR (sql/38) : liste en cache, rechargée après chaque écriture.
+let _blCache = null, _blLoading = null, _blKey = null, _blVer = 0;   // _blVer : changé à chaque modification locale du cache (une lecture plus ancienne est refaite)
+function blList() { return Array.isArray(_blCache) ? _blCache : []; }
+const blFromServer = (r) => {
+    const lines = Array.isArray(r.lines) ? r.lines : [];
+    return { id: r.id, number: r.number, date: r.delivery_date, clientId: r.client_id, clientName: r.client_name, clientICE: r.client_ice || '', clientAddress: r.client_address || '',
+        sourceQuote: r.source_quote || undefined, sourceQuoteNumber: r.source_quote_number || undefined, notes: r.notes || '', totalHT: Number(r.total_ht), totalTVA: Number(r.total_tva),
+        totalTTC: Number(r.total_ttc), invoiceId: r.invoice_id || null, invoiceNumber: r.invoice_number || null, status: r.status, cancelReason: r.cancel_reason || '', legacyId: r.legacy_id || null,
+        createdAt: r.created_at,
+        items: lines.map(l => ({ ...(l.product_id ? { productId: l.product_id } : {}), productName: l.product_name || '', unit: l.unit || '', trackStock: !!l.track_stock, description: l.description,
+            quantity: Number(l.qty), price: Number(l.unit_price), discount: Number(l.discount) || 0, tva: Number(l.tva_rate), totalHT: Number(l.total_ht), totalTVA: Number(l.total_tva),
+            totalTTC: Math.round((Number(l.total_ht) + Number(l.total_tva)) * 100) / 100 })),
+        // sorties de stock du BL (clé déterministe, utilisée par les retours d'avoir pour reprendre leur coût)
+        stockMoves: lines.filter(l => l.track_stock).map(l => ({ key: `bl:${r.legacy_id || r.id}:${l.line_no}`, productId: l.product_id, productName: l.product_name, unit: l.unit, qty: Number(l.qty) })) };
+};
+async function blLoad(force) {
+    if (!stockServer()) { _blCache = []; return _blCache; }
+    if (_blLoading && !force) return _blLoading;
+    _blLoading = (async () => {
+        const legacy = Storage.get('deliveries', []);
+        if (Array.isArray(legacy) && legacy.length && !Storage.get('deliveriesMigrated', false)) {
+            const { error } = await supaClient.rpc('fin_import_legacy_deliveries', { p_items: legacy });
+            if (!error) { Storage.set('deliveriesMigrated', true); showToast(`🚚 ${legacy.length} bon${legacy.length > 1 ? 's' : ''} de livraison de la version précédente repris par le serveur`, 'success'); }
+            else console.warn('Reprise des BL en attente :', error.message);
+        }
+        let data, tries = 0;
+        for (;;) {      // une modification locale pendant la lecture (lien facture…) : on relit, pour ne jamais écraser par un état plus ancien
+            const ver = _blVer, r = await supaClient.rpc('delivery_list', { p_from: null, p_to: null, p_status: null, p_limit: 5000, p_offset: 0 });
+            if (r.error) throw new Error(r.error.message || 'erreur');
+            data = r.data;
+            if (ver === _blVer || ++tries >= 3) break;
+        }
+        _blCache = (data || []).map(blFromServer);
+        // Lien vers une facture brouillon supprimée (hors ligne, autre appareil…) : le serveur le retire s'il voit la facture absente ou brouillon
+        const local = new Set((Storage.get('invoices', []) || []).map(i => i.id));
+        const orphans = [...new Set(_blCache.filter(d => d.status === 'active' && d.invoiceId && !local.has(d.invoiceId)).map(d => d.invoiceId))];
+        for (const invId of orphans) {
+            const r = await supaClient.rpc('delivery_unlink_invoice', { p_invoice_id: invId });
+            if (!r.error && r.data && r.data.unlinked) _blCache.forEach(d => { if (d.invoiceId === invId) { d.invoiceId = null; d.invoiceNumber = null; } });
+        }
+        return _blCache;
+    })();
+    try { return await _blLoading; } finally { _blLoading = null; }
 }
+function blUpdateBadge() { const b = document.getElementById('badgeDeliveries'); if (b) b.textContent = blList().filter(d => d.status !== 'cancelled' && !blInvoice(d)).length; }
 function blInvoice(d) { return d && d.invoiceId ? (Storage.get('invoices', []) || []).find(i => i.id === d.invoiceId) : null; }
-function renderDeliveries() {
+let _blRenderTok = 0;
+async function renderDeliveries() {
+    const tok = ++_blRenderTok;
+    const el = document.getElementById('deliveriesList');
+    if (!stockServer()) { el.innerHTML = '<div style="padding:16px; color:var(--ink-mute);">Les bons de livraison sont enregistrés sur le serveur : connexion à votre compte requise.</div>'; return; }
+    if (_blCache === null) el.innerHTML = '<div style="padding:16px; color:var(--ink-mute);">Chargement…</div>';
+    if (_blCache === null) { try { await blLoad(); } catch (e) { if (tok === _blRenderTok) el.innerHTML = '<div style="padding:16px; color:var(--danger);">Impossible de charger les bons de livraison (connexion). Réessayez.</div>'; return; } }
+    if (tok !== _blRenderTok) return;
     const q = (document.getElementById('blSearch')?.value || '').toLowerCase().trim();
     const f = document.getElementById('blFilter')?.value || 'all';
     const list = blList().filter(d => {
         if (q && ![d.clientName, d.number].some(v => String(v || '').toLowerCase().includes(q))) return false;
+        if (f === 'cancelled') return d.status === 'cancelled';
+        if (d.status === 'cancelled' && f !== 'all') return false;
         const inv = blInvoice(d);
         if (f === 'todo' && inv) return false;
         if (f === 'done' && !inv) return false;
         return true;
     }).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.number).localeCompare(String(a.number)));
-    const todo = blList().filter(d => !blInvoice(d)).length;
-    const badge = document.getElementById('badgeDeliveries'); if (badge) badge.textContent = todo;
-    const el = document.getElementById('deliveriesList');
+    blUpdateBadge();
     if (!list.length) {
         el.innerHTML = (q || f !== 'all') ? '<div style="padding:16px; color:var(--ink-mute);">Aucun bon de livraison.</div>' :
             `<div class="empty-state"><div class="empty-icon">🚚</div><h3>Aucun bon de livraison</h3><p>Créez un BL à la livraison : le stock sort tout de suite, la facture se fait ensuite à partir d'un ou plusieurs BL.</p><button class="btn btn-primary" onclick="openDelivery()">+ Nouveau BL</button></div>`;
         return;
     }
     el.innerHTML = list.map(d => {
-        const inv = blInvoice(d), n = (d.items || []).length;
-        const st = inv ? `<span style="color:var(--success);">Facturé ${escapeHtml(dn(inv.number))}</span>` : '<span style="color:var(--warning);">À facturer</span>';
+        const inv = blInvoice(d), n = (d.items || []).length, cancelled = d.status === 'cancelled';
+        const st = cancelled ? `<span style="color:var(--danger);">Annulé${d.cancelReason ? ' : ' + escapeHtml(d.cancelReason) : ''}</span>` : inv ? `<span style="color:var(--success);">Facturé ${escapeHtml(dn(inv.number))}</span>` : '<span style="color:var(--warning);">À facturer</span>';
         return `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(d.clientName || '—')}</strong><div class="stk-sub">${escapeHtml(d.number)} · ${formatDate(d.date)} · ${n} ligne${n > 1 ? 's' : ''} · ${st}${d.stockOk === false ? ' · <span style="color:var(--warning);">stock en attente</span>' : ''}</div></div>
             <div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end;">
                 <button class="btn btn-ghost btn-sm" onclick="generateDeliveryPDF(${jsArg(d.id)})" title="PDF à faire signer">📥 PDF</button>
-                ${inv ? `<button class="btn btn-ghost btn-sm" onclick="editInvoice(${jsArg(inv.id)})" title="Voir la facture">📄</button>` : `<button class="btn btn-ghost btn-sm" style="color:var(--success);" onclick="invoiceFromDeliveries(${jsArg(d.id)})" title="Créer la facture">→📄 Facturer</button>
-                <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="deleteDelivery(${jsArg(d.id)})" title="Supprimer">🗑</button>`}
+                ${cancelled ? '' : inv ? `<button class="btn btn-ghost btn-sm" onclick="editInvoice(${jsArg(inv.id)})" title="Voir la facture">📄</button>` : `<button class="btn btn-ghost btn-sm" style="color:var(--success);" onclick="invoiceFromDeliveries(${jsArg(d.id)})" title="Créer la facture">→📄 Facturer</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="cancelDelivery(${jsArg(d.id)})" title="Annuler le BL (stock remis)">↩️</button>`}
             </div></div>`;
     }).join('');
-    blSyncStock();
 }
 // ---- Saisie ----
 let _blFromQuote = null;
@@ -10233,7 +10286,9 @@ function onDeliveryProduct(sel) {
     delete row.dataset.discount;
 }
 function openDelivery(quoteId) {
+    if (!stockServer()) return showToast('Les bons de livraison sont enregistrés sur le serveur : connectez-vous à votre compte.', 'error');
     if (Storage._blockedByLicense('deliveries')) return showToast('🔒 Licence expirée : lecture seule. Activez votre licence pour enregistrer.', 'error');
+    _blKey = 'bk:' + uuid();                        // une clé par saisie : un renvoi ne crée jamais deux BL
     const clients = Storage.get('clients', []) || [];
     const sel = document.getElementById('blClient');
     sel.innerHTML = '<option value="">— Sélectionner un client —</option>' + clients.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
@@ -10277,70 +10332,46 @@ async function saveDelivery() {
     if (items.some(l => !l.description || !(l.quantity > 0))) return showToast('Chaque ligne : désignation et quantité livrée > 0', 'error');
     _blSaving = true;
     try {
-        const id = uuid(), number = blNextNumber(date), t = computeTotals(items);
         const products = Storage.get('products', []) || [];
-        const moves = [];
-        items.forEach((it, idx) => {
-            const p = it.productId && products.find(x => x.id === it.productId);
-            if (p && p.trackStock) moves.push({ key: `bl:${id}:${idx}`, productId: p.id, productName: p.name, unit: p.unit || 'unité', type: 'out', qty: it.quantity, date, source: 'delivery', ref: number, refId: id, note: client.name.slice(0, 200) });
-        });
         const quote = _blFromQuote ? (Storage.get('quotes', []) || []).find(x => x.id === _blFromQuote) : null;
-        const bl = { id, number, date, clientId: client.id, clientName: client.name, clientICE: client.ice || '', clientAddress: client.address || '', items, totalHT: t.totalHT, totalTVA: t.totalTVA, totalTTC: t.totalTTC,
-            notes: document.getElementById('blNote').value.trim().slice(0, 500), ...(quote ? { sourceQuote: quote.id, sourceQuoteNumber: quote.number } : {}),
-            stockMoves: moves.map(m => ({ key: m.key, productId: m.productId, productName: m.productName, unit: m.unit, qty: m.qty })), stockOk: true, createdAt: new Date().toISOString() };
-        Storage.set('deliveries', blList().concat([bl]));
+        const payload = { key: _blKey, client_id: client.id, client_name: client.name, client_ice: client.ice || '', client_address: client.address || '', date,
+            notes: document.getElementById('blNote').value.trim().slice(0, 500), source_quote: quote ? quote.id : null, source_quote_number: quote ? quote.number : null,
+            lines: items.map(it => { const p = it.productId && products.find(x => x.id === it.productId);
+                return { product_id: it.productId || null, product_name: p ? p.name : null, unit: it.unit || null, track_stock: !!(p && p.trackStock), description: it.description,
+                         qty: it.quantity, unit_price: it.price, discount: it.discount || 0, tva_rate: it.tva }; }) };
+        const { data, error } = await supaClient.rpc('delivery_record', { p: payload });
+        if (error) return showToast(finErrorText(error.message), 'error');
         if (quote && quote.status !== 'accepted') { const qs = Storage.get('quotes', []) || [], x = qs.find(y => y.id === quote.id); if (x) { x.status = 'accepted'; x.updatedAt = new Date().toISOString(); Storage.set('quotes', qs); } }
-        let r = 'ok';
-        if (moves.length) r = await stockRecord(moves);
-        if (r === 'error') { const all = blList(), x = all.find(d => d.id === id); if (x) { x.stockOk = false; Storage.set('deliveries', all); } }
-        const short = [];
-        if (r !== 'error') moves.forEach(m => { if (stockLevel(m.productId) < 0 && !short.includes(m.productName)) short.push(m.productName); });
         closeModal('deliveryModal');
+        await blLoad(true).catch(() => {});
+        await stockRefreshLevels().catch(() => {});
+        const tracked = payload.lines.filter(l => l.track_stock), short = [];
+        tracked.forEach(l => { if (stockLevel(l.product_id) < 0 && !short.includes(l.product_name)) short.push(l.product_name); });
         navTo('deliveries');
-        showToast(`${number} enregistré ✓` + (moves.length ? (r === 'error' ? ' — ⚠️ stock pas encore mis à jour (nouvel essai automatique)' : ` — stock : −${moves.length} ligne${moves.length > 1 ? 's' : ''}`) : '') + (short.length ? ` — ⚠️ stock négatif : ${short.join(', ')}` : ''), (r === 'error' || short.length) ? 'error' : 'success');
+        showToast(`${data.number} enregistré ✓` + (tracked.length ? ` — stock : −${tracked.length} ligne${tracked.length > 1 ? 's' : ''}` : '') + (short.length ? ` — ⚠️ stock négatif : ${short.join(', ')}` : ''), short.length ? 'error' : 'success');
     } finally { _blSaving = false; }
 }
-let _blSyncing = false;
-async function blSyncStock() {
-    if (_blSyncing || !stockServer()) return;
-    const pend = blList().filter(d => d.stockOk === false && (d.stockMoves || []).length);
-    if (!pend.length) return;
-    _blSyncing = true;
-    try {
-        for (const d of pend) {
-            try {
-                await stockSend(d.stockMoves.map(m => stockToServer({ ...m, type: 'out', date: d.date, source: 'delivery', ref: d.number, refId: d.id, note: d.clientName || '' })));
-                const all = blList(), x = all.find(y => y.id === d.id); if (x) { x.stockOk = true; Storage.set('deliveries', all); }
-            } catch (e) { break; }
-        }
-        await stockRefreshLevels();
-    } finally { _blSyncing = false; }
-}
-async function deleteDelivery(id) {
+async function cancelDelivery(id) {
     const d = blList().find(x => x.id === id);
-    if (!d) return;
+    if (!d || d.status === 'cancelled') return;
     const inv = blInvoice(d);
-    if (inv) return showToast(`Ce BL est rattaché à la facture ${dn(inv.number)} : il ne peut pas être supprimé.`, 'error');
+    if (inv) return showToast(`Ce BL est rattaché à la facture ${dn(inv.number)} : il ne peut pas être annulé.`, 'error');
     if (Storage._blockedByLicense('deliveries')) return showToast('🔒 Licence expirée : lecture seule. Activez votre licence pour enregistrer.', 'error');
     const sm = d.stockMoves || [];
-    if (!confirm(`Supprimer le bon de livraison ${d.number} (${d.clientName}) ?` + (sm.length ? `\n\nLes quantités seront remises en stock (${sm.length} ligne${sm.length > 1 ? 's' : ''}).` : ''))) return;
-    if (sm.length) {
-        const rev = sm.map(m => ({ key: String(m.key).replace(/^bl:/, 'bl-del:'), productId: m.productId, productName: m.productName, unit: m.unit, type: 'in', qty: m.qty, returnOf: m.key, date: todayISO(), source: 'delivery', ref: d.number, refId: d.id, note: 'Annulation ' + d.number }));   // remis au coût de la sortie du BL (sql/36)
-        if (stockServer()) {
-            const orig = sm.map(m => ({ key: m.key, productId: m.productId, productName: m.productName, unit: m.unit, type: 'out', qty: m.qty, date: d.date, source: 'delivery', ref: d.number, refId: d.id, note: d.clientName || '' }));
-            try { await stockSend(orig.concat(rev).map(stockToServer)); await stockRefreshLevels(); }
-            catch (e) { return showToast('Suppression impossible : le stock n\'a pas pu être corrigé (' + (e.message || 'connexion') + '). Réessayez.', 'error'); }
-        } else if (d.stockOk !== false) await stockRecord(rev);
-    }
-    Storage.set('deliveries', blList().filter(x => x.id !== id));
+    const reason = prompt(`Annuler le bon de livraison ${d.number} (${d.clientName}) ?` + (sm.length ? `\nLes quantités seront remises en stock (${sm.length} ligne${sm.length > 1 ? 's' : ''}), au coût de leur sortie.` : '') + `\nLe BL reste visible comme « annulé ».\n\nMotif :`, 'Livraison annulée');
+    if (reason === null) return;
+    const { error } = await supaClient.rpc('delivery_cancel', { p_id: id, p_reason: reason.slice(0, 200) });
+    if (error) return showToast(finErrorText(error.message), 'error');
+    await blLoad(true).catch(() => {});
+    await stockRefreshLevels().catch(() => {});
     renderDeliveries();
-    showToast(`${d.number} supprimé` + (sm.length ? ' — stock remis' : ''), 'success');
+    showToast(`${d.number} annulé` + (sm.length ? ' — stock remis' : ''), 'success');
 }
 // ---- Facturation à partir de BL ----
 function invoiceFromDeliveries(id) {
     const d = blList().find(x => x.id === id);
-    if (!d || blInvoice(d)) return;
-    const others = blList().filter(x => x.id !== id && x.clientId === d.clientId && !blInvoice(x)).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    if (!d || d.status === 'cancelled' || blInvoice(d)) return;
+    const others = blList().filter(x => x.id !== id && x.status !== 'cancelled' && x.clientId === d.clientId && !blInvoice(x)).sort((a, b) => String(a.date).localeCompare(String(b.date)));
     if (!others.length) return createInvoiceFromDeliveries([id]);
     document.querySelectorAll('.modal-overlay.bl-pick').forEach(m => m.remove());
     const all = [d].concat(others);
@@ -10353,15 +10384,15 @@ function invoiceFromDeliveries(id) {
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
 }
-function createInvoiceFromDeliveries(ids) {
+async function createInvoiceFromDeliveries(ids) {
     if (Storage._blockedByLicense('invoices')) return showToast('🔒 Licence expirée : lecture seule. Activez votre licence pour enregistrer.', 'error');
-    const all = blList(), bls = ids.map(i => all.find(x => x.id === i)).filter(x => x && !blInvoice(x));
+    const all = blList(), bls = ids.map(i => all.find(x => x.id === i)).filter(x => x && x.status !== 'cancelled' && !blInvoice(x));
     if (!bls.length) return;
     if (bls.some(x => x.clientId !== bls[0].clientId)) return showToast('Les BL doivent être du même client', 'error');
     const client = (Storage.get('clients', []) || []).find(c => c.id === bls[0].clientId) || {};
     bls.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const items = [];
-    bls.forEach(b => (b.items || []).forEach(it => { const { unit, ...rest } = it; items.push({ ...rest, fromDelivery: b.id }); }));
+    bls.forEach(b => (b.items || []).forEach(it => { const { unit, productName, trackStock, ...rest } = it; items.push({ ...rest, fromDelivery: b.id }); }));
     const t = computeTotals(items), now = new Date().toISOString();
     const inv = { id: uuid(), number: draftNumber(), type: 'invoice', status: 'draft', date: todayISO(), dueDate: addDaysISO(30), paymentTerms: '30',
         clientId: bls[0].clientId, clientName: client.name || bls[0].clientName, clientICE: client.ice || bls[0].clientICE, clientAddress: client.address || bls[0].clientAddress,
@@ -10371,8 +10402,14 @@ function createInvoiceFromDeliveries(ids) {
     const invoices = Storage.get('invoices', []) || [];
     invoices.push(inv);
     Storage.set('invoices', invoices);
-    bls.forEach(b => { b.invoiceId = inv.id; b.invoiceNumber = 'brouillon'; });
-    Storage.set('deliveries', all);
+    // Le serveur rattache les BL (même client, actifs, non facturés) ; en cas de refus, le brouillon est retiré
+    const { error } = await supaClient.rpc('delivery_link_invoice', { p_ids: bls.map(b => b.id), p_invoice_id: inv.id });
+    if (error) {
+        Storage.set('invoices', (Storage.get('invoices', []) || []).filter(i => i.id !== inv.id));
+        return showToast('Facture non créée : ' + finErrorText(error.message), 'error');
+    }
+    const linkedIds = bls.map(b => b.id);
+    _blVer++; blList().forEach(b => { if (linkedIds.includes(b.id)) { b.invoiceId = inv.id; b.invoiceNumber = null; } });   // par identifiant : le cache a pu être rechargé entre-temps
     logDoc('facturation_bl', inv, 'depuis ' + bls.map(b => b.number).join(', '));
     showToast('Facture créée en brouillon à partir des BL : vérifiez puis envoyez ✓', 'success');
     editInvoice(inv.id);
@@ -12682,7 +12719,7 @@ function exportData() {
         invoices: Storage.get('invoices', []),
         quotes: Storage.get('quotes', []),
         payments: Storage.get('payments', []),
-        deliveries: Storage.get('deliveries', []),
+        deliveries: blList(),
         suppliers: Storage.get('suppliers', []),
         purchases: purList(),
         counter: Storage.get('counter', {}),
