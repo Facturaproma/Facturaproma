@@ -77,10 +77,12 @@ ALTER TABLE public.fin_audit ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.fin_audit FROM PUBLIC, anon, authenticated;
 
 -- ---------- points d'extension remplacés par sql/39 (règlements) et sql/40 (clôture) ----------
-CREATE OR REPLACE FUNCTION public.fin_assert_open(p_uid UUID, p_date DATE) RETURNS VOID
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$ BEGIN RETURN; END; $$;
-REVOKE ALL ON FUNCTION public.fin_assert_open(UUID, DATE) FROM PUBLIC, anon, authenticated;
+-- Créées seulement si absentes : recoller sql/37 après sql/39 / sql/40 ne remet PAS les versions vides.
 DO $$ BEGIN
+    IF to_regprocedure('public.fin_assert_open(uuid,date)') IS NULL THEN
+        EXECUTE 'CREATE FUNCTION public.fin_assert_open(p_uid UUID, p_date DATE) RETURNS VOID LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $f$ BEGIN RETURN; END; $f$';
+    END IF;
+    EXECUTE 'REVOKE ALL ON FUNCTION public.fin_assert_open(UUID, DATE) FROM PUBLIC, anon, authenticated';
     IF to_regprocedure('public.fin_purchase_paid(uuid,uuid)') IS NULL THEN
         EXECUTE 'CREATE FUNCTION public.fin_purchase_paid(p_uid UUID, p_purchase UUID) RETURNS NUMERIC LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $f$ SELECT 0::numeric $f$';
         EXECUTE 'REVOKE ALL ON FUNCTION public.fin_purchase_paid(UUID, UUID) FROM PUBLIC, anon, authenticated';
