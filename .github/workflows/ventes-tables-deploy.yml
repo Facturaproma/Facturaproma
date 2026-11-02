@@ -25,11 +25,18 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main' && inputs.confirm == 'APPLIQUER'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: ${{ inputs.target == 'preprod' && 'preprod' || null }}
     timeout-minutes: 20
     steps:
+      - name: Confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          C=$(printf '%s' "$CONFIRM" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+          if [ "$C" != "APPLIQUER" ]; then echo "::error::Mot de confirmation incorrect : tapez APPLIQUER."; exit 1; fi
+          echo "Confirmation reçue."
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
