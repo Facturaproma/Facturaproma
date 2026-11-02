@@ -84,3 +84,10 @@ SELECT pg_temp.ok('après retour : user_data contient les nouveaux paiements (an
 SELECT pg_temp.ok('après retour : mêmes chiffres de novembre (lus dans user_data)', public.fin_figures('45454545-0000-4000-8000-000000000001', '2026-11-01', '2026-11-30') = (SELECT v FROM _b WHERE k = 'fig2'),
   public.fin_figures('45454545-0000-4000-8000-000000000001', '2026-11-01', '2026-11-30')::text);
 DELETE FROM public.doc_store_testers WHERE user_id = '45454545-0000-4000-8000-000000000001';
+-- sql/46 : un nouveau compte démarre en mode documents
+\i sql/46_nouveaux_comptes_documents.sql
+INSERT INTO auth.users(id, email, email_confirmed_at) VALUES ('46464646-0000-4000-8000-000000000001', 'nouveau@example.com', now());
+SELECT pg_temp.ok('sql/46 : nouveau compte en mode documents, autorisé', public.fp_doc_mode('46464646-0000-4000-8000-000000000001') = 'documents'
+  AND EXISTS (SELECT 1 FROM public.doc_store_testers WHERE user_id = '46464646-0000-4000-8000-000000000001'));
+SELECT pg_temp.ok('sql/46 : déclencheur interne non exposé', NOT has_function_privilege('authenticated', 'public.fp_new_account_documents()', 'EXECUTE'));
+DROP TRIGGER trg_fp_new_account_documents ON auth.users;   -- base de test : les suites suivantes créent des comptes legacy

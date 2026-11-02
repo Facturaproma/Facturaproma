@@ -55,3 +55,14 @@ Autorisée par le propriétaire le 01/11/2026 (« Migration des ventes et paieme
 
    Un compte actif dans les 10 dernières minutes est reporté (`ACTIVITE_RECENTE_ANCIEN_APPAREIL`).
 5. **Retour arrière d'un compte** : `SELECT fp_doc_mode_set(…, 'legacy');`.
+
+## Exécution (02/11/2026)
+
+- Production : sql/15, 16, 17 et 45 appliqués par le workflow `ventes-tables-deploy` (lancé par le propriétaire, vert).
+- Essai complet sur un compte temporaire en production, annulé à la fin :
+  - bascule faite, chiffres identiques ;
+  - plafond des paiements, annulation de paiement, refus d'écriture dans l'ancien stockage ;
+  - retour arrière : 3 paiements recopiés.
+- **Les 14 comptes ont été basculés** : 14/14 réussis, chiffres de gestion identiques avant et après pour chacun. 25 documents et 18 paiements, soit exactement le contenu de l'ancien stockage.
+- sql/46 : tout nouveau compte démarre directement en mode documents (vérifié en production sur un compte temporaire, annulé).
+- Préproduction : pas encore mise à jour. Pour le faire, ajouter `main` aux branches autorisées de l'environnement « preprod ».
