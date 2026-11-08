@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install edge-tts==7.3.1 faster-whisper==1.2.1 av==14.4.0
+      - run: pip install edge-tts==7.3.1 faster-whisper==1.2.1
       - run: python scripts/voix/generer.py
       - if: always()
         uses: actions/upload-artifact@v4
