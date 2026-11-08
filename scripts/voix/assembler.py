@@ -5,17 +5,26 @@ cfg = json.load(open('scripts/voix/voix-off.json', encoding='utf-8'))
 starts, total = cfg['starts'], cfg['total']
 def dur(f): return float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], capture_output=True, text=True).stdout)
 tag = lambda r: r.replace('%', '').replace('+', 'p').replace('-', 'm')
-chosen = []
+chosen = []; prev_end = 0.0
 for i, st in enumerate(starts):
     end = starts[i + 1] if i + 1 < len(starts) else total
-    slot = end - st - 0.45                       # petite respiration avant l'écran suivant
+    last = i + 1 == len(starts)
+    # fenêtre utilisable : jusqu'à 0,5 s avant l'écran (si la phrase précédente est finie), et jusqu'au début de l'écran suivant
+    earliest = max(prev_end + 0.3, st - 0.5 if i else 0.15)
+    limit = (total - 0.15) if last else end - 0.1
     pick = None
     for r in cfg['rates']:                       # du plus posé au plus rapide
         f = f"out/l{i + 1}_{tag(r)}.mp3"; d = dur(f)
-        if d <= slot: pick = (f, r, d); break
-    if not pick: f = f"out/l{i + 1}_{tag(cfg['rates'][-1])}.mp3"; pick = (f, cfg['rates'][-1], dur(f))
-    off = st + max(0.15, min(0.35, (slot - pick[2]) / 2))   # léger décalage après le changement d'écran
-    chosen.append({'ligne': i + 1, 'fichier': pick[0], 'debit': pick[1], 'duree': round(pick[2], 2), 'debut': round(off, 2), 'fin': round(off + pick[2], 2), 'creneau': [st, round(end, 2)]})
+        ideal = max(earliest, st + 0.15)
+        if ideal + d <= limit: pick = (f, r, d, ideal); break
+        if earliest + d <= limit: pick = (f, r, d, max(earliest, limit - d)); break
+    if not pick:
+        r = cfg['rates'][-1]; f = f"out/l{i + 1}_{tag(r)}.mp3"; d = dur(f); pick = (f, r, d, earliest)
+    off = pick[3]; prev_end = off + pick[2]
+    chosen.append({'ligne': i + 1, 'fichier': pick[0], 'debit': pick[1], 'duree': round(pick[2], 2), 'debut': round(off, 2), 'fin': round(prev_end, 2),
+                   'creneau': [st, round(end, 2)], 'dans_le_creneau': off >= st - 0.51 and prev_end <= limit + 0.001})
+assert all(chosen[k]['debut'] >= chosen[k - 1]['fin'] + 0.29 for k in range(1, len(chosen))), 'phrases qui se chevauchent'
+assert chosen[-1]['fin'] <= total, 'dépasse la fin de la vidéo'
 inputs, filt = [], []
 for k, c in enumerate(chosen):
     inputs += ['-i', c['fichier']]
