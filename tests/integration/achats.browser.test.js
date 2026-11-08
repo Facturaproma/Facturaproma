@@ -53,6 +53,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.fill('#supName', 'Minoterie Atlas'); await p.fill('#supICE', '1234'); await p.evaluate(() => saveSupplier());
   ok('ICE fournisseur invalide refusé (15 chiffres)', (await p.evaluate(() => purSuppliers().length)) === 0);
   await p.fill('#supICE', '001122334455667'); await p.evaluate(() => saveSupplier());
+  ok('fiche incomplète (IF, RC, adresse, ville, téléphone manquants) refusée', (await p.evaluate(() => purSuppliers().length)) === 0);
+  await p.fill('#supIF', '12345678'); await p.fill('#supRC', '98765 Casablanca'); await p.fill('#supAddress', '12 rue Atlas'); await p.fill('#supCity', 'Casablanca'); await p.fill('#supPhone', '0522 11 22 33');
+  await p.evaluate(() => saveSupplier());
   ok('fournisseur créé et sélectionné', await p.evaluate(() => purSuppliers().length === 1 && document.getElementById('purSupplier').value === purSuppliers()[0].id));
   // Achat mixte : marchandise suivie + frais de port (charge) + marchandise non suivie
   await p.evaluate(() => {

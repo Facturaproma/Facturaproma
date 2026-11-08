@@ -3416,7 +3416,7 @@
 
                     <div class="form-group">
                         <label>Client *</label>
-                        <select id="editorClient" required>
+                        <select id="editorClient" required onchange="warnIncompleteClient(this.value)">
                             <option value="">— Sélectionner un client —</option>
                         </select>
                         <button class="btn btn-ghost btn-sm" type="button" onclick="newClient(true)" style="margin-top: 6px;">+ Nouveau client</button>
@@ -5250,33 +5250,50 @@
 <div class="modal-overlay" id="clientModal" onclick="closeModalIfBg(event, 'clientModal')">
     <div class="modal-content" onclick="event.stopPropagation()">
         <h2 id="clientModalTitle">Nouveau client</h2>
-        <p>Ajoutez les informations de votre client</p>
+        <p>Les champs marqués * sont obligatoires.</p>
+
+        <div class="form-group">
+            <label>Type *</label>
+            <select id="modalClientKind" onchange="partyKindUI('client')">
+                <option value="societe">Société (SARL, SA…)</option>
+                <option value="ae">Auto-entrepreneur / personne physique professionnelle</option>
+                <option value="particulier">Particulier</option>
+            </select>
+        </div>
 
         <div class="form-group">
             <label>Nom / Raison sociale *</label>
-            <input type="text" id="modalClientName" required>
+            <input type="text" id="modalClientName" required maxlength="120">
         </div>
 
-        <div class="form-row">
+        <div class="form-row party-pro-client">
             <div>
-                <label>ICE</label>
-                <input type="text" id="modalClientICE">
+                <label>ICE *</label>
+                <input type="text" id="modalClientICE" inputmode="numeric" maxlength="20" placeholder="15 chiffres">
             </div>
-            <div>
-                <label>IF</label>
-                <input type="text" id="modalClientIF">
+            <div class="party-soc-client">
+                <label>IF *</label>
+                <input type="text" id="modalClientIF" maxlength="30">
             </div>
+        </div>
+        <div class="form-group party-soc-client">
+            <label>RC (registre de commerce) *</label>
+            <input type="text" id="modalClientRC" maxlength="40" placeholder="Ex. : 123456 Casablanca">
         </div>
 
         <div class="form-group">
-            <label>Adresse</label>
-            <textarea id="modalClientAddress"></textarea>
+            <label>Adresse *</label>
+            <textarea id="modalClientAddress" maxlength="250"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Ville *</label>
+            <input type="text" id="modalClientCity" maxlength="60">
         </div>
 
         <div class="form-row">
             <div>
-                <label>Téléphone</label>
-                <input type="tel" id="modalClientPhone">
+                <label>Téléphone *</label>
+                <input type="tel" id="modalClientPhone" maxlength="30" placeholder="06 12 34 56 78">
             </div>
             <div>
                 <label>Email</label>
@@ -5637,16 +5654,21 @@
 <div class="modal-overlay" id="supplierModal" style="z-index: 6000;" onclick="closeModalIfBg(event, 'supplierModal')">
     <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 480px;">
         <h2 id="supplierModalTitle">Nouveau fournisseur</h2>
+        <p style="font-size:13px;">Les champs marqués * sont obligatoires.</p>
+        <div class="form-group"><label>Type *</label><select id="supKind" onchange="partyKindUI('sup')">
+            <option value="societe">Société (SARL, SA…)</option><option value="ae">Auto-entrepreneur / personne physique professionnelle</option><option value="particulier">Particulier</option></select></div>
         <div class="form-group"><label>Nom / Raison sociale *</label><input type="text" id="supName" maxlength="120"></div>
-        <div class="form-row">
-            <div><label>ICE</label><input type="text" id="supICE" maxlength="20" inputmode="numeric" placeholder="15 chiffres"></div>
-            <div><label>IF</label><input type="text" id="supIF" maxlength="30"></div>
+        <div class="form-row party-pro-sup">
+            <div><label>ICE *</label><input type="text" id="supICE" maxlength="20" inputmode="numeric" placeholder="15 chiffres"></div>
+            <div class="party-soc-sup"><label>IF *</label><input type="text" id="supIF" maxlength="30"></div>
         </div>
+        <div class="form-group party-soc-sup"><label>RC (registre de commerce) *</label><input type="text" id="supRC" maxlength="40" placeholder="Ex. : 123456 Casablanca"></div>
+        <div class="form-group"><label>Adresse *</label><input type="text" id="supAddress" maxlength="250"></div>
+        <div class="form-group"><label>Ville *</label><input type="text" id="supCity" maxlength="60"></div>
         <div class="form-row">
-            <div><label>Téléphone</label><input type="tel" id="supPhone" maxlength="30"></div>
+            <div><label>Téléphone *</label><input type="tel" id="supPhone" maxlength="30" placeholder="06 12 34 56 78"></div>
             <div><label>E-mail</label><input type="email" id="supEmail" maxlength="120"></div>
         </div>
-        <div class="form-group"><label>Adresse</label><input type="text" id="supAddress" maxlength="250"></div>
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('supplierModal')">Annuler</button>
             <button class="btn btn-primary" onclick="saveSupplier()">Enregistrer</button>
@@ -9509,7 +9531,7 @@ async function _persistEditor(forceStatus = null) {
         clientId: clientId,
         clientName: client.name,
         clientICE: client.ice,
-        clientAddress: client.address,
+        clientAddress: partyFullAddress(client),
         items: items,
         totalHT: totalHT,
         totalTVA: totalTVA,
@@ -9823,7 +9845,7 @@ function renderClients() {
                     const totalCA = clientInvoices.filter(i => i.type !== 'credit').reduce((s, i) => s + invoicePaidAmount(i, _allPay), 0);
                     return `
                         <tr>
-                            <td><strong>${escapeHtml(c.name)}</strong></td>
+                            <td><strong>${escapeHtml(c.name)}</strong>${partyMissing(c).length ? `<div style="font-size:11px; color:var(--warning);" title="${escapeHtml('À compléter : ' + partyMissing(c).join(', '))}">⚠️ fiche incomplète</div>` : ''}</td>
                             <td>${escapeHtml(c.ice || '—')}</td>
                             <td>${escapeHtml(c.email || '—')}</td>
                             <td>${escapeHtml(c.phone || '—')}</td>
@@ -9840,6 +9862,12 @@ function renderClients() {
         </table>${pg.html}`;
 }
 
+// Facture : prévenir si la fiche du client choisi est incomplète (non bloquant pour les fiches créées avant le 08/11/2026)
+function warnIncompleteClient(id) {
+    const c = (Storage.get('clients', []) || []).find(x => x.id === id);
+    const miss = c ? partyMissing(c) : [];
+    if (miss.length) showToast(`Fiche client incomplète (${miss.join(', ')}) : complétez-la dans Clients avant d'émettre la facture.`, 'warning');
+}
 function populateClientSelect() {
     const select = document.getElementById('editorClient');
     const clients = Storage.get('clients', []);
@@ -9847,16 +9875,38 @@ function populateClientSelect() {
         clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.ice ? ' (ICE: ' + c.ice + ')' : ''}</option>`).join('');
 }
 
+// ---- Fiches client / fournisseur : champs obligatoires selon le type ----
+// Société : nom, ICE (15 chiffres), IF, RC, adresse, ville, téléphone. Auto-entrepreneur : nom, ICE, adresse, ville, téléphone
+// (pas de RC). Particulier : nom, adresse, ville, téléphone. E-mail facultatif mais vérifié s'il est saisi.
+const PARTY_KINDS = { societe: 'Société', ae: 'Auto-entrepreneur', particulier: 'Particulier' };
+// Adresse complète (adresse + ville) pour les pièces
+function partyFullAddress(x) { if (!x) return ''; const a = String(x.address || '').trim(), c = String(x.city || '').trim(); return a && c && !a.toLowerCase().includes(c.toLowerCase()) ? a + ', ' + c : (a || c); }
+function partyKindOf(x) { return x && PARTY_KINDS[x.kind] ? x.kind : 'societe'; }
+function partyMissing(x) {
+    const k = partyKindOf(x), miss = [];
+    const has = (v) => String(v || '').trim().length > 0;
+    if (!has(x.name)) miss.push('nom');
+    if (k !== 'particulier') { if (!/^\d{15}$/.test(String(x.ice || '').replace(/\s+/g, ''))) miss.push('ICE (15 chiffres)'); }
+    if (k === 'societe') { if (!has(x.if)) miss.push('IF'); if (!has(x.rc)) miss.push('RC'); }
+    if (!has(x.address)) miss.push('adresse');
+    if (!has(x.city)) miss.push('ville');
+    if (!/^\+?[0-9][0-9 .\-]{7,18}$/.test(String(x.phone || '').trim())) miss.push('téléphone');
+    if (has(x.email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(x.email).trim())) miss.push('e-mail valide');
+    return miss;
+}
+function partyKindUI(which) {
+    const k = document.getElementById(which === 'client' ? 'modalClientKind' : 'supKind').value;
+    document.querySelectorAll('.party-pro-' + which).forEach(e => { e.style.display = k === 'particulier' ? 'none' : ''; });
+    document.querySelectorAll('.party-soc-' + which).forEach(e => { e.style.display = k === 'societe' ? '' : 'none'; });
+}
+const CLIENT_FIELDS = [['modalClientName', 'name'], ['modalClientICE', 'ice'], ['modalClientIF', 'if'], ['modalClientRC', 'rc'], ['modalClientAddress', 'address'], ['modalClientCity', 'city'], ['modalClientPhone', 'phone'], ['modalClientEmail', 'email']];
+
 function newClient(fromInvoice = false) {
     editingClientId = null;
     clientFromInvoice = fromInvoice;
     document.getElementById('clientModalTitle').textContent = 'Nouveau client';
-    document.getElementById('modalClientName').value = '';
-    document.getElementById('modalClientICE').value = '';
-    document.getElementById('modalClientIF').value = '';
-    document.getElementById('modalClientAddress').value = '';
-    document.getElementById('modalClientPhone').value = '';
-    document.getElementById('modalClientEmail').value = '';
+    CLIENT_FIELDS.forEach(([el]) => { document.getElementById(el).value = ''; });
+    document.getElementById('modalClientKind').value = 'societe'; partyKindUI('client');
     document.getElementById('clientModal').classList.add('active');
 }
 
@@ -9867,33 +9917,27 @@ function editClient(id) {
     
     editingClientId = id;
     document.getElementById('clientModalTitle').textContent = 'Modifier le client';
-    document.getElementById('modalClientName').value = client.name || '';
-    document.getElementById('modalClientICE').value = client.ice || '';
-    document.getElementById('modalClientIF').value = client.if || '';
-    document.getElementById('modalClientAddress').value = client.address || '';
-    document.getElementById('modalClientPhone').value = client.phone || '';
-    document.getElementById('modalClientEmail').value = client.email || '';
+    CLIENT_FIELDS.forEach(([el, k]) => { document.getElementById(el).value = client[k] || ''; });
+    document.getElementById('modalClientKind').value = partyKindOf(client); partyKindUI('client');
     document.getElementById('clientModal').classList.add('active');
 }
 
 function saveClient() {
-    const name = document.getElementById('modalClientName').value.trim();
-    if (!name) {
-        showToast('Le nom est requis', 'error');
-        return;
-    }
-    
     const clients = Storage.get('clients', []);
+    const kind = document.getElementById('modalClientKind').value;
+    const v = (el) => document.getElementById(el).value.trim();
     const data = {
-        id: editingClientId || uuid(),
-        name: name,
-        ice: document.getElementById('modalClientICE').value.trim(),
-        if: document.getElementById('modalClientIF').value.trim(),
-        address: document.getElementById('modalClientAddress').value.trim(),
-        phone: document.getElementById('modalClientPhone').value.trim(),
-        email: document.getElementById('modalClientEmail').value.trim(),
+        id: editingClientId || uuid(), kind,
+        name: v('modalClientName'),
+        ice: kind === 'particulier' ? '' : v('modalClientICE').replace(/\s+/g, ''),
+        if: kind === 'societe' ? v('modalClientIF') : '',
+        rc: kind === 'societe' ? v('modalClientRC') : '',
+        address: v('modalClientAddress'), city: v('modalClientCity'),
+        phone: v('modalClientPhone'), email: v('modalClientEmail'),
         createdAt: editingClientId ? clients.find(c => c.id === editingClientId)?.createdAt : new Date().toISOString()
     };
+    const miss = partyMissing(data);
+    if (miss.length) { showToast('Champs obligatoires manquants ou invalides : ' + miss.join(', '), 'error'); return; }
     
     if (editingClientId) {
         const idx = clients.findIndex(c => c.id === editingClientId);
@@ -10618,17 +10662,19 @@ function openSupplierModal(id, fromPurchase) {
     const s = id ? purSuppliers().find(x => x.id === id) : null;
     editingSupplierId = s ? s.id : null; _supplierFromPurchase = !!fromPurchase;
     document.getElementById('supplierModalTitle').textContent = s ? 'Modifier le fournisseur' : 'Nouveau fournisseur';
-    [['supName', 'name'], ['supICE', 'ice'], ['supIF', 'if'], ['supPhone', 'phone'], ['supEmail', 'email'], ['supAddress', 'address']].forEach(([el, k]) => { document.getElementById(el).value = (s && s[k]) || ''; });
+    [['supName', 'name'], ['supICE', 'ice'], ['supIF', 'if'], ['supRC', 'rc'], ['supPhone', 'phone'], ['supEmail', 'email'], ['supAddress', 'address'], ['supCity', 'city']].forEach(([el, k]) => { document.getElementById(el).value = (s && s[k]) || ''; });
+    document.getElementById('supKind').value = partyKindOf(s); partyKindUI('sup');
     document.getElementById('supplierModal').classList.add('active');
 }
 function saveSupplier() {
-    const name = document.getElementById('supName').value.trim();
-    if (!name) return showToast('Le nom est requis', 'error');
-    const ice = document.getElementById('supICE').value.replace(/\s+/g, '');
-    if (ice && !/^\d{15}$/.test(ice)) return showToast('L\'ICE doit comporter 15 chiffres', 'error');
+    const kind = document.getElementById('supKind').value;
+    const v = (el, n) => document.getElementById(el).value.trim().slice(0, n);
     const list = purSuppliers().slice();
-    const data = { id: editingSupplierId || uuid(), name: name.slice(0, 120), ice, if: document.getElementById('supIF').value.trim().slice(0, 30), phone: document.getElementById('supPhone').value.trim().slice(0, 30),
-                   email: document.getElementById('supEmail').value.trim().slice(0, 120), address: document.getElementById('supAddress').value.trim().slice(0, 250) };
+    const data = { id: editingSupplierId || uuid(), kind, name: v('supName', 120), ice: kind === 'particulier' ? '' : v('supICE', 20).replace(/\s+/g, ''),
+                   if: kind === 'societe' ? v('supIF', 30) : '', rc: kind === 'societe' ? v('supRC', 40) : '', phone: v('supPhone', 30),
+                   email: v('supEmail', 120), address: v('supAddress', 250), city: v('supCity', 60) };
+    const miss = partyMissing(data);
+    if (miss.length) return showToast('Champs obligatoires manquants ou invalides : ' + miss.join(', '), 'error');
     const i = list.findIndex(x => x.id === data.id);
     if (i >= 0) list[i] = { ...list[i], ...data }; else list.push({ ...data, createdAt: new Date().toISOString() });
     Storage.set('suppliers', list);
@@ -10652,7 +10698,7 @@ async function openSuppliersList() {
     const pur = purList();
     const rows = sup.length ? sup.map(s => {
         const n = pur.filter(p => p.supplierId === s.id && p.status !== 'cancelled'), tot = n.reduce((t, p) => t + (Number(p.totalTTC) || 0), 0);
-        return `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(s.name)}</strong><div class="stk-sub">${s.ice ? 'ICE ' + escapeHtml(s.ice) + ' · ' : ''}${s.phone ? escapeHtml(s.phone) + ' · ' : ''}${n.length} achat${n.length > 1 ? 's' : ''} · ${formatCurrency(tot)}</div></div>
+        return `<div class="stk-row"><div class="stk-main"><strong>${escapeHtml(s.name)}</strong>${partyMissing(s).length ? ` <span style="font-size:11px; color:var(--warning);" title="${escapeHtml('À compléter : ' + partyMissing(s).join(', '))}">⚠️ fiche incomplète</span>` : ''}<div class="stk-sub">${s.ice ? 'ICE ' + escapeHtml(s.ice) + ' · ' : ''}${s.phone ? escapeHtml(s.phone) + ' · ' : ''}${n.length} achat${n.length > 1 ? 's' : ''} · ${formatCurrency(tot)}</div></div>
             <div style="display:flex; gap:4px;"><button class="btn btn-ghost btn-sm" onclick="openSupplierModal(${jsArg(s.id)})" title="Modifier">✏️</button><button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="deleteSupplier(${jsArg(s.id)})" title="Supprimer">🗑</button></div></div>`;
     }).join('') : '<div class="empty-state"><h3>Aucun fournisseur</h3><p>Ajoutez vos fournisseurs pour saisir vos achats.</p></div>';
     const modal = document.createElement('div');
@@ -10835,7 +10881,7 @@ async function saveDelivery() {
     try {
         const products = Storage.get('products', []) || [];
         const quote = _blFromQuote ? (Storage.get('quotes', []) || []).find(x => x.id === _blFromQuote) : null;
-        const payload = { key: _blKey, client_id: client.id, client_name: client.name, client_ice: client.ice || '', client_address: client.address || '', date,
+        const payload = { key: _blKey, client_id: client.id, client_name: client.name, client_ice: client.ice || '', client_address: partyFullAddress(client), date,
             notes: document.getElementById('blNote').value.trim().slice(0, 500), source_quote: quote ? quote.id : null, source_quote_number: quote ? quote.number : null,
             lines: items.map(it => { const p = it.productId && products.find(x => x.id === it.productId);
                 return { product_id: it.productId || null, product_name: p ? p.name : null, unit: it.unit || null, track_stock: !!(p && p.trackStock), description: it.description,
@@ -10896,7 +10942,7 @@ async function createInvoiceFromDeliveries(ids) {
     bls.forEach(b => (b.items || []).forEach(it => { const { unit, productName, trackStock, ...rest } = it; items.push({ ...rest, fromDelivery: b.id }); }));
     const t = computeTotals(items), now = new Date().toISOString();
     const inv = { id: uuid(), number: draftNumber(), type: 'invoice', status: 'draft', date: todayISO(), dueDate: addDaysISO(30), paymentTerms: '30',
-        clientId: bls[0].clientId, clientName: client.name || bls[0].clientName, clientICE: client.ice || bls[0].clientICE, clientAddress: client.address || bls[0].clientAddress,
+        clientId: bls[0].clientId, clientName: client.name || bls[0].clientName, clientICE: client.ice || bls[0].clientICE, clientAddress: partyFullAddress(client) || bls[0].clientAddress,
         items, totalHT: t.totalHT, totalTVA: t.totalTVA, totalTTC: t.totalTTC,
         notes: 'Selon bon' + (bls.length > 1 ? 's' : '') + ' de livraison : ' + bls.map(b => b.number).join(', '),
         deliveryIds: bls.map(b => b.id), createdAt: now, updatedAt: now };
@@ -16050,7 +16096,7 @@ async function generatePaymentReceiptPDF(paymentId, opts) {
     y = pdfParties(pdf, T, y, {
         partyLabel: 'Reçu de',
         name: invoice.clientName || (client && client.name) || 'Client',
-        lines: [client && client.ice ? `ICE : ${client.ice}` : '', client && client.address ? client.address : '', `Encaissé par : ${company.name || 'Mon Entreprise'}`],
+        lines: [client && client.ice ? `ICE : ${client.ice}` : '', client ? partyFullAddress(client) : '', `Encaissé par : ${company.name || 'Mon Entreprise'}`],
         meta: [
             ['Date du paiement', formatDate(p.date)],
             ['Mode', methodLabels[p.method] || String(p.method || '')],
