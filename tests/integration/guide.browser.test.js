@@ -63,6 +63,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     FP_GUIDE.forEach(g => { add(g.t); add(g.p); add(g.tag); add('▶ ' + g.btn); g.li.forEach(add); g.nodes.forEach(n => add(n[1])); });
     ['❓ Comment ça marche', '← Précédent', 'Suivant →', 'Terminer ✓', 'Découvrez FacturaPro en 1 minute', '▶ Voir le guide'].forEach(add); return out; });
   ok('arabe : toutes les phrases du guide sont traduites', missing.length === 0, JSON.stringify(missing));
+  await p.evaluate(() => { openGuide(0); document.querySelector('.fp-guide .fpg-video').click(); }); await sleep(400);
+  ok('bouton « 🎬 Vidéo » : lecteur avec la vidéo du dépôt', await p.evaluate(() => { const v = document.querySelector('.fp-guide video'); return !!v && /media\/facturapro-premiere-facture\.mp4$/.test(v.getAttribute('src')); }) && fs.existsSync(path.join(R, 'media', 'facturapro-premiere-facture.mp4')));
+  await p.evaluate(() => document.querySelector('.fp-guide .fpg-x').click());
   ok('aucune erreur JavaScript', errs.length === 0, JSON.stringify(errs));
 
   const nOk = R_.filter(Boolean).length;
