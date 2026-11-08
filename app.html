@@ -8248,7 +8248,7 @@ function openGuide(step) {
     m.addEventListener('click', (e) => { if (e.target === m) close(); });
     m.querySelector('.fpg-x').addEventListener('click', close);
     m.querySelector('.fpg-video').addEventListener('click', () => { const b = m.querySelector('.fpg-body');
-        b.innerHTML = `<video src="media/facturapro-premiere-facture.mp4" controls autoplay playsinline style="width:100%; max-height:62vh; border-radius:12px; background:#000;"></video>`; });
+        b.innerHTML = `<video src="media/facturapro-premiere-facture${document.documentElement.dir === 'rtl' ? '-ar' : ''}.mp4" controls autoplay playsinline style="width:100%; max-height:62vh; border-radius:12px; background:#000;"></video>`; });
     m.querySelector('.fpg-prev').addEventListener('click', () => { if (_fpgStep > 0) { _fpgStep--; draw(); } });
     m.querySelector('.fpg-next').addEventListener('click', () => { if (_fpgStep < FP_GUIDE.length - 1) { _fpgStep++; draw(); } else close(); });
     m.querySelector('.fpg-try').addEventListener('click', () => { const g = FP_GUIDE[_fpgStep]; close(); try { g.go(); } catch (e) { console.warn(e); } });
