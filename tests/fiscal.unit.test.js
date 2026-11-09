@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
 const a = html.indexOf('// <FISCAL-CALC>'), b = html.indexOf('// </FISCAL-CALC>');
 assert(a > 0 && b > a, 'bloc FISCAL-CALC introuvable');
-const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, aeCnssValidate, aeCnssRules, cnssValidate, cnssRules, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr };')();
+const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, aeCnssValidate, aeCnssRules, cnssValidate, cnssRules, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr, PAY_MODES, payModeLabel, deductionRows, dedSplit, deductionSheet, deductionXml, deductionXmlErrors, deductionXmlParams };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 
 // Échéances trimestrielles : fin du mois suivant le trimestre
@@ -99,4 +99,60 @@ ok('CNSS 20/12/2026 : échéance 10/01/2027 pour décembre 2026', cn.due === '20
 cn = api.cnssNextDue('2027-01-05');
 ok('CNSS 05/01/2027 : période = décembre 2026', cn.due === '2027-01-10' && cn.periodLabel === 'décembre 2026');
 ok('date française', api.fiscalDateFr('2026-10-31') === '31 octobre 2026' && api.fiscalDateFr('2026-11-01') === '1er novembre 2026');
+
+// ---- Relevé des déductions ----
+const oct = api.vatPeriods('monthly', 2026)[9], sep = api.vatPeriods('monthly', 2026)[8], q4 = api.vatPeriods('quarterly', 2026)[3];
+ok('modes : codes 1 à 7 dans l\'ordre du logiciel de déclaration', api.PAY_MODES.map(m => m.code + '-' + m.label).join('|') === '1-Espèces|2-Chèque|3-Prélèvement|4-Virement|5-Effet|6-Compensation|7-Autres' && api.payModeLabel('') === '');
+const sups = [{ id: 's1', name: 'STAR PNEUMATIQUE', if: '1620155', ice: '000094033000084', kind: 'societe' }, { id: 's2', name: 'Marché', kind: 'particulier' }];
+const purA = { id: 'pa', number: 'ACH-2026-001', supplierRef: 'FC-25-470', supplierId: 's1', supplierName: 'STAR PNEUMATIQUE', date: '2026-09-07', status: 'active', includeVat: true,
+  totalHT: 1500, totalTVA: 270, totalTTC: 1770,
+  lines: [{ nature: 'expense', category: 'Fournitures', tva: 20, totalHT: 1000, totalTVA: 200 }, { nature: 'goods', tva: 14, totalHT: 500, totalTVA: 70 }], credits: [] };
+const purNoVat = Object.assign({}, purA, { id: 'pn', includeVat: false });
+const purCancel = Object.assign({}, purA, { id: 'pc', status: 'cancelled' });
+const pays = [{ id: 'm1', purchaseId: 'pa', date: '2026-09-20', amount: 885, mode: 'virement' }, { id: 'm2', purchaseId: 'pa', date: '2026-10-05', amount: 885, mode: '' },
+  { id: 'm3', purchaseId: 'pn', date: '2026-10-05', amount: 100, mode: 'cheque' }, { id: 'm4', purchaseId: 'pc', date: '2026-10-05', amount: 100, mode: 'cheque' }];
+const rs = api.deductionRows(sep, [purA, purNoVat, purCancel], pays, sups, []);
+ok('septembre : moitié payée, ventilée par taux (20 % et 14 %)', rs.rows.length === 2 && rs.rows[0].rate === 20 && rs.rows[0].tva === 100 && rs.rows[0].ht === 500 && rs.rows[1].rate === 14 && rs.rows[1].tva === 35 && rs.rows[1].ttc === 285);
+ok('septembre : total TTC = montant payé, TVA 135', rs.ttc === 885 && rs.tva === 135 && rs.ht === 750);
+ok('colonnes : facture fournisseur, IF, ICE, désignation par nature, date de paiement', rs.rows[0].facture === 'FC-25-470' && rs.rows[0].if === '1620155' && rs.rows[0].ice === '000094033000084'
+  && rs.rows[0].designation === 'Charges : Fournitures + Achats de marchandises' && rs.rows[0].datePaiement === '2026-09-20' && rs.rows[0].dateFacture === '2026-09-07');
+const ro = api.deductionRows(oct, [purA, purNoVat, purCancel], pays, sups, []);
+ok('octobre : TVA non déductible et achat annulé exclus ; mode manquant signalé', ro.rows.length === 2 && ro.tva === 135 && ro.alerts === 2 && ro.rows[0].alerts.includes('Mode de paiement à compléter'));
+ok('trimestre : les deux règlements d\'octobre seulement', api.deductionRows(q4, [purA], pays, sups, []).tva === 135);
+ok('arrondis : 3 règlements de 590 = TVA totale 270', (() => { const p3 = [1, 2, 3].map(i => ({ id: 'x' + i, purchaseId: 'pa', date: '2026-10-0' + i, amount: 590, mode: 'virement' }));
+  const r = api.deductionRows(oct, [purA], p3, sups, []); return r.ttc === 1770 && Math.abs(r.tva - 270) < 0.011 && r.rows.every(x => Math.abs(x.ht + x.tva - x.ttc) < 0.001); })());
+ok('annulation de règlement : ligne négative', (() => { const r = api.deductionRows(oct, [purA], [{ id: 'r', purchaseId: 'pa', date: '2026-10-09', amount: -885, mode: 'virement', reversal: true }], sups, []);
+  return r.tva === -135 && r.rows.every(x => x.reversal && !x.movementId && x.alerts.length === 0); })());
+// Avoir reçu après paiement complet : régularisation au mois de l'avoir ; avoir avant paiement : rien à régulariser
+const purB = Object.assign({}, purA, { id: 'pb', lines: [{ nature: 'expense', tva: 20, totalHT: 1000, totalTVA: 200 }], totalHT: 1000, totalTVA: 200, totalTTC: 1200,
+  credits: [{ id: 'c1', number: 'AVF-1', date: '2026-10-15', totalHT: 100, totalTVA: 20, totalTTC: 120, lines: [{ tva: 20, totalHT: 100, totalTVA: 20 }] }] });
+ok('avoir après paiement complet : −20 de TVA en octobre', (() => { const r = api.deductionRows(oct, [purB], [{ id: 'p', purchaseId: 'pb', date: '2026-09-10', amount: 1200, mode: 'virement' }], sups, []);
+  return r.rows.length === 1 && r.rows[0].credit && r.tva === -20 && r.ttc === -120; })());
+ok('avoir avant paiement : aucune régularisation, paiement du net', (() => { const r = api.deductionRows(oct, [purB], [{ id: 'p', purchaseId: 'pb', date: '2026-10-20', amount: 1080, mode: 'virement' }], sups, []);
+  return r.rows.length === 1 && !r.rows[0].credit && r.tva === 180; })());
+ok('avoir après paiement partiel (600 payés, avoir 120) : rien à régulariser', (() => { const r = api.deductionRows(oct, [purB], [{ id: 'p', purchaseId: 'pb', date: '2026-10-01', amount: 600, mode: 'virement' }], sups, []);
+  return r.tva === 100 && r.rows.length === 1; })());
+// Saisie manuelle : au mois du paiement
+const man = [{ id: 'v1', date: '2026-09-28', ref: 'F-9', supplier: 'SPAB', if: '18719679', ice: '000305480000047', ht: 1000, tva: 200, rate: 20, mode: 'cheque', payDate: '2026-10-02', designation: 'Achats consommables' },
+  { id: 'v2', date: '2026-10-03', ref: 'F-10', supplier: 'Ancien', ht: 100, tva: 20 }];
+const rm = api.deductionRows(oct, [], [], sups, man);
+ok('saisie manuelle : comptée au mois du paiement ; ancienne saisie sans paiement à la date de facture, signalée', rm.rows.length === 2 && rm.tva === 220
+  && rm.rows.find(r => r.facture === 'F-10').alerts.includes('Date de paiement non saisie (date de facture utilisée)') && api.deductionRows(sep, [], [], sups, man).rows.length === 0);
+ok('espèces signalé ; fournisseur particulier sans IF/ICE non signalé', (() => { const r = api.deductionRows(oct, [Object.assign({}, purA, { supplierId: 's2' })], [{ id: 'e', purchaseId: 'pa', date: '2026-10-01', amount: 100, mode: 'especes' }], sups, []);
+  return r.rows.every(x => x.alerts.length === 1 && /espèces/.test(x.alerts[0])); })());
+// XML
+const prm = api.deductionXmlParams('monthly', api.vatPeriods('monthly', 2025)[11]), prq = api.deductionXmlParams('quarterly', q4);
+ok('XML : régime 1 mensuel période 12 ; régime 2 trimestriel période 4', prm.annee === 2025 && prm.periode === 12 && prm.regime === 1 && prq.regime === 2 && prq.periode === 4);
+const relX = api.deductionRows(oct, [], [], sups, [man[0]]);
+const xml = api.deductionXml('33666706', 'monthly', oct, relX);
+ok('XML : structure DeclarationReleveDeduction / rd / refF / mp, montants à 2 décimales, dates ISO', /^<\?xml version="1.0" encoding="UTF-8"\?>\n<DeclarationReleveDeduction>\n<identifiantFiscal>33666706<\/identifiantFiscal>\n<annee>2026<\/annee>\n<periode>10<\/periode>\n<regime>1<\/regime>\n<releveDeductions>/.test(xml)
+  && xml.includes('<rd><ord>1</ord><num>F-9</num><des>Achats consommables</des><mht>1000.00</mht><tva>200.00</tva><ttc>1200.00</ttc><refF><if>18719679</if><nom>SPAB</nom><ice>000305480000047</ice></refF><tx>20.00</tx><mp><id>2</id></mp><dpai>2026-10-02</dpai><dfac>2026-09-28</dfac></rd>')
+  && xml.trim().endsWith('</releveDeductions>\n</DeclarationReleveDeduction>'), xml);
+ok('XML : caractères spéciaux échappés', api.deductionXml('1', 'monthly', oct, api.deductionRows(oct, [], [], sups, [Object.assign({}, man[0], { supplier: 'A & B <SARL>' })])).includes('<nom>A &amp; B &lt;SARL&gt;</nom>'));
+ok('XML : relevé valide → aucune erreur', api.deductionXmlErrors('33666706', relX).length === 0);
+const bad = api.deductionXmlErrors('', api.deductionRows(oct, [], [], sups, [Object.assign({}, man[0], { ice: '000305480000', if: '', mode: '' })]));
+ok('XML : erreurs bloquantes (IF société, ICE ≠ 15 chiffres, IF fournisseur, mode)', bad.length === 4 && /société/.test(bad[0]) && bad.some(e => /ICE du fournisseur invalide/.test(e)) && bad.some(e => /IF du fournisseur/.test(e)) && bad.some(e => /mode de paiement/.test(e)), JSON.stringify(bad));
+ok('XML : relevé vide refusé', api.deductionXmlErrors('1', { rows: [] }).some(e => /Aucune ligne/.test(e)));
+const sh = api.deductionSheet('Ma société', oct, relX);
+ok('Excel : en-têtes, IF/ICE en texte, montants en nombres, total', sh[3].length === 13 && sh[3][6].v === 'ICE' && sh[4][6].v === '000305480000047' && sh[4][7] === 1000 && sh[4][2] === '28/09/2026' && sh[5][1].v === 'TOTAL' && sh[5][9].v === 200);
 console.log(`\n${n} tests OK`);
