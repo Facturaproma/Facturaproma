@@ -44,6 +44,19 @@ Modes de paiement :
 
 - Les 7 codes et leur ordre sont confirmés par la liste du logiciel de déclaration de Marwan (09/11/2026). C'est ce code qui va dans la balise `<mp><id>` du fichier XML.
 
+## Déductions tardives et périodes déclarées (09/11/2026)
+
+- **Règle :** la TVA non déduite le mois (ou le trimestre) du paiement peut l'être plus tard, dans un délai d'un an (art. 101-3° du CGI). Au-delà, une amende de 15 % (minimum 500 DH) s'applique (art. 204 bis). Source : Upsilon Consulting, à confirmer par le comptable.
+- **Lignes proposées :** sous le relevé, « Paiements antérieurs non déclarés » liste les lignes des 24 derniers mois qui ne figurent dans aucune période déclarée ni reprise ailleurs, avec leur état :
+  - « Omis (période déclarée) » : la période d'origine a été déclarée sans cette ligne ;
+  - « Période non marquée » : statut inconnu, à vérifier avant de reprendre ;
+  - « Délai d'un an dépassé » : non ajoutable.
+- **Reprise :** ajout ligne par ligne ou en une fois (lignes dans le délai). La ligne reprise porte le badge « Déduction tardive », garde sa vraie date de paiement (`dpai`), et n'est plus comptée dans sa période d'origine.
+- **« Marquer la période comme déclarée »**, à faire après le dépôt : les lignes sont figées et ne seront plus proposées ailleurs.
+  - Un règlement saisi après coup est marqué « Non déclaré », exclu des exports de la période, puis proposé sur la période suivante.
+  - Le marquage peut être annulé si la déclaration n'a pas été déposée.
+- **Stockage :** `vatDeclarations` et `vatLateDeductions`, dans les données du compte (synchronisées comme les autres réglages). Aucun changement serveur.
+
 ## Contrôles
 
 - **Alertes à l'écran** (la ligne est signalée et la cellule passe en rouge) :

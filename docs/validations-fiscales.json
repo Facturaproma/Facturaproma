@@ -51,6 +51,16 @@
       "pattern": "art. 73-II-B-6° du CGI",
       "status": "non_verifie",
       "notes": "Référence ajoutée au code après la rédaction du registre ; non vérifiée sur le texte officiel. À faire valider par le comptable (taux, tranches, article)."
+    },
+    {
+      "id": "TVA_DEDUCTION_DELAI_UN_AN",
+      "claim": "La TVA non déduite le mois ou le trimestre du paiement peut l'être dans un délai d'un an (art. 101-3° du CGI) ; au-delà, amende de 15 % (minimum 500 DH) selon l'art. 204 bis",
+      "found_in": {
+        "app.html": "art. 101-3° du CGI"
+      },
+      "pattern": "art. 101-3° du CGI",
+      "status": "non_verifie",
+      "notes": "Source secondaire seulement (Upsilon Consulting, « VAT deductions Morocco », lu le 09/11/2026) ; confirmé en pratique par le logiciel de déclaration de Marwan (paiements de janvier à septembre repris en décembre). Texte officiel non lu. À faire confirmer par le comptable. Voir docs/RELEVE_DEDUCTIONS.md."
     }
   ]
 }

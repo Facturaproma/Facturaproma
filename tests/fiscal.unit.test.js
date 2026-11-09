@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, '..', 'app.html'), 'utf8');
 const a = html.indexOf('// <FISCAL-CALC>'), b = html.indexOf('// </FISCAL-CALC>');
 assert(a > 0 && b > a, 'bloc FISCAL-CALC introuvable');
-const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, aeCnssValidate, aeCnssRules, cnssValidate, cnssRules, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr, PAY_MODES, payModeLabel, deductionRows, dedSplit, deductionSheet, deductionXml, deductionXmlErrors, deductionXmlParams };')();
+const api = new Function(html.slice(a, b) + '\nreturn { FISCAL_RULES, aeCnssQuarter, aeCnssValidate, aeCnssRules, cnssValidate, cnssRules, vatPeriods, nextVatPeriod, vatCollected, vatDeductible, vatBalance, vatReportCsv, csvText, cnssForEmployee, cnssNextDue, fiscalDateFr, PAY_MODES, payModeLabel, deductionRows, dedSplit, deductionSheet, deductionXml, deductionXmlErrors, deductionXmlParams, deductionPeriodView, dedPeriodId, dedShiftMonths };')();
 let n = 0; const ok = (name, c) => { assert(c, name); n++; console.log('PASS ' + name); };
 
 // Échéances trimestrielles : fin du mois suivant le trimestre
@@ -155,4 +155,31 @@ ok('XML : erreurs bloquantes (IF société, ICE ≠ 15 chiffres, IF fournisseur,
 ok('XML : relevé vide refusé', api.deductionXmlErrors('1', { rows: [] }).some(e => /Aucune ligne/.test(e)));
 const sh = api.deductionSheet('Ma société', oct, relX);
 ok('Excel : en-têtes, IF/ICE en texte, montants en nombres, total', sh[3].length === 13 && sh[3][6].v === 'ICE' && sh[4][6].v === '000305480000047' && sh[4][7] === 1000 && sh[4][2] === '28/09/2026' && sh[5][1].v === 'TOTAL' && sh[5][9].v === 200);
+
+// ---- Déclarations et déductions tardives ----
+ok('dates : décalage de mois (fin de mois, changement d\'année)', api.dedShiftMonths('2026-03-31', -1) === '2026-02-28' && api.dedShiftMonths('2026-01-15', -12) === '2025-01-15' && api.dedShiftMonths('2025-11-01', 2) === '2026-01-01');
+const nov = api.vatPeriods('monthly', 2026)[10];
+const srcT = { purchases: [purA], payments: [{ id: 'm1', purchaseId: 'pa', date: '2026-09-20', amount: 885, mode: 'virement' }, { id: 'm2', purchaseId: 'pa', date: '2026-10-05', amount: 885, mode: 'virement' }], suppliers: sups, manual: [] };
+let vO = api.deductionPeriodView(oct, 'monthly', srcT, {}, {});
+ok('vue octobre : lignes du mois ; septembre proposé (période non marquée)', vO.rows.length === 2 && vO.tva === 135 && vO.candidates.length === 2 && vO.candidates.every(c => !c.homeDeclared && !c.horsDelai && c.homeLabel === sep.label) && !vO.declared);
+const sepKeys = api.deductionRows(sep, srcT.purchases, srcT.payments, sups, []).rows.map(r => r.key);
+ok('clés stables : pay:<règlement>:<taux>', sepKeys.join() === 'pay:m1:20,pay:m1:14');
+vO = api.deductionPeriodView(oct, 'monthly', srcT, { [api.dedPeriodId(sep)]: { lines: [] } }, {});
+ok('septembre déclaré sans ce règlement : proposé comme « omis dans une période déclarée »', vO.candidates.length === 2 && vO.candidates.every(c => c.homeDeclared));
+const inclO = { [api.dedPeriodId(oct)]: sepKeys };
+vO = api.deductionPeriodView(oct, 'monthly', srcT, { [api.dedPeriodId(sep)]: { lines: [] } }, inclO);
+ok('ajouté à octobre : TVA d\'octobre 270, lignes tardives marquées, plus rien à proposer', vO.tva === 270 && vO.late === 2 && vO.rows.filter(r => r.late).length === 2 && vO.candidates.length === 0 && vO.rows.map(r => r.ord).join() === '1,2,3,4');
+const vN = api.deductionPeriodView(nov, 'monthly', srcT, {}, inclO);
+ok('novembre : ni septembre (déjà repris en octobre) ni octobre déclaré ailleurs', vN.candidates.length === 2 && vN.candidates.every(c => c.datePaiement === '2026-10-05'));
+const vNd = api.deductionPeriodView(nov, 'monthly', srcT, { [api.dedPeriodId(oct)]: { lines: vO.rows.map(r => r.key) } }, inclO);
+ok('octobre déclaré avec ses lignes : novembre ne propose plus rien', vNd.candidates.length === 0 && vNd.rows.length === 0);
+ok('septembre : la ligne reprise en octobre n\'est plus comptée en septembre', api.deductionPeriodView(sep, 'monthly', srcT, {}, inclO).rows.length === 0);
+const declO = { [api.dedPeriodId(oct)]: { lines: ['pay:m2:20', 'pay:m2:14'] } };
+const srcT2 = Object.assign({}, srcT, { payments: srcT.payments.slice(1).concat([{ id: 'm3', purchaseId: 'pa', date: '2026-10-28', amount: 100, mode: 'cheque' }]) });
+const vOd = api.deductionPeriodView(oct, 'monthly', srcT2, declO, {});
+ok('période déclarée : règlement saisi après la déclaration signalé « non déclaré »', !!vOd.declared && vOd.rows.filter(r => r.notDeclared).length === 2 && vOd.rows.filter(r => !r.notDeclared).length === 2);
+ok('… et proposé le mois suivant comme omis', api.deductionPeriodView(nov, 'monthly', srcT2, declO, {}).candidates.filter(c => c.homeDeclared).length === 2);
+const old = Object.assign({}, srcT, { payments: [{ id: 'o1', purchaseId: 'pa', date: '2025-09-30', amount: 177, mode: 'virement' }] });
+ok('délai d\'un an dépassé : signalé hors délai', api.deductionPeriodView(oct, 'monthly', old, {}, {}).candidates.every(c => c.horsDelai));
+ok('trimestriel : période d\'origine = trimestre', api.deductionPeriodView(q4, 'quarterly', srcT, {}, {}).candidates.every(c => c.homeLabel === api.vatPeriods('quarterly', 2026)[2].label));
 console.log(`\n${n} tests OK`);

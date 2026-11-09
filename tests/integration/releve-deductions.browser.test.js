@@ -109,13 +109,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const xz = unz(xf);
   ok('Excel : classeur .xlsx valide (5 parties), ICE en texte, HT en nombre', /\.xlsx$/.test(xf) && ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/styles.xml', 'xl/worksheets/sheet1.xml'].every(n => n in xz)
     && /<t xml:space="preserve">000094033000084<\/t>/.test(xz['xl/worksheets/sheet1.xml']) && /<c r="H5" s="2"><v>[\d.]+<\/v><\/c>/.test(xz['xl/worksheets/sheet1.xml']), Object.keys(xz).join(','));
+  // Déduction tardive : règlement du mois précédent non déclaré, repris sur ce mois ; puis période marquée déclarée
+  const PM = await p.evaluate((m) => dedShiftMonths(m, -1), M);
+  await p.evaluate(async (d) => {
+    const r = await supaClient.rpc('purchase_record', { p: { key: 'r-old', supplier_id: 's1', supplier_name: 'STAR PNEUMATIQUE', supplier_ref: 'FC-ANCIENNE', date: d, lines: [{ nature: 'expense', category: 'Fournitures', description: 'Ancien', qty: 1, unit_price: 500, tva_rate: 20 }] } });
+    if (r.error) throw new Error(r.error.message);
+    const acc = cashActive().find(a => a.kind === 'bank').id;
+    const s2 = await supaClient.rpc('supplier_settle', { p: { purchase_id: r.data.id, account_id: acc, date: dedShiftMonths(d, 0).slice(0, 8) + '15', amount: 600, mode: 'virement' } });
+    if (s2.error) throw new Error(s2.error.message);
+    await purLoad(true); await dedLoad(true); renderVatReport(false);
+  }, PM); await sleep(400);
+  const lateTxt = () => p.evaluate(() => { const d = document.querySelector('#dedLate details'); if (d) d.open = true; return document.getElementById('dedLate').innerText; });
+  ok('paiement du mois précédent proposé (période non marquée, TVA 100)', /Paiements antérieurs non déclarés : 1/.test(await lateTxt()) && /Période non marquée/.test(await lateTxt()) && /FC-ANCIENNE/.test(await lateTxt()), await lateTxt());
+  await p.evaluate(() => dedIncludeLate(null)); await sleep(300);
+  v = await g();
+  ok('repris sur ce mois : 5 lignes, badge « Déduction tardive », TVA 604,57', v.rows.length === 5 && v.rows.some(r => /FC-ANCIENNE[\s\S]*Déduction tardive/.test(r[1])) && /604,57/.test(v.ded) && (await lateTxt()) === '', JSON.stringify([v.rows.length, v.ded]));
+  ok('mois précédent : la ligne reprise n\'y est plus comptée', await p.evaluate((pm) => { const per = vatPeriods('monthly', parseInt(pm.slice(0, 4), 10)).find(x => x.start === pm); return dedCompute(per).rows.length === 0; }, PM));
+  await p.evaluate(() => dedMarkDeclared()); await sleep(300);
+  ok('période marquée déclarée : bandeau, 5 lignes figées, bouton d\'ajout masqué', await p.evaluate(() => /Période déclarée le/.test(document.getElementById('dedStatus').innerText) && /5 ligne\(s\)/.test(document.getElementById('dedStatus').innerText)
+    && Object.values(Storage.get('vatDeclarations')).length === 1 && !document.querySelector('#dedBody button[onclick^="dedRemoveLate"]')));
+  // Règlement saisi après la déclaration : signalé, exclu des exports de la période, proposé le mois suivant
+  await p.evaluate(async () => { const pu = purList().find(x => x.supplierRef === 'NON-REGLEE'); const r = await supaClient.rpc('supplier_settle', { p: { purchase_id: pu.id, account_id: cashActive().find(a => a.kind === 'bank').id, date: todayISO(), amount: 360, mode: 'cheque' } }); if (r.error) throw new Error(r.error.message); await purLoad(true); await dedLoad(true); renderVatReport(false); }); await sleep(300);
+  ok('règlement après déclaration : « Non déclaré », hors du fichier de la période', await p.evaluate(() => document.querySelectorAll('#dedBody tr.ded-new').length === 1 && /Non déclaré/.test(document.getElementById('dedBody').innerText)
+    && (() => { const c = dedCurrent(); return c.rel.rows.length === 5 && !c.rel.rows.some(r => r.facture === 'NON-REGLEE'); })()));
+  ok('mois suivant : seul le règlement non déclaré est proposé (omis)', await p.evaluate((m) => { const nx = dedShiftMonths(m, 1), per = vatPeriods('monthly', parseInt(nx.slice(0, 4), 10)).find(x => x.start === nx);
+    const r = dedCompute(per); return r.candidates.length === 1 && r.candidates[0].facture === 'NON-REGLEE' && r.candidates[0].homeDeclared; }, M));
+  await p.evaluate(() => dedUnmarkDeclared()); await sleep(200);
+  ok('marquage annulé : plus de période déclarée', await p.evaluate(() => Object.keys(Storage.get('vatDeclarations') || {}).length === 0 && /Marquer la période comme déclarée/.test(document.getElementById('dedStatus').innerText)));
+  await p.evaluate(() => document.getElementById('dedCard').scrollIntoView()); await sleep(200);
+  await p.screenshot({ path: path.join(OUT, 'releve-deductions-tardives.png'), fullPage: false });
   // Impression
   await p.evaluate(() => { window.__printed = 0; HTMLIFrameElement.prototype.__p = 1; });
   await p.evaluate(() => printDeductions()); await sleep(1200);
   ok('impression : PDF paysage préparé dans un cadre d\'impression', await p.evaluate(() => !!document.querySelector('iframe.fp-print')));
   // Hors période : rien
-  await p.evaluate(() => { const s = document.getElementById('tvaPeriod'); s.selectedIndex = (s.selectedIndex + 6) % 12; renderVatReport(false); });
-  ok('autre mois : relevé vide', await p.evaluate(() => /Aucune facture payée/.test(document.getElementById('dedBody').innerText)));
+  ok('autre mois : relevé vide', await p.evaluate(() => { const s = document.getElementById('tvaPeriod'); for (const o of s.options) { s.value = o.value; renderVatReport(false); if (/Aucune facture payée/.test(document.getElementById('dedBody').innerText)) return true; } return false; }));
 
   const nOk = R_.filter(Boolean).length;
   console.log(`${nOk === R_.length ? 'OK' : 'ECHEC'} : ${nOk}/${R_.length} contrôles (relevé des déductions, SIMULATION locale)`);
