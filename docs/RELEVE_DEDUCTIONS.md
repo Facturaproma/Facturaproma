@@ -102,6 +102,13 @@ Aucun schéma officiel (XSD) n'a été relu. **Avant le premier vrai dépôt**, 
 1. recoller `supplier_settle` de sql/39 ;
 2. supprimer les deux fonctions et la table `payment_modes`.
 
+## Déploiement
+
+- **Script SQL :** lancé par le propriétaire (GitHub › Actions › **releve-deductions-deploy** › Run workflow, cible `prod`, mot `APPLIQUER`). Une seule transaction, contrôles avant et après.
+- **Application :** elle peut être en ligne avant le script.
+  - Sans sql/47, le relevé affiche « mise à jour du serveur en attente » et la TVA déductible reste calculée à la date des factures.
+  - Le champ « mode » est ignoré par l'ancien `supplier_settle`.
+
 ## Tests
 
 | Test | Résultat |
