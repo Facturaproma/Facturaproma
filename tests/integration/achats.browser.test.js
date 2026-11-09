@@ -84,7 +84,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.evaluate(async () => { navTo('taxes'); await purLoad(); try { renderVatReport(true); } catch (e) {} });
   const vat = await p.evaluate(() => allVatPurchases().filter(x => x.fromPurchase).map(x => x.tva).sort((a, b) => a - b));
   ok('TVA déductible : achats actifs à TVA déductible seulement (reprise 16, achat 39,20, balance 300 ; gasoil exclu)', JSON.stringify(vat) === '[16,39.2,300]', JSON.stringify(vat));
-  ok('liste TVA : lignes « Achats » non supprimables depuis la TVA', await p.evaluate(() => /ACH-/.test(document.getElementById('vatPurchasesBody').innerText) && /Achats/.test(document.getElementById('vatPurchasesBody').innerText)));
+  await p.evaluate(() => dedLoad(true));
+  ok('relevé des déductions : seulement les achats réglés (TVA déductible au mois du paiement)', await p.evaluate(() => { const all = { key: 'x', start: '2000-01-01', end: '2099-12-31' };
+    const r = deductionRows(all, purList(), _dedPay, purSuppliers(), []); return Array.isArray(_dedPay) && r.rows.every(x => _dedPay.some(y => y.purchaseId === x.purchaseId)); }));
   // Validations
   ok('marchandise sans produit : refusée avant envoi', await p.evaluate(async () => { navTo('purchases'); openPurchase(); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-desc').value = 'X'; r.querySelector('.pl-qty').value = '1'; r.querySelector('.pl-price').value = '1'; const n = purList().length; await savePurchase(); const ok_ = purList().length === n && document.getElementById('purchaseModal').classList.contains('active'); closeModal('purchaseModal'); return ok_; }));
   ok('charge sans catégorie : refusée', await p.evaluate(async () => { openPurchase('expense'); document.getElementById('purSupplier').value = purSuppliers()[0].id; const r = document.querySelector('#purLines .pur-line'); r.querySelector('.pl-desc').value = 'X'; r.querySelector('.pl-price').value = '1'; const n = purList().length; await savePurchase(); const ok_ = purList().length === n; closeModal('purchaseModal'); return ok_; }));
