@@ -1,6 +1,6 @@
 // FacturaPro Service Worker
 // Version - changer ce numéro pour forcer mise à jour
-const CACHE_VERSION = 'facturapro-v26-netfirst';
+const CACHE_VERSION = 'facturapro-v27-netfirst';
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fichiers à mettre en cache au moment de l'installation
@@ -11,6 +11,10 @@ const URLS_TO_CACHE = [
     './docstore.js',
     './vendor/jspdf.umd.min.js',
     './vendor/jspdf.plugin.autotable.min.js',
+    './fonts/plex.css',
+    './fonts/ibm-plex-sans-latin-400-normal.woff2',
+    './fonts/ibm-plex-sans-latin-500-normal.woff2',
+    './fonts/ibm-plex-sans-latin-600-normal.woff2',
     './manifest.json'
 ];
 
