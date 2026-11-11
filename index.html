@@ -20,44 +20,48 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="FacturaPro">
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600&family=Manrope:wght@400;500;600;700;800&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preload" href="fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="fonts/plex.css">
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --primary: #1B3A6B;
-            --primary-deep: #122849;
-            --accent: #C9A95B;
-            --accent-bright: #E0BD6B;
-            --success: #2E7D5B;
-            --danger: #C84A4A;
-            --bg: #F7F5F0;
+            --font-body: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
+            --font-display: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
+            --primary: #16325C;
+            --primary-deep: #0C1F3D;
+            --accent: #C8973A;
+            --accent-bright: #E2B55A;
+            --success: #0F7B55;
+            --danger: #C0362C;
+            --bg: #F3F5F8;
             --surface: #FFFFFF;
-            --surface-soft: #FAF8F3;
-            --ink: #1A1F2E;
-            --ink-soft: #4A5468;
-            --ink-mute: #8B95A8;
-            --border: #E8E5DD;
-            --shadow: rgba(26, 31, 46, 0.06);
-            --shadow-md: rgba(26, 31, 46, 0.12);
-            --shadow-lg: rgba(26, 31, 46, 0.2);
+            --surface-soft: #F7F9FB;
+            --ink: #101828;
+            --ink-soft: #475467;
+            --ink-mute: #667085;
+            --border: #E1E6ED;
+            --border-strong: #CDD5DF;
+            --shadow: rgba(16, 24, 40, 0.05);
+            --shadow-md: rgba(16, 24, 40, 0.10);
+            --shadow-lg: rgba(16, 24, 40, 0.20);
+            --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
+            --elev-1: 0 1px 2px rgba(16, 24, 40, 0.05);
+            --elev-2: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
         }
 
         html { scroll-behavior: smooth; }
 
         body {
-            font-family: 'Manrope', -apple-system, sans-serif;
+            font-family: var(--font-body);
             background: var(--bg);
             color: var(--ink);
             line-height: 1.6;
             overflow-x: hidden;
         }
 
-        .display { font-family: 'Crimson Pro', serif; letter-spacing: -0.02em; }
+        .display { font-family: var(--font-display); letter-spacing: -0.02em; }
 
         .container {
             max-width: 1200px;
@@ -100,13 +104,13 @@
             align-items: center;
             justify-content: center;
             color: var(--accent);
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 22px;
             font-weight: 700;
         }
 
         .nav-name {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 22px;
             font-weight: 700;
             color: var(--primary);
@@ -257,7 +261,7 @@
         }
 
         .hero h1 {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: clamp(40px, 6vw, 64px);
             font-weight: 700;
             line-height: 1.05;
@@ -374,7 +378,7 @@
         }
 
         .mockup-company {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 22px;
             font-weight: 700;
             margin-bottom: 4px;
@@ -389,7 +393,7 @@
         }
 
         .mockup-title {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 30px;
             font-weight: 700;
             text-align: right;
@@ -479,7 +483,7 @@
 
         .mockup-totals strong {
             color: var(--accent);
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 18px;
         }
 
@@ -557,7 +561,7 @@
         }
 
         .stat-number {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 36px;
             font-weight: 700;
             color: var(--primary);
@@ -588,7 +592,7 @@
         }
 
         .section-title {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: clamp(32px, 5vw, 48px);
             font-weight: 700;
             line-height: 1.1;
@@ -647,7 +651,7 @@
         }
 
         .feature h3 {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 22px;
             font-weight: 700;
             margin-bottom: 8px;
@@ -680,7 +684,7 @@
             text-align: left;
             padding: 16px;
             border-bottom: 2px solid var(--border);
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 18px;
             font-weight: 700;
         }
@@ -749,7 +753,7 @@
         }
 
         .pricing-card h3 {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 32px;
             font-weight: 700;
             margin-bottom: 8px;
@@ -778,7 +782,7 @@
         }
 
         .price-now {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 72px;
             font-weight: 900;
             color: var(--accent-bright);
@@ -880,14 +884,14 @@
         }
 
         .alt-tier h4 {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 22px;
             font-weight: 700;
             margin-bottom: 8px;
         }
 
         .alt-tier .alt-price {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 36px;
             font-weight: 700;
             color: var(--primary);
@@ -938,7 +942,7 @@
         }
 
         .testimonial-quote-mark {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 64px;
             color: var(--accent);
             line-height: 0.8;
@@ -1066,7 +1070,7 @@
         }
 
         .final-cta h2 {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: clamp(32px, 5vw, 48px);
             font-weight: 700;
             margin-bottom: 16px;
@@ -1115,7 +1119,7 @@
         }
 
         .footer-brand-name {
-            font-family: 'Crimson Pro', serif;
+            font-family: var(--font-display);
             font-size: 24px;
             font-weight: 700;
             color: var(--accent);
@@ -1199,7 +1203,7 @@
         .steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1000px; margin: 0 auto; }
         .step-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px 18px; text-align: left; }
         .step-num { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; font-size: 14px; }
-        .step-card h4 { font-family: 'Crimson Pro', serif; font-size: 20px; margin-bottom: 6px; }
+        .step-card h4 { font-family: var(--font-display); font-size: 20px; margin-bottom: 6px; }
         .step-card p { font-size: 14px; color: var(--ink-soft); }
         .step-cta { text-align: center; margin-top: 28px; }
 
@@ -1207,7 +1211,7 @@
         .vs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; margin: 0 auto; }
         .vs-col { border-radius: 16px; padding: 22px; border: 1px solid var(--border); background: var(--surface); }
         .vs-col.with { border-color: var(--primary); background: linear-gradient(180deg, rgba(27, 58, 107, 0.03), rgba(201, 169, 91, 0.06)); }
-        .vs-col h4 { font-family: 'Crimson Pro', serif; font-size: 22px; margin-bottom: 10px; }
+        .vs-col h4 { font-family: var(--font-display); font-size: 22px; margin-bottom: 10px; }
         .vs-col ul { list-style: none; font-size: 14px; color: var(--ink-soft); }
         .vs-col li { padding: 6px 0; border-top: 1px solid var(--border); }
         .vs-col li:first-child { border-top: 0; }
@@ -1259,12 +1263,50 @@
         .lang-btn { background: none; border: 1px solid var(--border, #ddd); border-radius: 100px; padding: 8px 14px; font-weight: 700; cursor: pointer; margin-right: 8px; color: var(--ink, #222); font-family: inherit; }
         [dir="rtl"] .lang-btn { margin-right: 0; margin-left: 8px; }
         [dir="rtl"] body, [dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3, [dir="rtl"] h4, [dir="rtl"] .nav-name,
-        [dir="rtl"] .btn, [dir="rtl"] p, [dir="rtl"] li, [dir="rtl"] a, [dir="rtl"] span, [dir="rtl"] .alt-price, [dir="rtl"] .stat-number { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; }
+        [dir="rtl"] .btn, [dir="rtl"] p, [dir="rtl"] li, [dir="rtl"] a, [dir="rtl"] span, [dir="rtl"] .alt-price, [dir="rtl"] .stat-number { font-family: var(--font-body); }
         [dir="rtl"] h1 em, [dir="rtl"] h2 em { font-style: normal; }
         [dir="rtl"] .hero-grid, [dir="rtl"] .faq-question { text-align: right; }
         [dir="rtl"] .alt-tier li::before { margin-left: 8px; margin-right: 0; }
         [dir="rtl"] .hero-visual { direction: ltr; }
-    </style>
+    
+        /* ===== DESIGN SYSTEM v2 (11/2026) : même identité que l'application ===== */
+        body { font-family: var(--font-body); letter-spacing: -0.003em; }
+        h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; font-weight: 600; }
+        :focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; }
+        .ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+        .nav { background: rgba(243, 245, 248, 0.92); }
+        .nav-mark { background: var(--primary-deep); color: var(--accent-bright); font-family: var(--font-display); font-weight: 700; border-radius: 8px; }
+        .nav-name { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+        .btn { border-radius: var(--r-md); font-weight: 500; transition: background .12s, border-color .12s, box-shadow .12s; }
+        .btn:hover { transform: none !important; }
+        .btn-primary { background: var(--primary); box-shadow: var(--elev-1); }
+        .btn-secondary { border: 1px solid var(--border-strong); box-shadow: var(--elev-1); }
+        .btn-accent { background: var(--accent); color: var(--primary-deep); }
+        .hero::before, .hero::after, .pricing-card::before { display: none; }
+        .hero h1 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.08; }
+        .hero h1 em, .section-title em, .final-cta h2 em { font-style: normal; color: inherit; }
+        .hero h1 em::after { display: none; }
+        .hero-eyebrow { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 13px; background: #FBF6EA; border-color: #EFE1BD; color: #6B4E12; border-radius: var(--r-md); }
+        .section-eyebrow, .social-proof-label { text-transform: lowercase; letter-spacing: 0; font-weight: 500; font-size: 14px; color: var(--ink-mute); }
+        .section-eyebrow::first-letter, .social-proof-label::first-letter { text-transform: uppercase; }
+        .section-title { font-weight: 600; letter-spacing: -0.025em; }
+        .stat-number { font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+        .feature, .vs-col, .step-card, .faq-item, .install-box, .alt-tier, .pricing-card { border-radius: var(--r-lg); box-shadow: var(--elev-1); }
+        .feature:hover, .alt-tier:hover, .faq-item:hover { transform: none; box-shadow: var(--elev-2); border-color: var(--border-strong); }
+        .feature-icon { width: 44px; height: 44px; background: #EEF2F8; color: var(--primary); border-radius: 10px; font-size: 0; }
+        .feature h3, .step-card h4, .vs-col h4, .alt-tier h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.01em; }
+        .invoice-mockup { border-radius: var(--r-xl); }
+        .pricing-badge { text-transform: none; letter-spacing: 0; font-weight: 600; }
+        .final-cta { border-radius: var(--r-xl); background-color: var(--primary-deep);
+            background-image: radial-gradient(ellipse at 50% 50%, rgba(12,31,61,.25) 0%, rgba(12,31,61,.9) 70%, var(--primary-deep) 100%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23E2B55A' stroke-opacity='.38' stroke-width='1'%3E%3Cpath d='M60 18 72.3 47.7 102 60 72.3 72.3 60 102 47.7 72.3 18 60 47.7 47.7z'/%3E%3Crect x='30.3' y='30.3' width='59.4' height='59.4'/%3E%3Cpath d='M60 18 89.7 30.3 102 60 89.7 89.7 60 102 30.3 89.7 18 60 30.3 30.3z'/%3E%3Cpath d='M0 60h18M102 60h18M60 0v18M60 102v18'/%3E%3C/g%3E%3C/svg%3E"); background-size: cover, 120px 120px; }
+        .final-cta::before { display: none; }
+        .final-cta h2 { font-weight: 600; letter-spacing: -0.025em; }
+        footer { background: var(--primary-deep); }
+        .footer-brand-name { font-family: var(--font-display); font-weight: 600; }
+        .footer-col h4 { text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; }
+        @media (max-width: 640px) { body .hero.hero { padding-top: 92px !important; } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+</style>
 </head>
 <body>
 
@@ -1443,32 +1485,32 @@
         
         <div class="features-grid">
             <div class="feature">
-                <div class="feature-icon">📄</div>
+                <div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg></div>
                 <h3>Mentions légales</h3>
                 <p>ICE, IF, RC et numérotation séquentielle intégrés, avec un contrôle avant envoi.</p>
             </div>
             <div class="feature">
-                <div class="feature-icon">💬</div>
+                <div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/></svg></div>
                 <h3>Envoi WhatsApp</h3>
                 <p>Facture ou devis envoyé au client en un clic, message prêt à partir.</p>
             </div>
             <div class="feature">
-                <div class="feature-icon">📋</div>
+                <div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></svg></div>
                 <h3>Devis en facture</h3>
                 <p>Convertissez un devis accepté en facture en 1 clic.</p>
             </div>
             <div class="feature">
-                <div class="feature-icon">🏥</div>
+                <div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="M9 12h6M12 9v6"/></svg></div>
                 <h3>CNSS et TVA</h3>
                 <p>Calcul de la cotisation et de tous les taux de TVA marocains.</p>
             </div>
             <div class="feature">
-                <div class="feature-icon">🔔</div>
+                <div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2.5h-15z"/><path d="M10 21h4"/></svg></div>
                 <h3>Relances</h3>
                 <p>Les factures en retard remontent seules, avec un message de relance prêt.</p>
             </div>
             <div class="feature">
-                <div class="feature-icon">📥</div>
+                <div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg></div>
                 <h3>PDF professionnel</h3>
                 <p>Prêt à envoyer ou imprimer, avec vos coordonnées bancaires.</p>
             </div>

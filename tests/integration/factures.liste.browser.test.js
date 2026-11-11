@@ -57,7 +57,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.evaluate(() => navTo('invoices')); await sleep(600);
     const txt = async () => p.$$eval('#invoicesList tbody tr', (trs) => trs.map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
     let L = await txt();
-    ok('3 colonnes seulement (Facture, Montant, Actions) : plus de colonne coupée', (await p.$$eval('#invoicesList thead th', (h) => h.map((x) => x.innerText.trim()))).join('|') === 'FACTURE|MONTANT|ACTIONS');
+    // Design System v2 : en-têtes en casse normale ; sur téléphone la liste passe en cartes (en-tête masqué), donc on lit le texte du DOM
+    ok('3 colonnes seulement (Facture, Montant, Actions) : plus de colonne coupée', (await p.$$eval('#invoicesList thead th', (h) => h.map((x) => x.textContent.trim().toUpperCase()))).join('|') === 'FACTURE|MONTANT|ACTIONS');
     ok('en-têtes de groupe : « Brouillons » puis « Factures enregistrées »', L.some((l) => /^BROUILLONS/i.test(l)) && L.some((l) => /^FACTURES ENREGISTRÉES/i.test(l)), JSON.stringify(L.slice(0, 3)));
     const idxD = L.findIndex((l) => /Brouillon · non enregistré/.test(l)), idxI = L.findIndex((l) => /FAC-2026-001/.test(l));
     ok('le brouillon est listé avant les factures enregistrées et porte « Brouillon · non enregistré » (numéro BRO- masqué)', idxD >= 0 && idxD < idxI && !/BRO-AB12CD/.test(L[idxD]), L[idxD]);
@@ -65,7 +66,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('facture soldée : « Soldée », aucun bouton Encaisser', /soldée/i.test(L.find((l) => /FAC-2026-002/.test(l)) || '') && !(await p.isVisible('#invoicesList tbody tr:has-text("FAC-2026-002") button:has-text("Encaisser")')));
     ok('SUPPRESSION : aucun bouton Supprimer sur les factures enregistrées', (await p.$$eval('#invoicesList tr.inv-row-issued button', (b) => b.filter((x) => /deleteInvoice|Supprimer/.test((x.getAttribute('onclick') || '') + x.textContent)).length)) === 0);
     ok('SUPPRESSION : le brouillon garde « Supprimer » et « Modifier »', (await p.$$eval('#invoicesList tr.inv-row-draft button', (b) => b.map((x) => x.textContent.trim()).join('|'))).includes('Supprimer') && (await p.isVisible('#invoicesList tr.inv-row-draft button:has-text("Modifier")')));
-    ok('brouillon visuellement distinct : bordure pointillée à gauche et fond hachuré', await p.$eval('#invoicesList tr.inv-row-draft td:first-child', (e) => /dashed/.test(getComputedStyle(e).borderLeftStyle)) && await p.$eval('#invoicesList tr.inv-row-draft td', (e) => /gradient/.test(getComputedStyle(e).backgroundImage)));
+    // La bordure et le fond sont portés par la cellule (tableau) ou par la ligne (carte, sur téléphone)
+    ok('brouillon visuellement distinct : bordure pointillée à gauche et fond hachuré', await p.$eval('#invoicesList tr.inv-row-draft', (r) => { const c = r.querySelector('td'); const cs = (e) => getComputedStyle(e);
+      return (/dashed/.test(cs(c).borderLeftStyle) || /dashed/.test(cs(r).borderLeftStyle)) && (/gradient/.test(cs(c).backgroundImage) || /gradient/.test(cs(r).backgroundImage)); }));
     const ov = await p.evaluate(() => { const t = document.querySelector('#invoicesList table'); return { page: document.documentElement.scrollWidth - window.innerWidth, table: t.scrollWidth - t.parentElement.clientWidth }; });
     ok('téléphone 390 px : pas de défilement horizontal', ov.page <= 1 && ov.table <= 1, JSON.stringify(ov));
     const sel = async (v) => { await p.selectOption('#invoiceFilter', v); await sleep(250); };

@@ -8,10 +8,7 @@
     <script>try{if(window.top===window.self){document.getElementById('fp-antiframe').remove();}else{window.top.location=window.self.location;}}catch(e){}</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FacturaPro Admin — Gestion Clients & Licences</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="fonts/plex.css">
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha256-7jvo3hkrl8sdc9HpXWuCux9rZYwPl8TvdX/DMZlu09M=" crossorigin="anonymous"></script>
     
@@ -23,24 +20,24 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --primary: #1B3A6B;
-            --primary-deep: #122849;
-            --accent: #C9A95B;
-            --accent-bright: #E0BD6B;
-            --success: #2E7D5B;
-            --danger: #C84A4A;
+            --primary: #16325C;
+            --primary-deep: #0C1F3D;
+            --accent: #C8973A;
+            --accent-bright: #E2B55A;
+            --success: #0F7B55;
+            --danger: #C0362C;
             --warning: #E8B14A;
-            --bg: #F7F5F0;
+            --bg: #F3F5F8;
             --surface: #FFFFFF;
-            --surface-soft: #FAF8F3;
-            --ink: #1A1F2E;
-            --ink-soft: #4A5468;
-            --ink-mute: #8B95A8;
-            --border: #E8E5DD;
+            --surface-soft: #F7F9FB;
+            --ink: #101828;
+            --ink-soft: #475467;
+            --ink-mute: #667085;
+            --border: #E1E6ED;
         }
 
         body {
-            font-family: 'Manrope', sans-serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
             background: var(--bg);
             color: var(--ink);
             min-height: 100vh;
@@ -69,7 +66,7 @@
         }
 
         .login-card h1 {
-            font-family: 'Crimson Pro', serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: -0.015em;
             text-align: center;
             margin-bottom: 8px;
             color: var(--ink);
@@ -177,13 +174,13 @@
             align-items: center;
             justify-content: center;
             color: var(--accent);
-            font-family: 'Crimson Pro', serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: -0.015em;
             font-size: 22px;
             font-weight: 700;
         }
 
         .brand-name {
-            font-family: 'Crimson Pro', serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: -0.015em;
             font-size: 20px;
             font-weight: 700;
             color: var(--primary);
@@ -193,7 +190,7 @@
             display: block;
             font-size: 11px;
             color: var(--ink-mute);
-            font-family: 'Manrope', sans-serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -231,7 +228,7 @@
         }
 
         .topbar h1 {
-            font-family: 'Crimson Pro', serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: -0.015em;
             font-size: 32px;
             font-weight: 700;
             color: var(--ink);
@@ -278,7 +275,7 @@
         }
 
         .stat-value {
-            font-family: 'Crimson Pro', serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: -0.015em;
             font-size: 32px;
             font-weight: 700;
             color: var(--ink);
@@ -311,7 +308,7 @@
         }
 
         .card-header h2 {
-            font-family: 'Crimson Pro', serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: -0.015em;
             font-size: 20px;
             font-weight: 700;
         }
@@ -408,7 +405,7 @@
         }
 
         .modal h2 {
-            font-family: 'Crimson Pro', serif;
+            font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: -0.015em;
             font-size: 22px;
             font-weight: 700;
             margin-bottom: 16px;

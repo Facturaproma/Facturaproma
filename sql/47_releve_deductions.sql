@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS payment_modes_user_idx ON public.payment_modes (user_
 ALTER TABLE public.payment_modes ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.payment_modes FROM PUBLIC, anon, authenticated;
 
-CREATE OR REPLACE FUNCTION public.fin_pay_mode(p_mode TEXT) RETURNS TEXT LANGUAGE plpgsql IMMUTABLE AS $$
+CREATE OR REPLACE FUNCTION public.fin_pay_mode(p_mode TEXT) RETURNS TEXT LANGUAGE plpgsql IMMUTABLE SET search_path = public AS $$
 BEGIN
     IF p_mode IS NULL OR btrim(p_mode) = '' THEN RETURN NULL; END IF;
     IF btrim(p_mode) NOT IN ('especes', 'cheque', 'prelevement', 'virement', 'effet', 'compensation', 'autre') THEN RAISE EXCEPTION 'MODE_PAIEMENT_INVALIDE'; END IF;
