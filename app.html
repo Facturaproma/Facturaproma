@@ -4659,7 +4659,7 @@
             <!-- TVA Tab -->
             <div class="tab-content active" id="tab-tva">
                 <div class="notice">
-                    <strong>ℹ️ TVA au Maroc</strong> — Taux normal : 20%. Taux réduits : 14%, 10%, 7%. Auto-Entrepreneurs : exonérés.
+                    <strong>ℹ️ TVA au Maroc</strong> — Depuis le 1er janvier 2026 : taux normal 20 %, taux réduit 10 %. Les anciens taux 7 % et 14 % ne s'appliquent plus aux nouvelles factures. Auto-entrepreneurs : exonérés.
                 </div>
 
                 <div class="calc-grid">
@@ -4730,7 +4730,7 @@
                         <div class="form-group"><label for="vpDesignation">Désignation</label><input type="text" id="vpDesignation" maxlength="120" placeholder="Ex. : Achats consommables"></div>
                         <div class="form-row">
                             <div class="form-group"><label for="vpHT">Montant HT (DH) *</label><input type="number" id="vpHT" min="0" step="0.01" placeholder="0" oninput="vpSuggestTva()"></div>
-                            <div class="form-group"><label for="vpRate">Taux</label><select id="vpRate" onchange="vpSuggestTva(true)"><option value="20">20 %</option><option value="14">14 %</option><option value="10">10 %</option><option value="7">7 %</option><option value="0">0 %</option></select></div>
+                            <div class="form-group"><label for="vpRate">Taux</label><select id="vpRate" onchange="vpSuggestTva(true)"><option value="20">20 %</option><option value="10">10 %</option><option value="0">0 %</option><option value="14">14 % (ancien taux)</option><option value="7">7 % (ancien taux)</option></select></div>
                             <div class="form-group"><label for="vpTVA">TVA (DH) *</label><input type="number" id="vpTVA" min="0" step="0.01" placeholder="0" oninput="this.dataset.touched='1'"></div>
                         </div>
                         <div class="form-row">
@@ -6391,6 +6391,8 @@ const ArTranslator = {
         }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title'] });
     }
 };
+// Compléments du 11/11/2026 (taux de TVA) : ajoutés à part pour ne pas réécrire la ligne du dictionnaire
+Object.assign(AR_TEXT, {"— Depuis le 1er janvier 2026 : taux normal 20 %, taux réduit 10 %. Les anciens taux 7 % et 14 % ne s'appliquent plus aux nouvelles factures. Auto-entrepreneurs : exonérés.": "— منذ فاتح يناير 2026: النسبة العادية 20 %، النسبة المخفَّضة 10 %. النسب القديمة 7 % و14 % لم تعد تطبَّق على الفواتير الجديدة. المقاولون الذاتيون: معفَون.", "14 % (ancien taux)": "14 % (نسبة قديمة)", "7 % (ancien taux)": "7 % (نسبة قديمة)"});
 /* AR-PREVIEW-END */
 
 const I18n = {
@@ -9711,11 +9713,11 @@ function renderProductPicker(products) {
                         <div style="font-weight: 600; font-size: 14px;">📦 ${escapeHtml(p.name)}${cat}</div>
                         ${desc}
                         <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">
-                            Unité : ${p.unit || 'unité'} · TVA : ${p.tva || 0}%
+                            Unité : ${escapeHtml(p.unit || 'unité')} · TVA : ${escapeHtml(p.tva || 0)}%
                         </div>
                     </div>
                     <div style="text-align: right; flex-shrink: 0;">
-                        <div style="font-weight: 700; color: var(--primary); font-size: 16px;">${(p.price || 0).toLocaleString('fr-FR')} DH</div>
+                        <div style="font-weight: 700; color: var(--primary); font-size: 16px;">${(Number(p.price) || 0).toLocaleString('fr-FR')} DH</div>
                         <div style="font-size: 10px; color: var(--ink-mute);">HT</div>
                     </div>
                 </div>
@@ -10323,7 +10325,7 @@ function populateClientSelect() {
     const select = document.getElementById('editorClient');
     const clients = Storage.get('clients', []);
     select.innerHTML = '<option value="">— Sélectionner un client —</option>' +
-        clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.ice ? ' (ICE: ' + c.ice + ')' : ''}</option>`).join('');
+        clients.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}${c.ice ? ' (ICE: ' + escapeHtml(c.ice) + ')' : ''}</option>`).join('');
 }
 
 // ---- Fiches client / fournisseur : champs obligatoires selon le type ----
@@ -13904,7 +13906,7 @@ function renderTeamMembers() {
             <div style="width: 40px; height: 40px; background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700;">👑</div>
             <div style="flex: 1;">
                 <div style="font-weight: 600;">Vous (Propriétaire)</div>
-                <div style="font-size: 12px; color: var(--ink-mute);">${session?.email || ''}</div>
+                <div style="font-size: 12px; color: var(--ink-mute);">${escapeHtml(session?.email || '')}</div>
             </div>
             <span class="badge badge-success">Owner</span>
         </div>
@@ -13915,12 +13917,12 @@ function renderTeamMembers() {
         const roleLabels = { viewer: '👁️ Lecteur', editor: '✏️ Éditeur', admin: '🔧 Admin' };
         html += `
             <div style="display: flex; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid var(--border);">
-                <div style="width: 40px; height: 40px; background: var(--surface-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink-mute);">${(m.email || '?').charAt(0).toUpperCase()}</div>
+                <div style="width: 40px; height: 40px; background: var(--surface-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink-mute);">${escapeHtml((m.email || '?').charAt(0).toUpperCase())}</div>
                 <div style="flex: 1;">
-                    <div style="font-weight: 600;">${m.name || m.email}</div>
-                    <div style="font-size: 12px; color: var(--ink-mute);">${m.email}</div>
+                    <div style="font-weight: 600;">${escapeHtml(m.name || m.email)}</div>
+                    <div style="font-size: 12px; color: var(--ink-mute);">${escapeHtml(m.email)}</div>
                 </div>
-                <span class="badge" style="background: var(--surface-soft); color: var(--ink);">${roleLabels[m.role] || m.role}</span>
+                <span class="badge" style="background: var(--surface-soft); color: var(--ink);">${roleLabels[m.role] || escapeHtml(m.role)}</span>
                 <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="removeTeamMember(${jsArg(m.email)})">🗑️</button>
             </div>
         `;
@@ -13934,10 +13936,10 @@ function renderTeamMembers() {
             <div style="display: flex; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid var(--border); opacity: 0.7;">
                 <div style="width: 40px; height: 40px; background: var(--surface-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center;">⏳</div>
                 <div style="flex: 1;">
-                    <div style="font-weight: 600;">${inv.name || inv.email}</div>
-                    <div style="font-size: 12px; color: var(--ink-mute);">Invité il y a ${daysSince}j · Code: <code>${inv.code}</code></div>
+                    <div style="font-weight: 600;">${escapeHtml(inv.name || inv.email)}</div>
+                    <div style="font-size: 12px; color: var(--ink-mute);">Invité il y a ${escapeHtml(daysSince)}j · Code: <code>${escapeHtml(inv.code)}</code></div>
                 </div>
-                <span class="badge badge-warning">${roleLabels[inv.role] || inv.role}</span>
+                <span class="badge badge-warning">${roleLabels[inv.role] || escapeHtml(inv.role)}</span>
                 <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="resendInvitation(${jsArg(inv.code)})" title="Renvoyer le code">📱</button>
                 <button class="btn btn-danger" style="font-size: 11px; padding: 4px 10px;" onclick="cancelInvitation(${jsArg(inv.code)})" title="Annuler l'invitation">✕</button>
             </div>
@@ -15122,10 +15124,10 @@ function updateTrialUI() {
             const soon = info.type !== 'lifetime' && dl >= 0 && dl <= 7;
             banner.className = soon ? (dl <= 1 ? 'trial-banner urgent' : 'trial-banner warning') : 'trial-banner licensed';
             const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '';
-            document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierData.icon}</span> ${tierData.name} actif${expDate ? ` · Renouvellement le ${expDate}` : ''}`;
+            document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierData.icon}</span> ${escapeHtml(tierData.name)} actif${expDate ? ` · Renouvellement le ${expDate}` : ''}`;
             document.getElementById('trialBannerCountdown').style.display = 'none';
             if (soon) {
-                document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${dl <= 1 ? '🔴' : '⏰'}</span> ${tierData.name} : fin ${dl <= 0 ? 'aujourd\'hui' : dl === 1 ? 'demain' : 'dans ' + dl + ' jours'} — pensez à renouveler`;
+                document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${dl <= 1 ? '🔴' : '⏰'}</span> ${escapeHtml(tierData.name)} : fin ${dl <= 0 ? 'aujourd\'hui' : dl === 1 ? 'demain' : 'dans ' + dl + ' jours'} — pensez à renouveler`;
             }
             const banBtn = banner.querySelector('button');
             if (banBtn) { banBtn.style.display = soon ? 'inline-block' : 'none'; if (soon) banBtn.textContent = 'Renouveler →'; }
@@ -15383,7 +15385,7 @@ function renderLicensePage() {
                 <h3>📋 Votre abonnement actuel</h3>
                 <div class="calc-line">
                     <span>Formule</span>
-                    <strong>${t.label}</strong>
+                    <strong>${escapeHtml(t.label)}</strong>
                 </div>
                 <div class="calc-line">
                     <span>Statut</span>

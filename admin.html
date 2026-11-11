@@ -6813,7 +6813,7 @@ async function renderStaffList() {
         if (error) throw error;
         tb.innerHTML = (data || []).length ? data.map(x => `<tr>
             <td><strong>${esc(x.email)}</strong></td><td>${formatDate(x.created_at)}</td><td>${esc(x.added_by || '—')}</td>
-            <td><button class="btn btn-danger btn-sm" onclick='removeStaff(${JSON.stringify(x.email)})'>Retirer</button></td></tr>`).join('')
+            <td><button class="btn btn-danger btn-sm" onclick="removeStaff(${jsArg(x.email)})">Retirer</button></td></tr>`).join('')
             : '<tr><td colspan="4" class="empty">Aucun assistant</td></tr>';
     } catch (err) {
         tb.innerHTML = '<tr><td colspan="4" class="empty">Exécute sql/13_profil_assistant.sql dans Supabase pour activer ce profil.</td></tr>';
