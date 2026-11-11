@@ -6,6 +6,7 @@ const R = path.join(__dirname, '..', '..');
 const { createDb, dropDb, makeBackend } = require('../../tests/integration/backend');
 const FAKE = fs.readFileSync(path.join(R, 'tests', 'integration', 'fake_supabase.js'), 'utf8');
 const PORT = 8291;
+const RTL = !!process.env.TOUR_RTL, RTL_RES = [];   // TOUR_RTL=1 : toutes les vues en arabe (ordinateur, tablette, mobile) + contrôle des débordements
 const srv = http.createServer((q, r) => {
   let u = '/'; try { u = decodeURIComponent(q.url.split('?')[0]); } catch (e) { r.writeHead(400); return r.end(); }
   const f = path.resolve(R, '.' + path.posix.normalize('/' + (u === '/' ? 'index.html' : u)));
@@ -101,7 +102,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const PAGES = ['dashboard', 'invoices', 'quotes', 'deliveries', 'clients', 'products', 'stock', 'purchases', 'payments', 'treasury', 'pilotage', 'reminders', 'reports', 'cnss', 'taxes', 'company', 'messages', 'license'];
   const tour = async (label, p) => {
     let i = 1;
-    const snap = async (name, full = true) => { await p.screenshot({ path: path.join(OUT, `${label}-${String(i++).padStart(2, '0')}-${name}.png`), fullPage: full }); };
+    const snap = async (name, full = true) => {
+      await p.screenshot({ path: path.join(OUT, `${label}-${String(i++).padStart(2, '0')}-${name}.png`), fullPage: full });
+      if (RTL) RTL_RES.push(Object.assign({ ecran: label, vue: name }, await p.evaluate(() => {
+        // Débordements : élément visible qui sort de la fenêtre (hors zones à défilement horizontal voulu : tableaux, barres d'onglets)
+        const vw = document.documentElement.clientWidth, out = [];
+        for (const el of document.querySelectorAll('body *')) {
+          const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || cs.display === 'none' || el.closest('svg')) continue;
+          const r = el.getBoundingClientRect(); if (!r.width || !r.height) continue;
+          let q = el.parentElement, scroller = false; while (q && q !== document.body) { const o = getComputedStyle(q).overflowX; if (o === 'auto' || o === 'scroll' || o === 'hidden') { scroller = true; break; } q = q.parentElement; }
+          if (scroller) continue;
+          if (r.right > vw + 2 || r.left < -2) out.push((el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/)[0] : '')) + ' [' + Math.round(r.left) + ',' + Math.round(r.right) + ']');
+        }
+        return { dir: document.documentElement.dir || getComputedStyle(document.body).direction, defilementHorizontal: document.documentElement.scrollWidth > vw + 2, debordements: out.slice(0, 8), nb: out.length };
+      })));
+    };
     for (const pg of PAGES) {
       await p.evaluate((x) => { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); navTo(x); window.scrollTo(0, 0); }, pg); await sleep(pg === 'dashboard' || pg === 'pilotage' || pg === 'taxes' ? 1300 : 700);
       await snap(pg);
@@ -115,14 +130,50 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.evaluate(() => { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); navTo('dashboard'); if (typeof toggleSidebar === 'function' && window.innerWidth < 1000) toggleSidebar(); }); await sleep(400);
     if (label !== 'desktop') await snap('menu', false);
   };
+  // Audit de traduction : TOUR_LANG_AUDIT=1 → pour chaque page en arabe, liste les textes visibles restés en français (JSON), puis s'arrête
+  if (process.env.TOUR_LANG_AUDIT) {
+    // L'arabe est un aperçu : il ne s'active que par l'adresse ?lang=ar (aucun bouton dans l'application)
+    await p.goto(`http://localhost:${PORT}/app.html?lang=ar`); await sleep(2500);
+    const res = {};
+    const collect = () => p.evaluate(() => {
+      const out = new Set(), skip = /^(DH|MAD|ICE|IF|RC|CNSS|TVA|HT|TTC|PDF|RIB|IBAN|SARL|SA|SAS|XML|CSV|Excel|WhatsApp|FacturaPro|SIMPL|AMO|IR|IS|TP|BL|N°|FAC|DEV|AVO|ACH|Banque|Caisse|CMI|Email|OK)$/i;
+      const w = document.createTreeWalker(document.querySelector('.main'), NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) {
+        const n = w.currentNode, el = n.parentElement; if (!el || el.closest('script,style,option:not(:checked),[data-userdata]')) continue;
+        const r = el.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') continue;
+        const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t.length < 3) continue;   // textes mixtes (arabe + français) compris : un mot français resté dans une phrase traduite est signalé
+        const words = (t.replace(/[\u0600-\u06FF]+/g, ' ').match(/[A-Za-zÀ-ÿ]{3,}/g) || []).filter(x => !skip.test(x)); if (!words.length) continue;
+        out.add(t);
+      }
+      return [...out];
+    });
+    const userData = new Set(['Atelier Atlas SARL', 'Café Nour', 'Riad Yasmine', 'Boulangerie El Fath', 'Hôtel Les Palmiers', 'Grossiste Café Maroc', 'Entretien machine à café', 'Capsules café (boîte)', 'Installation et mise en service', 'Filtre à eau', 'Casablanca', 'Marrakech', 'Rabat', 'Agadir', 'Banque Exemple', 'Fournitures', 'Loyer', 'Capsules en gros', 'Loyer atelier', "Contrat d'entretien annuel", 'forfait', 'boîte', 'pièce']);
+    for (const pg of ['dashboard', 'invoices', 'quotes', 'deliveries', 'clients', 'products', 'stock', 'purchases', 'payments', 'treasury', 'pilotage', 'reminders', 'reports', 'cnss', 'taxes', 'company', 'messages', 'license']) {
+      await p.evaluate((x) => { navTo(x); window.scrollTo(0, 0); }, pg); await sleep(pg === 'dashboard' || pg === 'pilotage' || pg === 'taxes' ? 1300 : 700);
+      res[pg] = (await collect()).filter(t => !userData.has(t) && !/@|^\d|facturapro-test|^FA-|^(FAC|DEV|ACH|BL)-/.test(t));
+    }
+    await p.evaluate(() => { navTo('invoices'); newInvoice(); }); await sleep(500);
+    await p.evaluate(() => { const sel = document.getElementById('editorClient'); sel.value = 'c3'; sel.dispatchEvent(new Event('change', { bubbles: true })); addItem({ description: 'Entretien machine à café', quantity: 1, price: 1500, tva: 20 }); if (typeof updateTotals === 'function') updateTotals(); }); await sleep(800);
+    res['editeur-facture'] = (await collect()).filter(t => !userData.has(t));
+    for (const [nom, f] of [['modale-client', () => { navTo('clients'); newClient(); }], ['modale-paiement', () => { navTo('payments'); recordPayment(); }], ['modale-achat', () => { navTo('purchases'); if (typeof newPurchase === 'function') newPurchase(); }]]) {
+      await p.evaluate(() => document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'))); await p.evaluate(f); await sleep(600);
+      res[nom] = (await p.evaluate(() => { const m = [...document.querySelectorAll('.modal-overlay.active')].pop(); if (!m) return []; const out = new Set(); const w = document.createTreeWalker(m, NodeFilter.SHOW_TEXT);
+        while (w.nextNode()) { const el = w.currentNode.parentElement; if (!el || el.closest('script,style,option:not(:checked)')) continue; const t = w.currentNode.textContent.replace(/\s+/g, ' ').trim(); if (t.length >= 3 && /[A-Za-zÀ-ÿ]{3,}/.test(t.replace(/[\u0600-\u06FF]+/g, ' '))) out.add(t); } return [...out]; })).filter(t => !userData.has(t));
+    }
+    fs.writeFileSync(path.join(OUT, 'arabe-non-traduit.json'), JSON.stringify(res, null, 1));
+    console.log('non traduits par page :', Object.entries(res).map(([k, v]) => k + '=' + v.length).join(' '), '| total', Object.values(res).reduce((t, v) => t + v.length, 0));
+    await browser.close(); srv.close(); dropDb(db); process.exit(0);
+  }
+  if (RTL) { await p.goto(`http://localhost:${PORT}/app.html?lang=ar`); await sleep(2500); }
   await p.evaluate(() => navTo('dashboard')); await sleep(600);
-  await tour('desktop', p);
+  await tour(RTL ? 'rtl-ordinateur' : 'desktop', p);
+  if (!RTL) {
   // Arabe (droite à gauche) : tableau de bord, factures, éditeur
-  await p.evaluate(() => { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); setLanguage('ar'); navTo('dashboard'); }); await sleep(900);
+  await p.goto(`http://localhost:${PORT}/app.html?lang=ar`); await sleep(2500); await p.evaluate(() => navTo('dashboard')); await sleep(900);
   await p.screenshot({ path: path.join(OUT, 'arabe-01-dashboard.png'), fullPage: true });
   await p.evaluate(() => navTo('invoices')); await sleep(600); await p.screenshot({ path: path.join(OUT, 'arabe-02-invoices.png'), fullPage: true });
   await p.evaluate(() => navTo('taxes')); await sleep(900); await p.screenshot({ path: path.join(OUT, 'arabe-03-taxes.png'), fullPage: true });
-  await p.evaluate(() => { setLanguage('fr'); navTo('dashboard'); }); await sleep(500);
+  await p.goto(`http://localhost:${PORT}/app.html`); await sleep(2500); await p.evaluate(() => navTo('dashboard')); await sleep(500);
   // PDF réels (facture, devis)
   for (const [kind, key] of [['invoice', 'invoices'], ['quote', 'quotes']]) {
     try {
@@ -133,6 +184,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       require('child_process').execFileSync('pdftoppm', ['-png', '-r', '80', '-f', '1', '-l', '1', f, path.join(OUT, `pdf-${kind}`)]);
     } catch (e) { console.log('pdf', kind, e.message); }
   }
+  }
   await ctx.close();
   for (const [label, w, h] of [['tablette', 820, 1180], ['mobile', 390, 844]]) {
     const c2 = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, serviceWorkers: 'block', locale: 'fr-FR', storageState: path.join(OUT, 'state.json'), isMobile: label === 'mobile', hasTouch: true });
@@ -142,12 +194,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await q.route('**/jspdf.umd.min.js', (r) => r.fulfill({ path: nm('jspdf', 'dist', 'jspdf.umd.min.js'), contentType: 'text/javascript' }));
     await q.route('**/jspdf.plugin.autotable.min.js', (r) => r.fulfill({ path: nm('jspdf-autotable', 'dist', 'jspdf.plugin.autotable.min.js'), contentType: 'text/javascript' }));
     if (!process.env.TOUR_FONTS) await q.route(/googleapis|gstatic|hcaptcha/, (r) => r.abort()); else await q.route(/hcaptcha/, (r) => r.abort());
-    await q.goto(`http://localhost:${PORT}/app.html`); await sleep(2500);
+    await q.goto(`http://localhost:${PORT}/app.html${RTL ? '?lang=ar' : ''}`); await sleep(2500);
     if (!(await q.isVisible('#mainApp'))) { try { await q.fill('#loginEmail', EMAIL); await q.fill('#loginPassword', PASS); await q.click('#loginBtn'); await sleep(2500); } catch (e) { console.log('login', label, e.message.slice(0, 120)); } }
-    await tour(label, q);
-    if (label === 'mobile') { await q.goto(`http://localhost:${PORT}/index.html`); await sleep(1200); await q.screenshot({ path: path.join(OUT, 'mobile-accueil.png'), fullPage: true }); }
+    await tour(RTL ? 'rtl-' + label : label, q);
+    if (label === 'mobile' && !RTL) { await q.goto(`http://localhost:${PORT}/index.html`); await sleep(1200); await q.screenshot({ path: path.join(OUT, 'mobile-accueil.png'), fullPage: true }); }
     await c2.close();
   }
+  if (RTL) { fs.writeFileSync(path.join(OUT, 'rtl.json'), JSON.stringify(RTL_RES, null, 1)); const bad = RTL_RES.filter(x => x.dir !== 'rtl' || x.defilementHorizontal || x.nb); console.log('vues contrôlées :', RTL_RES.length, '| à examiner :', bad.length); bad.forEach(x => console.log(' ', x.ecran, x.vue, x.dir, x.defilementHorizontal ? 'DEFILEMENT' : '', x.debordements.join(' '))); await browser.close(); srv.close(); dropDb(db); process.exit(0); }
   const c3 = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' }); const h = await c3.newPage();
   if (!process.env.TOUR_FONTS) await h.route(/googleapis|gstatic/, (r) => r.abort());
   await h.goto(`http://localhost:${PORT}/index.html`); await sleep(1200); await h.screenshot({ path: path.join(OUT, 'desktop-accueil.png'), fullPage: true });
