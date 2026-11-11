@@ -61,6 +61,16 @@
       "pattern": "art. 101-3° du CGI",
       "status": "non_verifie",
       "notes": "Source secondaire seulement (Upsilon Consulting, « VAT deductions Morocco », lu le 09/11/2026) ; confirmé en pratique par le logiciel de déclaration de Marwan (paiements de janvier à septembre repris en décembre). Texte officiel non lu. À faire confirmer par le comptable. Voir docs/RELEVE_DEDUCTIONS.md."
+    },
+    {
+      "id": "TVA_TAUX_2026",
+      "claim": "Depuis le 1er janvier 2026, deux taux de TVA seulement : 20 % (normal) et 10 % (réduit) ; les taux 7 % et 14 % sont supprimés",
+      "found_in": {
+        "app.html": "Depuis le 1er janvier 2026 : taux normal 20 %, taux réduit 10 %"
+      },
+      "pattern": "Depuis le 1er janvier 2026 : taux normal 20 %, taux réduit 10 %",
+      "status": "non_verifie",
+      "notes": "Source secondaire seulement (Upsilon Consulting, « Réforme TVA Maroc 2024-2026 », lu le 11/11/2026). Cohérent avec les taux déjà proposés dans l'éditeur de facture (0, 10, 20). Texte officiel (loi de finances 2026, CGI) non lu : à confirmer par le comptable."
     }
   ]
 }
