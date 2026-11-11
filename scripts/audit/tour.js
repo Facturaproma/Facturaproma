@@ -117,6 +117,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   };
   await p.evaluate(() => navTo('dashboard')); await sleep(600);
   await tour('desktop', p);
+  // Arabe (droite à gauche) : tableau de bord, factures, éditeur
+  await p.evaluate(() => { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); setLanguage('ar'); navTo('dashboard'); }); await sleep(900);
+  await p.screenshot({ path: path.join(OUT, 'arabe-01-dashboard.png'), fullPage: true });
+  await p.evaluate(() => navTo('invoices')); await sleep(600); await p.screenshot({ path: path.join(OUT, 'arabe-02-invoices.png'), fullPage: true });
+  await p.evaluate(() => navTo('taxes')); await sleep(900); await p.screenshot({ path: path.join(OUT, 'arabe-03-taxes.png'), fullPage: true });
+  await p.evaluate(() => { setLanguage('fr'); navTo('dashboard'); }); await sleep(500);
   // PDF réels (facture, devis)
   for (const [kind, key] of [['invoice', 'invoices'], ['quote', 'quotes']]) {
     try {

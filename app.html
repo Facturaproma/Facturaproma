@@ -3027,11 +3027,12 @@
         .notice.success { background: #E9F6F0; border-color: #C5E5D6; border-left-color: var(--success); }
         .quick-action-icon .ic { width: 20px; height: 20px; }
         @media (min-width: 901px) { .sync-indicator { padding: 5px 11px; font-size: 12px; border-radius: 100px; opacity: .92; } }
-        tr.inv-row-draft td { background: #FFFCF3; }
-        tr.inv-row-draft td:first-child { border-left: 3px dashed #D9A21B; }
-        tr.inv-row-issued td:first-child { border-left: 3px solid var(--success); }
-        tr.inv-row-credit td:first-child { border-left: 3px solid var(--warning); }
+        tr.inv-row-draft td { background: repeating-linear-gradient(135deg, #FFFDF7, #FFFDF7 8px, #FFF8E8 8px, #FFF8E8 16px); }
+        tr.inv-row-draft td:first-child { border-left: none; border-inline-start: 3px dashed #D9A21B; }
+        tr.inv-row-issued td:first-child { border-left: none; border-inline-start: 3px solid var(--success); }
+        tr.inv-row-credit td:first-child { border-left: none; border-inline-start: 3px solid var(--warning); }
         .inv-tag-draft { background: #FFF4D6; border: 1px dashed #D9A21B; }
+        table.tbl-inv td:last-child .btn-ghost, table.tbl-pay td:last-child .btn-ghost { background: var(--surface); }
         #editorInvoiceNumber { font-size: 20px !important; letter-spacing: -0.015em; }
         .items-table input, .items-table select { border-color: transparent; background: transparent; }
         .items-table tr:hover input, .items-table tr:hover select { border-color: var(--border-strong); background: var(--surface); }
@@ -3053,9 +3054,11 @@
             table.tbl-inv tr.inv-group { padding: 0; }
             table.tbl-inv tr.inv-group td { padding: 8px 14px; }
             table.tbl-inv td { border: none !important; padding: 0 !important; }
-            table.tbl-inv tr.inv-row-draft { border-left: 3px dashed #D9A21B; background: #FFFCF3; }
-            table.tbl-inv tr.inv-row-issued { border-left: 3px solid var(--success); }
-            table.tbl-inv tr.inv-row-credit { border-left: 3px solid var(--warning); }
+            table.tbl-inv tr td:first-child { border-inline-start: none !important; }
+            table.tbl-inv tr.inv-row-draft { border-inline-start: 3px dashed #D9A21B; background: repeating-linear-gradient(135deg, #FFFDF7, #FFFDF7 8px, #FFF8E8 8px, #FFF8E8 16px); }
+            table.tbl-inv tr.inv-row-draft td { background: transparent; }
+            table.tbl-inv tr.inv-row-issued { border-inline-start: 3px solid var(--success); }
+            table.tbl-inv tr.inv-row-credit { border-inline-start: 3px solid var(--warning); }
             table.tbl-inv tr:not(.inv-group) td:nth-child(2) { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
             table.tbl-inv tr:not(.inv-group) td:nth-child(2) > strong:first-child, table.tbl-inv tr:not(.inv-group) td:nth-child(2) > b:first-child { font-size: 16px; }
             table.tbl-inv th:last-child, table.tbl-inv td:last-child { width: 100%; }
@@ -13069,7 +13072,7 @@ function renderReportInvoices() {
             
             return `
                 <tr>
-                    <td><strong>${escapeHtml(i.number)}</strong></td>
+                    <td><strong>${escapeHtml(dn(i.number))}</strong></td>
                     <td>${formatDate(i.date)}</td>
                     <td>${escapeHtml(i.clientName || '—')}</td>
                     <td><strong>${formatCurrency(i.totalTTC)}</strong></td>
