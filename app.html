@@ -10811,13 +10811,16 @@ async function purLoad(force) {
         }
         const { data, error } = await supaClient.rpc('purchase_list', { p_from: null, p_to: null, p_status: null, p_limit: 5000, p_offset: 0 });
         if (error) throw new Error(error.message || 'erreur');
-        _purCache = (data || []).map(purFromServer);
+        // La liste n'est publiée qu'une fois complète (avoirs rattachés) : publiée avant, un écran ouvert pendant
+        // le chargement des avoirs voyait des achats sans avoirs (« déjà entièrement couvert », bouton absent).
+        const list = (data || []).map(purFromServer);
         // Avoirs fournisseurs (sql/44) : rattachés à leur achat ; serveur sans sql/44 → aucun avoir
         const cr = await supaClient.rpc('purchase_credit_list', { p_purchase: null });
         const credits = cr.error ? [] : (cr.data || []);
-        _purCache.forEach(pu => { pu.credits = credits.filter(c => c.purchase_id === pu.id).map(c => ({ id: c.id, number: c.number, date: c.doc_date, supplierRef: c.supplier_ref || '', reason: c.reason,
+        list.forEach(pu => { pu.credits = credits.filter(c => c.purchase_id === pu.id).map(c => ({ id: c.id, number: c.number, date: c.doc_date, supplierRef: c.supplier_ref || '', reason: c.reason,
             totalHT: Number(c.total_ht), totalTVA: Number(c.total_tva), totalTTC: Number(c.total_ttc), lines: (c.lines || []).map(l => ({ lineNo: l.line_no, qty: Number(l.qty), price: Number(l.unit_price), totalHT: Number(l.total_ht), totalTVA: Number(l.total_tva), returned: Number(l.returned_qty) || 0, description: l.description, nature: l.nature, category: l.category, tva: Number(l.tva_rate) })) }));
             pu.credited = purR2(pu.credits.reduce((t, c) => t + c.totalTTC, 0)); });
+        _purCache = list;
         return _purCache;
     })();
     try { return await _purLoading; } finally { _purLoading = null; }

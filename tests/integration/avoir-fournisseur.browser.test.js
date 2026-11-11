@@ -48,6 +48,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const pur = () => p.evaluate(() => purList()[0]);
   ok('achat : 3000 TTC, reste à payer 3000, stock 10', (await pur()).totalTTC === 3000 && (await p.evaluate(() => purDue(purList()[0]))) === 3000 && (await lv()) === 10);
   ok('bouton « Avoir fournisseur » proposé', await p.evaluate(() => /openSupplierCredit\(/.test(document.getElementById('purchasesList').innerHTML)));
+  // Rechargement de la liste pendant que l'utilisateur agit (navTo('purchases') recharge sans attendre) : les avoirs
+  // doivent rester rattachés à chaque instant. Lecture des avoirs ralentie pour rendre la fenêtre de course systématique.
+  ok('rechargement en cours : achats toujours avec leurs avoirs', await p.evaluate(async () => {
+    const rpc = supaClient.rpc.bind(supaClient);
+    supaClient.rpc = (n, a) => n === 'purchase_credit_list' ? new Promise((res) => setTimeout(() => res(rpc(n, a)), 600)) : rpc(n, a);
+    try { const pending = purLoad(true); await new Promise((r) => setTimeout(r, 250)); const mid = purCreditable(purList()[0]).length; await pending; return mid === 2; }
+    finally { supaClient.rpc = rpc; } }));
   const open = () => p.evaluate(() => openSupplierCredit(purList()[0].id));
   const fill = (vals, reason, ref) => p.evaluate(([v, r, f]) => { const m = document.querySelector('.pcr-modal'); const rows = [...m.querySelectorAll('.pcr-line')];
     v.forEach((x, k) => { if (x.q !== undefined) rows[k].querySelector('.pcr-qty').value = x.q; if (x.p !== undefined) rows[k].querySelector('.pcr-price').value = x.p; });
