@@ -115,14 +115,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.evaluate(() => { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); navTo('dashboard'); if (typeof toggleSidebar === 'function' && window.innerWidth < 1000) toggleSidebar(); }); await sleep(400);
     if (label !== 'desktop') await snap('menu', false);
   };
+  // Audit de traduction : TOUR_LANG_AUDIT=1 → pour chaque page en arabe, liste les textes visibles restés en français (JSON), puis s'arrête
+  if (process.env.TOUR_LANG_AUDIT) {
+    // L'arabe est un aperçu : il ne s'active que par l'adresse ?lang=ar (aucun bouton dans l'application)
+    await p.goto(`http://localhost:${PORT}/app.html?lang=ar`); await sleep(2500);
+    const res = {};
+    const collect = () => p.evaluate(() => {
+      const out = new Set(), skip = /^(DH|MAD|ICE|IF|RC|CNSS|TVA|HT|TTC|PDF|RIB|IBAN|SARL|SA|SAS|XML|CSV|Excel|WhatsApp|FacturaPro|SIMPL|AMO|IR|IS|TP|BL|N°|FAC|DEV|AVO|ACH|Banque|Caisse|CMI|Email|OK)$/i;
+      const w = document.createTreeWalker(document.querySelector('.main'), NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) {
+        const n = w.currentNode, el = n.parentElement; if (!el || el.closest('script,style,option:not(:checked),[data-userdata]')) continue;
+        const r = el.getBoundingClientRect(); if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') continue;
+        const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t.length < 3 || /[\u0600-\u06FF]/.test(t)) continue;
+        const words = (t.match(/[A-Za-zÀ-ÿ]{3,}/g) || []).filter(x => !skip.test(x)); if (!words.length) continue;
+        out.add(t);
+      }
+      return [...out];
+    });
+    const userData = new Set(['Atelier Atlas SARL', 'Café Nour', 'Riad Yasmine', 'Boulangerie El Fath', 'Hôtel Les Palmiers', 'Grossiste Café Maroc', 'Entretien machine à café', 'Capsules café (boîte)', 'Installation et mise en service', 'Filtre à eau', 'Casablanca', 'Marrakech', 'Rabat', 'Agadir', 'Banque Exemple', 'Fournitures', 'Loyer', 'Capsules en gros', 'Loyer atelier', "Contrat d'entretien annuel", 'forfait', 'boîte', 'pièce']);
+    for (const pg of ['dashboard', 'invoices', 'quotes', 'deliveries', 'clients', 'products', 'stock', 'purchases', 'payments', 'treasury', 'pilotage', 'reminders', 'reports', 'cnss', 'taxes', 'company', 'messages', 'license']) {
+      await p.evaluate((x) => { navTo(x); window.scrollTo(0, 0); }, pg); await sleep(pg === 'dashboard' || pg === 'pilotage' || pg === 'taxes' ? 1300 : 700);
+      res[pg] = (await collect()).filter(t => !userData.has(t) && !/@|^\d|facturapro-test|^FA-|^(FAC|DEV|ACH|BL)-/.test(t));
+    }
+    await p.evaluate(() => { navTo('invoices'); newInvoice(); }); await sleep(500); res['editeur-facture'] = (await collect()).filter(t => !userData.has(t));
+    fs.writeFileSync(path.join(OUT, 'arabe-non-traduit.json'), JSON.stringify(res, null, 1));
+    console.log('non traduits par page :', Object.entries(res).map(([k, v]) => k + '=' + v.length).join(' '), '| total', Object.values(res).reduce((t, v) => t + v.length, 0));
+    await browser.close(); srv.close(); dropDb(db); process.exit(0);
+  }
   await p.evaluate(() => navTo('dashboard')); await sleep(600);
   await tour('desktop', p);
   // Arabe (droite à gauche) : tableau de bord, factures, éditeur
-  await p.evaluate(() => { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); setLanguage('ar'); navTo('dashboard'); }); await sleep(900);
+  await p.goto(`http://localhost:${PORT}/app.html?lang=ar`); await sleep(2500); await p.evaluate(() => navTo('dashboard')); await sleep(900);
   await p.screenshot({ path: path.join(OUT, 'arabe-01-dashboard.png'), fullPage: true });
   await p.evaluate(() => navTo('invoices')); await sleep(600); await p.screenshot({ path: path.join(OUT, 'arabe-02-invoices.png'), fullPage: true });
   await p.evaluate(() => navTo('taxes')); await sleep(900); await p.screenshot({ path: path.join(OUT, 'arabe-03-taxes.png'), fullPage: true });
-  await p.evaluate(() => { setLanguage('fr'); navTo('dashboard'); }); await sleep(500);
+  await p.goto(`http://localhost:${PORT}/app.html`); await sleep(2500); await p.evaluate(() => navTo('dashboard')); await sleep(500);
   // PDF réels (facture, devis)
   for (const [kind, key] of [['invoice', 'invoices'], ['quote', 'quotes']]) {
     try {

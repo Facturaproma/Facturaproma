@@ -63,14 +63,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.evaluate(() => navTo('invoices')); await sleep(400); t = await txt(p, '#mainApp');
   ok('factures en arabe (filtres), sans français', /مسودات/.test(t) && /متأخرة/.test(t) && !FR.test(t), (t.match(FR) || [''])[0]);
   // Écrans secondaires : aucun texte français résiduel (hors noms propres, formats et modèles de messages destinés aux clients)
-  const OK_FR = /^(@placeholder:(Bonjour, je me|Suite à mon|Sans paiement de|FP-|Casablanca|https|FAC|DEV|AVR)|FAC-2026|.*@facturapro-test|Business|ICE \*|SWIFT \/ BIC|CSV Excel|FEC)/;
-  for (const pg of ['invoice-editor', 'quotes', 'products', 'reports', 'payments', 'reminders', 'messages', 'license', 'company', 'team']) {
+  const OK_FR = /^(@placeholder:(Bonjour, je me|Suite à mon|Sans paiement de|FP-|Casablanca|https|FAC|DEV|AVR)|FAC-2026|.*@facturapro-test|Business|ICE \*|SWIFT \/ BIC|CSV Excel|FEC|ae\.gov\.ma$|cnss\.ma$|tax\.gov\.ma$|Damancom$|ICE$|⬇️ Excel$)/;
+  for (const pg of ['invoice-editor', 'quotes', 'products', 'reports', 'payments', 'reminders', 'messages', 'license', 'company', 'team', 'deliveries', 'stock', 'purchases', 'treasury', 'pilotage', 'cnss', 'taxes']) {
     await p.evaluate((x) => { try { navTo(x); } catch (e) {} }, pg); await sleep(500);
     const left = await p.evaluate((x) => { const root = document.getElementById('page-' + x); const out = []; const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n;
       while ((n = w.nextNode())) { const v = n.nodeValue.trim(); if (v && !/[؀-ۿ]/.test(v) && /[A-Za-zÀ-ÿ]{3,}/.test(v)) out.push(v); }
       root.querySelectorAll('[placeholder],[title]').forEach((e) => ['placeholder', 'title'].forEach((a) => { const v = e.getAttribute(a); if (v && /[A-Za-zÀ-ÿ]{3,}/.test(v) && !/[؀-ۿ]/.test(v)) out.push('@' + a + ':' + v); }));
       return out; }, pg).then((l) => l.filter((v) => !OK_FR.test(v)));
-    ok('écran « ' + pg + ' » traduit en arabe', left.length === 0, left.slice(0, 3).join(' / '));
+    ok('écran « ' + pg + ' » traduit en arabe', left.length === 0, left.length + ' : ' + left.slice(0, 60).join(' / '));
   }
   // Fenêtres, assistant de démarrage, écran de licence : tout le texte statique est traduit (hors CNSS / impôts, lot suivant)
   const leftAll = await p.evaluate(() => { const out = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n;
