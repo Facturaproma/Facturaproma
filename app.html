@@ -5074,7 +5074,7 @@
                 </div>
 
                 <!-- Semestriel (non vendu, masqué) -->
-                <div class="pricing-tier" data-tier="semestrial" style="display:none;">
+                <div class="pricing-tier" data-tier="semestrial" data-unsold style="display:none;">
                     <h3>🔥 Semestriel</h3>
                     <div class="tier-tagline">Engagement moyen</div>
                     <div class="tier-price">
@@ -15403,8 +15403,8 @@ function renderLicensePage() {
         show(sectionPayment);
         show(sectionActivate);
         
-        // Afficher TOUTES les cartes
-        document.querySelectorAll('.pricing-tier').forEach(card => {
+        // Afficher les cartes des formules en vente (une formule « non vendue » reste masquée)
+        document.querySelectorAll('.pricing-tier:not([data-unsold])').forEach(card => {
             card.style.display = '';
         });
         
@@ -15426,8 +15426,8 @@ function renderLicensePage() {
         show(sectionPayment);
         show(sectionActivate);
         
-        // Afficher TOUTES les cartes
-        document.querySelectorAll('.pricing-tier').forEach(card => {
+        // Afficher les cartes des formules en vente (une formule « non vendue » reste masquée)
+        document.querySelectorAll('.pricing-tier:not([data-unsold])').forEach(card => {
             card.style.display = '';
         });
         

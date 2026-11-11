@@ -77,6 +77,9 @@ const check = (name, cond, extra = '') => results.push([!!cond, name, extra]);
   // 3. offre : plus d'espèces, plus de champ code promo
   check('plus d\'offre « espèces » pour payer l\'abonnement', !/Sur rendez-vous|Casa\/Rabat/.test(all));
   check('plus de champ « code promo » sur la page abonnement', !(await p.$('#promoCode')));
+  // Formules affichées pendant l'essai : uniquement celles en vente (Mensuel, Annuel). La carte « Semestriel », non vendue, reste masquée.
+  const cards = await p.evaluate(() => [...document.querySelectorAll('#pricingCards .pricing-tier')].filter((c) => getComputedStyle(c).display !== 'none').map((c) => c.getAttribute('data-tier')));
+  check('formules visibles pendant l\'essai : Mensuel et Annuel seulement (Semestriel non vendu, masqué)', cards.join(',') === 'monthly,annual', cards.join(','));
 
   // 4. message de demande d'abonnement (annuel) : sans espèces, sans faux ID, avec le contact configuré
   dialogs.length = 0;
