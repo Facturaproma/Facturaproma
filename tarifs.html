@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- APERÇU INTERNE : grille validée le 11/11/2026, PAS encore en vigueur. Page non liée et non indexée. -->
+    <meta name="robots" content="noindex, nofollow">
+    <title>Tarifs FacturaPro (aperçu)</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/plex.css">
+    <style>
+        :root {
+            --font-body: 'IBM Plex Sans', 'IBM Plex Sans Arabic', -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
+            --primary: #16325C; --primary-deep: #0C1F3D; --accent: #C8973A; --accent-bright: #E2B55A; --success: #0F7B55;
+            --bg: #F3F5F8; --surface: #FFFFFF; --surface-soft: #F7F9FB;
+            --ink: #101828; --ink-soft: #475467; --ink-mute: #667085;
+            --border: #E1E6ED; --border-strong: #CDD5DF; --focus: #2563EB;
+            --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
+            --elev-1: 0 1px 2px rgba(16, 24, 40, 0.05);
+            --elev-2: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: var(--font-body); background: var(--bg); color: var(--ink); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+        .preview { background: #FFF7E6; border-bottom: 1px solid var(--accent); color: var(--ink-soft); font-size: 13.5px; padding: 10px 16px; text-align: center; }
+        header { background: var(--primary-deep); color: #fff; padding: 40px 16px 72px; }
+        .wrap { max-width: 1120px; margin: 0 auto; }
+        .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; }
+        .brand b { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: var(--primary-deep); }
+        h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.15; margin: 28px 0 10px; font-weight: 600; max-width: 22ch; }
+        .lead { color: #C5D0E0; max-width: 60ch; margin: 0; }
+        .controls { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+        .seg { display: inline-flex; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 3px; }
+        .seg button { font: inherit; font-size: 14px; color: #C5D0E0; background: none; border: 0; border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+        .seg button[aria-pressed="true"] { background: #fff; color: var(--primary-deep); font-weight: 600; }
+        .seg button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+        main { padding: 0 16px 56px; }
+        .plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: -44px; }
+        .plan { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--elev-1); padding: 22px 20px; display: flex; flex-direction: column; }
+        .plan.mark { border-color: var(--accent); box-shadow: var(--elev-2); }
+        .plan h2 { font-size: 18px; margin: 0; font-weight: 600; }
+        .who { color: var(--ink-mute); font-size: 13.5px; margin: 4px 0 16px; min-height: 40px; }
+        .price { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+        .price small { font-size: 14px; font-weight: 500; color: var(--ink-mute); letter-spacing: 0; }
+        .sub { font-size: 13px; color: var(--ink-mute); min-height: 40px; font-variant-numeric: tabular-nums; }
+        .users { margin: 14px 0; padding: 10px 12px; background: var(--surface-soft); border-radius: var(--r-md); font-size: 14px; }
+        .users strong { font-variant-numeric: tabular-nums; }
+        .plan ul { list-style: none; padding: 0; margin: 0; font-size: 14px; color: var(--ink-soft); }
+        .plan li { padding: 5px 0 5px 20px; position: relative; }
+        .plan li::before { content: ''; position: absolute; left: 2px; top: 12px; width: 8px; height: 4px; border-left: 2px solid var(--success); border-bottom: 2px solid var(--success); transform: rotate(-45deg); }
+        .plan li.inherit { color: var(--ink-mute); }
+        .plan li.inherit::before { border-color: var(--border-strong); }
+        .always { margin: 28px 0 0; padding: 16px 18px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r-md); font-size: 14.5px; }
+        h3 { font-size: 20px; font-weight: 600; margin: 44px 0 14px; }
+        .tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+        th, td { padding: 10px 14px; border-bottom: 1px solid var(--border); text-align: center; }
+        th:first-child, td:first-child { text-align: left; }
+        thead th { background: var(--surface-soft); font-size: 13px; color: var(--ink-soft); font-weight: 600; position: sticky; top: 0; }
+        tbody tr:last-child td { border-bottom: 0; }
+        td.y { color: var(--success); font-weight: 600; }
+        td.n { color: var(--border-strong); }
+        tr.grp td { background: var(--surface-soft); font-weight: 600; color: var(--ink-soft); font-size: 12.5px; text-align: left; }
+        .notes { color: var(--ink-mute); font-size: 13px; margin-top: 18px; }
+        .notes p { margin: 4px 0; }
+        @media (max-width: 1000px) { .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 600px) { .plans { grid-template-columns: 1fr; } .who, .sub { min-height: 0; } header { padding-bottom: 64px; } }
+    </style>
+</head>
+<body>
+    <div class="preview" role="note">Aperçu interne : grille validée le 11/11/2026, <strong>pas encore en vigueur</strong>. Les abonnements en cours ne changent pas.</div>
+    <header>
+        <div class="wrap">
+            <div class="brand"><b>F</b> FacturaPro</div>
+            <h1>Une formule par taille d'équipe</h1>
+            <p class="lead">Factures, devis, clients et produits illimités dans toutes les formules. Vous payez pour travailler à plusieurs et pour aller plus loin dans la gestion.</p>
+            <div class="controls">
+                <div class="seg" role="group" aria-label="Période">
+                    <button type="button" data-period="m" aria-pressed="true">Mensuel</button>
+                    <button type="button" data-period="a" aria-pressed="false">Annuel, 2 mois offerts</button>
+                </div>
+                <div class="seg" role="group" aria-label="Affichage des prix">
+                    <button type="button" data-tax="ht" aria-pressed="true">HT</button>
+                    <button type="button" data-tax="ttc" aria-pressed="false">TTC</button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <main>
+        <div class="wrap">
+            <section class="plans" aria-label="Formules">
+                <article class="plan" data-price="79">
+                    <h2>Essentielle</h2>
+                    <p class="who">Auto-entrepreneur, indépendant seul</p>
+                    <div class="price"><span class="amt"></span> <small class="per"></small></div>
+                    <div class="sub"></div>
+                    <div class="users"><strong>1</strong> utilisateur</div>
+                    <ul><li>Factures, devis et avoirs</li><li>Clients et produits</li><li>Suivi des paiements, reçus</li><li>PDF professionnels, lien client, WhatsApp</li><li>TVA sur les ventes</li></ul>
+                </article>
+                <article class="plan" data-price="179">
+                    <h2>Pro</h2>
+                    <p class="who">Freelance, petite structure</p>
+                    <div class="price"><span class="amt"></span> <small class="per"></small></div>
+                    <div class="sub"></div>
+                    <div class="users"><strong>2</strong> utilisateurs</div>
+                    <ul><li class="inherit">Tout Essentielle</li><li>Achats et fournisseurs</li><li>Relevé des déductions, fichier XML</li><li>Stock et bons de livraison</li><li>Relances clients</li><li>Statistiques</li></ul>
+                </article>
+                <article class="plan mark" data-price="299">
+                    <h2>Business</h2>
+                    <p class="who">TPE, SARL</p>
+                    <div class="price"><span class="amt"></span> <small class="per"></small></div>
+                    <div class="sub"></div>
+                    <div class="users"><strong>3</strong> utilisateurs</div>
+                    <ul><li class="inherit">Tout Pro</li><li>Exports avancés et export comptable</li><li>Pilotage et trésorerie</li><li>Factures récurrentes</li><li>CNSS</li><li>Clôture mensuelle</li></ul>
+                </article>
+                <article class="plan" data-price="499">
+                    <h2>Premium</h2>
+                    <p class="who">Équipe de plusieurs collaborateurs</p>
+                    <div class="price"><span class="amt"></span> <small class="per"></small></div>
+                    <div class="sub"></div>
+                    <div class="users"><strong>5</strong> utilisateurs</div>
+                    <ul><li class="inherit">Tout Business</li><li>Support prioritaire</li><li>Rapports avancés (en préparation)</li></ul>
+                </article>
+            </section>
+
+            <p class="always"><strong>Dans toutes les formules :</strong> factures, devis, clients et produits illimités ; numérotation sans doublon ; données sauvegardées et exportables. Chaque utilisateur a son propre identifiant : on ne partage jamais un mot de passe.</p>
+
+            <h3>Comparer les formules</h3>
+            <div class="tbl">
+                <table>
+                    <thead><tr><th scope="col">Fonction</th><th scope="col">Essentielle</th><th scope="col">Pro</th><th scope="col">Business</th><th scope="col">Premium</th></tr></thead>
+                    <tbody>
+                        <tr class="grp"><td colspan="5">Facturer</td></tr>
+                        <tr><td>Factures, devis, avoirs (illimités)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Clients et produits (illimités)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Paiements et reçus</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>PDF, lien client, WhatsApp</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>TVA sur les ventes, échéances</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr class="grp"><td colspan="5">Gérer</td></tr>
+                        <tr><td>Achats, fournisseurs, avoirs fournisseurs</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Relevé des déductions de TVA, XML SIMPL</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Stock et bons de livraison</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Relances clients</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Statistiques</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr class="grp"><td colspan="5">Piloter</td></tr>
+                        <tr><td>Exports avancés, export comptable (Sage, EBP, FEC)</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Pilotage et trésorerie</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Factures récurrentes</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>CNSS</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Clôture mensuelle</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
+                        <tr><td>Rapports avancés</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td>en préparation</td></tr>
+                        <tr><td>Support prioritaire</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td></tr>
+                        <tr class="grp"><td colspan="5">Équipe</td></tr>
+                        <tr><td>Utilisateurs</td><td>1</td><td>2</td><td>3</td><td>5</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="notes">
+                <p>Prix en dirhams. TTC = HT + TVA 20 %, lorsque la TVA s'applique.</p>
+                <p>Annuel : 10 mois payés pour 12 mois d'accès.</p>
+                <p>Abonnements en cours (mensuel, annuel, Fondateurs, à vie) : conditions inchangées.</p>
+            </div>
+        </div>
+    </main>
+    <script>
+        (function () {
+            var period = 'm', tax = 'ht';
+            var fmt = function (n) { return n.toLocaleString('fr-FR', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }); };
+            function render() {
+                document.querySelectorAll('.plan').forEach(function (el) {
+                    var ht = Number(el.getAttribute('data-price')), k = tax === 'ttc' ? 1.2 : 1, lbl = tax === 'ttc' ? 'TTC' : 'HT';
+                    var month = Math.round(ht * k * 100) / 100, year = Math.round(ht * 10 * k * 100) / 100, save = Math.round(ht * 2 * k * 100) / 100;
+                    if (period === 'm') {
+                        el.querySelector('.amt').textContent = fmt(month) + ' DH';
+                        el.querySelector('.per').textContent = lbl + ' / mois';
+                        el.querySelector('.sub').textContent = 'ou ' + fmt(year) + ' DH ' + lbl + ' par an';
+                    } else {
+                        el.querySelector('.amt').textContent = fmt(year) + ' DH';
+                        el.querySelector('.per').textContent = lbl + ' / an';
+                        el.querySelector('.sub').textContent = 'soit ' + fmt(Math.round(year / 12 * 100) / 100) + ' DH par mois, ' + fmt(save) + ' DH économisés';
+                    }
+                });
+                document.querySelectorAll('[data-period]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-period') === period)); });
+                document.querySelectorAll('[data-tax]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tax') === tax)); });
+            }
+            document.querySelectorAll('[data-period]').forEach(function (b) { b.addEventListener('click', function () { period = b.getAttribute('data-period'); render(); }); });
+            document.querySelectorAll('[data-tax]').forEach(function (b) { b.addEventListener('click', function () { tax = b.getAttribute('data-tax'); render(); }); });
+            render();
+        })();
+    </script>
+</body>
+</html>
