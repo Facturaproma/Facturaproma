@@ -166,7 +166,7 @@ CREATE OR REPLACE FUNCTION public.fp_license_ok(p_uid UUID) RETURNS BOOLEAN LANG
         (SELECT l.status = 'active' AND (l.expires_at IS NULL OR l.expires_at
                  + CASE WHEN l.type = 'trial' THEN INTERVAL '0' ELSE make_interval(days => public.license_grace_days()) END > now())
            FROM public.licenses l WHERE l.user_id = p_uid),
-        (SELECT u.created_at + INTERVAL '14 days' > now() OR EXISTS (SELECT 1 FROM public.admins a WHERE lower(a.email) = lower(u.email))
+        (SELECT public.fp_trial_end(u.created_at) > now() OR EXISTS (SELECT 1 FROM public.admins a WHERE lower(a.email) = lower(u.email))
            FROM auth.users u WHERE u.id = p_uid),
         FALSE)
 $$;

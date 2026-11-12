@@ -799,7 +799,7 @@
                 <div class="stat-card warning">
                     <div class="stat-label">Essais en cours</div>
                     <div class="stat-value" id="statTrialUsers">0</div>
-                    <div class="stat-trend" id="statTrialNote">14 jours gratuits</div>
+                    <div class="stat-trend" id="statTrialNote">30 jours gratuits (nouveaux comptes)</div>
                 </div>
                 <div class="stat-card accent">
                     <div class="stat-label">Abonnés actifs</div>
@@ -1382,7 +1382,7 @@
             </div>
 
             <div class="alert">
-                <strong>📋 Offres en vente</strong> — Essai gratuit 14 jours, Mensuel 49 DH, Annuel 449 DH, et l'offre Fondateur (299 DH/an, 30 places). Les chiffres ci-dessous viennent des vrais comptes.
+                <strong>📋 Offres en vente</strong> — Essai gratuit 30 jours (nouveaux comptes ; 14 jours pour les comptes créés avant l'activation), Mensuel 49 DH, Annuel 449 DH, et l'offre Fondateur (299 DH/an, 30 places). Les chiffres ci-dessous viennent des vrais comptes.
             </div>
 
             <div class="card" id="founderCard" style="margin-bottom: 20px;">
@@ -1422,7 +1422,7 @@
 
             <div class="stats-grid">
                 <div class="stat-card warning">
-                    <div class="stat-label">🆓 Essai (14 jours)</div>
+                    <div class="stat-label">🆓 Essai</div>
                     <div class="stat-value" id="tierTrialCount">0</div>
                     <div class="stat-trend" id="tierTrialNote">—</div>
                 </div>
@@ -1450,7 +1450,7 @@
                     <thead>
                         <tr>
                             <th>Fonctionnalité</th>
-                            <th style="text-align: center;">🆓 Essai<br><small style="font-weight: 400;">14 jours</small></th>
+                            <th style="text-align: center;">🆓 Essai<br><small style="font-weight: 400;">30 jours</small></th>
                             <th style="text-align: center;">📅 Mensuel<br><small style="font-weight: 400;">49 DH / 30 j</small></th>
                             <th style="text-align: center;">🏆 Annuel<br><small style="font-weight: 400;">449 DH / 365 j</small></th>
                             <th style="text-align: center;">🎁 Fondateur<br><small style="font-weight: 400;">299 DH / 365 j</small></th>
@@ -1473,7 +1473,7 @@
             <div class="card" style="margin-bottom: 24px;">
                 <div class="card-header"><h2>🧭 Règles de l'offre</h2></div>
                 <ul style="margin: 0; padding: 4px 24px 20px 40px; font-size: 14px; line-height: 1.7;">
-                    <li><strong>Essai :</strong> 14 jours dès la création du compte, accès complet avec filigrane sur les PDF. Prolongeable depuis « Clients > Licence ».</li>
+                    <li><strong>Essai :</strong> 30 jours dès la création du compte pour les nouveaux comptes (14 jours pour les comptes créés avant l'activation), accès complet avec filigrane sur les PDF. Prolongeable depuis « Clients > Licence ».</li>
                     <li><strong>Fondateur :</strong> 30 codes maximum, chacun à usage unique et lié à l'e-mail du client. Ils s'ajoutent à l'offre annuelle (365 jours).</li>
                     <li><strong>Renouvellement :</strong> un nouveau code prolonge à partir de la fin en cours : le client ne perd pas ses jours restants.</li>
                     <li><strong>Pas encore vendu :</strong> multi-utilisateurs, multi-sociétés, facturation électronique DGI. À ne pas promettre tant qu'ils ne sont pas livrés et testés.</li>
@@ -3241,7 +3241,7 @@ function renderActionCenter() {
             a => `${esc(PLAN_LABEL[acctPlanKey(a)] || a.type)} · fin le ${formatDate(a.expires_at)}`);
         group('🔁 Abonnements expirés (30 jours) : à renouveler', accts.filter(a => acctState(a) === 'paid_expired' && dl(a) !== null && dl(a) >= -30), 'paid_expired',
             a => `${esc(PLAN_LABEL[acctPlanKey(a)] || a.type)} · expiré depuis ${Math.abs(dl(a))} j`);
-        group('🎯 Essais terminés (14 jours) : à convertir', accts.filter(a => acctState(a) === 'trial_expired' && dl(a) !== null && dl(a) >= -14)
+        group('🎯 Essais terminés depuis moins de 14 jours : à convertir', accts.filter(a => acctState(a) === 'trial_expired' && dl(a) !== null && dl(a) >= -14)
             .sort((x, y) => y.invoices_count - x.invoices_count), 'trial_expired',
             a => a.invoices_count > 0 ? `A créé ${a.invoices_count} facture(s) : bon prospect` : 'Compte peu utilisé');
     }

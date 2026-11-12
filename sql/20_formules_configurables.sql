@@ -204,7 +204,7 @@ BEGIN
                 THEN 'lifetime' ELSE 'trial' END,
            u.created_at,
            CASE WHEN EXISTS (SELECT 1 FROM public.admins a WHERE lower(a.email) = lower(u.email))
-                THEN NULL ELSE u.created_at + INTERVAL '14 days' END
+                THEN NULL ELSE public.fp_trial_end(u.created_at) END
       FROM auth.users u
      WHERE u.id = v_uid
     ON CONFLICT (user_id) DO NOTHING;

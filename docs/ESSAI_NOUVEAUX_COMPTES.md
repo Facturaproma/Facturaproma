@@ -1,25 +1,40 @@
-# Essai des nouveaux comptes : spécification (12/11/2026)
+# Essai des nouveaux comptes : spécification (12/11/2026, durée fixée à 30 jours)
 
 > **Statut : spécification seulement. Rien n'est développé ni activé.** Règle validée par le propriétaire le 12/11/2026 ; son activation (migration, écrans, valeurs des réglages) demande une autorisation distincte. Étape T7 du plan de `docs/COMPTES_ET_ABONNEMENTS.md`.
 
 ## 1. Règle validée
 
-**Nouveau compte → période d'essai → Essentielle comme formule de référence → à la fin de l'essai, application normale des limites et de la formule choisie.**
+**Nouveau compte → essai de 30 jours → Essentielle comme formule de référence → à la fin de l'essai, application normale des limites et de la formule choisie.**
+
+Fin des 30 jours (décision du 12/11/2026) :
+
+- formule payante choisie et active : ses limites s'appliquent ;
+- sans paiement : lecture seule ;
+- aucune donnée supprimée, aucun compte exclu, aucun utilisateur supprimé.
 
 - Ne concerne **que les nouveaux comptes**. Les comptes existants gardent leurs conditions historiques (`legacy`) ; ils n'entrent jamais dans ce parcours.
 - Le comportement exact de l'essai reste **configurable avant activation** (section 3).
 
-## 2. Ce qui existe aujourd'hui (production)
+## 2. Ce qui existe aujourd'hui (production, inchangée)
 
 | Élément | État | Où |
 |---|---|---|
 | Essai | licence `trial` créée au premier accès, **14 jours** depuis l'inscription, toutes les fonctions | `sql/07`, reprise dans `sql/08`, `sql/09`, `sql/20`, `sql/23` |
-| Durée | **écrite en dur** (`INTERVAL '14 days'`) dans 6 scripts et dans `fp_license_ok` (`sql/48`) | — |
+| Durée | **écrite en dur** (`INTERVAL '14 days'`) dans la version en production des scripts | — |
 | Fin d'essai | licence expirée : **lecture seule** (pas de période de grâce pour l'essai ; 3 jours pour les licences payantes) | `has_active_license`, `license_grace_days()` |
 | Formule pendant l'essai | aucune notion de formule : tout est ouvert | — |
 | Site | annonce « 14 jours d'essai gratuit, sans carte bancaire » | `index.html` |
 
-Écart connu : une durée de **30 jours** avait été validée le 26/10, mais n'a jamais été appliquée. La durée réelle reste 14 jours tant que ce réglage n'est pas activé.
+### Durée de 30 jours : préparée dans les scripts, non activée
+
+Décision du 12/11/2026 : **30 jours pour les nouveaux clients.** Les 10 occurrences de `INTERVAL '14 days'` réparties dans 7 scripts (`sql/07`, `08`, `09`, `20`, `23`, `45`, `48` ; le 7e, `sql/45`, n'avait pas été compté le 12/11 au matin) appellent désormais `public.fp_trial_end(created_at)` (défini dans `sql/07`) :
+
+- **30 jours** pour un compte créé à partir de la date d'activation `trial_config.trial30_from` ;
+- **14 jours** pour un compte créé avant : ses conditions d'origine, inchangées (sinon, des comptes de 15 à 30 jours retrouveraient un essai actif) ;
+- tant que `trial30_from` est vide (état à l'installation), **le comportement est exactement celui d'avant** ;
+- une licence d'essai déjà enregistrée n'est jamais prolongée (sa date de fin est écrite dans la table `licenses`).
+
+Activation, **sur autorisation** : appliquer les scripts modifiés, puis `UPDATE public.trial_config SET trial30_from = now();`. Les textes publics (accueil, conditions, application) annoncent déjà 30 jours dans la même PR : **ils doivent être mis en ligne en même temps que l'activation**, sinon le site promettrait 30 jours alors que le serveur en accorde 14. Tests : `tests/sql/test_essai.sql`.
 
 ## 3. Réglages (configurables, valeurs par défaut proposées)
 
@@ -28,7 +43,7 @@ Une seule ligne de réglages, modifiable par l'administration FacturaPro (2FA), 
 | Réglage | Défaut proposé | Rôle |
 |---|---|---|
 | `trial_enabled` | `true` | Un nouveau compte reçoit-il un essai ? Si `false`, il démarre directement en Essentielle, en lecture seule tant qu'il n'a pas payé |
-| `trial_days` | `14` (à confirmer : 14 ou 30) | Durée de l'essai, comptée depuis la création du compte |
+| `trial_days` | **`30` (décidé le 12/11/2026)** | Durée de l'essai, comptée depuis la création du compte |
 | `trial_plan_key` | `essentielle` | Formule dont l'essai ouvre les fonctions. Peut être réglée sur une formule supérieure (ex. `business`) pour faire découvrir davantage ; jamais `legacy` (refusé par le serveur, comme `account_set_plan`) |
 | `trial_max_users` | `1` | Nombre d'utilisateurs pendant l'essai, quelle que soit la formule d'essai |
 | `trial_end_mode` | `lecture_seule` | À la fin sans abonnement payé : `lecture_seule` (règle actuelle) ; pas de suppression, pas d'exclusion |
@@ -69,7 +84,7 @@ fp_account_effective(account) → (formule, utilisateurs max, accès)
 
 | Étape | Contenu | Autorisation |
 |---|---|---|
-| Migration | `trial_settings`, colonnes d'essai sur `accounts`, `fp_account_effective` ; remplacement des `INTERVAL '14 days'` par la lecture des réglages | **oui** (structurante) |
+| Migration | `trial_settings`, colonnes d'essai sur `accounts`, `fp_account_effective` ; lecture des réglages (la durée passe déjà par `fp_trial_end`, voir § 2) | **oui** (structurante) |
 | Écrans | bandeau d'essai (jours restants, formule d'essai), choix de la formule, rappels | **oui** (activation commerciale) |
 | Site | texte de l'essai aligné sur `trial_days` | **oui** (déploiement) |
 | Licences | rapprochement licence `trial` ↔ `accounts.trial_ends_at` (une seule source de vérité, prévue en T4) | **oui** |
@@ -90,7 +105,7 @@ Prérequis : T1 (`sql/48`) appliquée et T4 (fonctions serveur par compte) faite
 
 ## 8. Décisions à prendre avant activation
 
-1. Durée : **14 jours** (affichée sur le site) ou **30 jours** (validée le 26/10, jamais appliquée).
+1. ~~Durée~~ : **30 jours, décidé le 12/11/2026.**
 2. Formule d'essai : Essentielle (règle validée) ou une formule supérieure pour faire découvrir.
 3. Utilisateurs pendant l'essai : 1 (proposé) ou plus.
 4. Rappels de fin d'essai : à l'écran seulement, ou aussi par e-mail (demande un service d'envoi).

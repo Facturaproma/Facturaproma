@@ -56,9 +56,9 @@ BEGIN
         RETURN jsonb_build_object('ok', false, 'reason', 'unknown_user');
     END IF;
 
-    -- S'assurer qu'une ligne existe (essai de 14 jours depuis la création du compte)
+    -- S'assurer qu'une ligne existe (essai depuis la création du compte : public.fp_trial_end, sql/07)
     INSERT INTO public.licenses (user_id, type, started_at, expires_at)
-    SELECT u.id, 'trial', u.created_at, u.created_at + INTERVAL '14 days'
+    SELECT u.id, 'trial', u.created_at, public.fp_trial_end(u.created_at)
       FROM auth.users u WHERE u.id = p_user
     ON CONFLICT (user_id) DO NOTHING;
 

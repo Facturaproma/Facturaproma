@@ -51,8 +51,36 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.licenses TO authenticated;
 -- INSERT/UPDATE/DELETE n'aboutissent que si la policy admin ci-dessus le permet
 
 -- ------------------------------------------------------------
+-- 1 bis. Durée de l'essai (décision du 12/11/2026 : 30 jours pour les nouveaux clients)
+--    Référence : 30 jours, pour les comptes créés À PARTIR de la date d'activation (trial_config.trial30_from).
+--    Comptes créés avant cette date : 14 jours, leurs conditions d'origine, inchangées.
+--    Tant que trial30_from est NULL (état à l'installation), le comportement reste exactement celui d'avant.
+--    ACTIVATION (autorisation du propriétaire requise) : UPDATE public.trial_config SET trial30_from = now();
+--    Réexécuter ce script ne remet jamais la date à NULL (INSERT ... ON CONFLICT DO NOTHING).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.trial_config (
+    id           BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),
+    trial30_from TIMESTAMPTZ
+);
+INSERT INTO public.trial_config (id, trial30_from) VALUES (true, NULL) ON CONFLICT (id) DO NOTHING;
+ALTER TABLE public.trial_config ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.trial_config FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.fp_trial_days(p_created TIMESTAMPTZ) RETURNS INT
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+    SELECT CASE WHEN c.trial30_from IS NOT NULL AND p_created >= c.trial30_from THEN 30 ELSE 14 END
+      FROM (SELECT (SELECT trial30_from FROM public.trial_config WHERE id) AS trial30_from) c
+$$;
+CREATE OR REPLACE FUNCTION public.fp_trial_end(p_created TIMESTAMPTZ) RETURNS TIMESTAMPTZ
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+    SELECT p_created + make_interval(days => public.fp_trial_days(p_created))
+$$;
+REVOKE ALL ON FUNCTION public.fp_trial_days(TIMESTAMPTZ), public.fp_trial_end(TIMESTAMPTZ) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.fp_trial_days(TIMESTAMPTZ), public.fp_trial_end(TIMESTAMPTZ) TO authenticated;
+
+-- ------------------------------------------------------------
 -- 2. Licence active ? (source de vérité unique)
---    Sans ligne : essai de 14 jours depuis la création du compte.
+--    Sans ligne : essai depuis la création du compte (durée : public.fp_trial_days, 30 jours après activation).
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.has_active_license(p_uid UUID DEFAULT auth.uid())
 RETURNS BOOLEAN
@@ -69,7 +97,7 @@ AS $$
                 AND (l.expires_at IS NULL OR l.expires_at > NOW())
            FROM public.licenses l
           WHERE l.user_id = p_uid),
-        (SELECT u.created_at + INTERVAL '14 days' > NOW()
+        (SELECT public.fp_trial_end(u.created_at) > NOW()
                 OR EXISTS (SELECT 1 FROM public.admins a WHERE lower(a.email) = lower(u.email))
            FROM auth.users u
           WHERE u.id = p_uid),
@@ -104,7 +132,7 @@ BEGIN
                 THEN 'lifetime' ELSE 'trial' END,
            u.created_at,
            CASE WHEN EXISTS (SELECT 1 FROM public.admins a WHERE lower(a.email) = lower(u.email))
-                THEN NULL ELSE u.created_at + INTERVAL '14 days' END
+                THEN NULL ELSE public.fp_trial_end(u.created_at) END
       FROM auth.users u
      WHERE u.id = v_uid
     ON CONFLICT (user_id) DO NOTHING;

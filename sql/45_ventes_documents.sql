@@ -239,7 +239,7 @@ BEGIN
         u.id, u.email::TEXT, u.created_at, u.last_sign_in_at,
         COALESCE(l.type, CASE WHEN st.is_staff THEN 'lifetime' ELSE 'trial' END),
         COALESCE(l.status, 'active'),
-        CASE WHEN l.user_id IS NOT NULL THEN l.expires_at WHEN st.is_staff THEN NULL ELSE u.created_at + INTERVAL '14 days' END,
+        CASE WHEN l.user_id IS NOT NULL THEN l.expires_at WHEN st.is_staff THEN NULL ELSE public.fp_trial_end(u.created_at) END,
         public.has_active_license(u.id), l.code, st.is_staff,
         GREATEST((SELECT MAX(d.updated_at) FROM public.user_data d WHERE d.user_id = u.id),
                  (SELECT MAX(x.updated_at) FROM public.documents x WHERE x.user_id = u.id),
