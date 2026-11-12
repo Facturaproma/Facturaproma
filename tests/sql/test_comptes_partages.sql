@@ -23,9 +23,15 @@ SELECT pg_temp.ok('fonctions : authenticated oui, anon non ; fonctions internes 
   AND NOT has_function_privilege('authenticated', 'public.fp_accounts_backfill()', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'public.fp_license_ok(uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'public.fp_account_seats(uuid,uuid)', 'EXECUTE'));
-SELECT pg_temp.ok('grille validée : 79 / 179 / 299 / 499 DH HT, 1 / 2 / 3 / 5 utilisateurs, 10 mois payés par an',
-  (SELECT string_agg(key || ':' || price_ht_month::int || ':' || max_users || ':' || months_paid_per_year, ',' ORDER BY sort_order) FROM public.plan_catalog WHERE key <> 'legacy')
-  = 'essentielle:79:1:10,pro:179:2:10,business:299:3:10,premium:499:5:10');
+SELECT pg_temp.ok('grille validée le 12/11 : 99 / 199 / 349 / 549 DH HT, 1 / 2 / 3 / 5 utilisateurs, 10 mois payés par an',
+  (SELECT string_agg(key || ':' || price_ht_month::int || ':' || max_users || ':' || months_paid_per_year, ',' ORDER BY sort_order) FROM public.plan_catalog WHERE offered)
+  = 'essentielle:99:1:10,pro:199:2:10,business:349:3:10,premium:549:5:10');
+SELECT pg_temp.ok('conditions historiques : pas une formule proposée (offered = false, sans prix, 1 utilisateur)',
+  (SELECT NOT offered AND price_ht_month IS NULL AND max_users = 1 AND label LIKE 'Conditions historiques%' FROM public.plan_catalog WHERE key = 'legacy')
+  AND (SELECT count(*) FROM public.plan_catalog WHERE offered) = 4);
+SELECT pg_temp.ok('« Rapports avancés » vendu nulle part tant qu''il n''existe pas ; TVA sur les ventes dans toutes les formules',
+  NOT EXISTS (SELECT 1 FROM public.plan_catalog WHERE 'rapports_avances' = ANY(features))
+  AND (SELECT bool_and('tva_ventes' = ANY(features)) FROM public.plan_catalog));
 SELECT pg_temp.ok('formules cumulatives : chaque formule contient la précédente',
   (SELECT p.features @> e.features FROM public.plan_catalog p, public.plan_catalog e WHERE p.key = 'pro' AND e.key = 'essentielle')
   AND (SELECT p.features @> e.features FROM public.plan_catalog p, public.plan_catalog e WHERE p.key = 'business' AND e.key = 'pro')
@@ -66,6 +72,12 @@ SET ROLE authenticated;
 -- ---------- Identité ----------
 SELECT pg_temp.as_user('48484848-0000-4000-8000-000000000007');
 SELECT pg_temp.ok('e-mail non confirmé : aucun compte créé', pg_temp.err('SELECT public.account_ensure()') LIKE '%NON_AUTHENTIFIE%');
+RESET ROLE;
+INSERT INTO auth.users(id, email, email_confirmed_at) VALUES ('48484848-0000-4000-8000-000000000008', 'cp-nouveau-client@test.invalid', now());
+SET ROLE authenticated; SELECT pg_temp.as_user('48484848-0000-4000-8000-000000000008');
+SELECT (public.account_ensure()->>'created')::boolean AS neuf_cree \gset
+SELECT pg_temp.ok('nouveau client après la reprise : compte créé en Essentielle, jamais en conditions historiques',
+  :'neuf_cree'::boolean AND (public.account_info()->>'plan') = 'essentielle');
 SELECT pg_temp.as_user('48484848-0000-4000-8000-000000000001');
 SELECT pg_temp.ok('account_ensure sur un compte existant : le même, rien de créé',
   (public.account_ensure()->>'created')::boolean = false AND public.fp_my_account()::text = (SELECT v FROM _c WHERE k = 'A'));
@@ -82,6 +94,10 @@ SELECT pg_temp.as_user('48484848-0000-4000-8000-000000000006');
 SELECT pg_temp.ok('administration FacturaPro : passage en Business (3 utilisateurs)',
   public.account_set_plan((SELECT v FROM _c WHERE k = 'A')::uuid, 'business')->>'plan' = 'business');
 SELECT pg_temp.ok('formule inconnue refusée', pg_temp.err(format('SELECT public.account_set_plan(%L, ''gold'')', (SELECT v FROM _c WHERE k = 'A'))) LIKE '%FORMULE_INCONNUE%');
+SELECT pg_temp.ok('conditions historiques quittées : elles ne se réattribuent pas',
+  pg_temp.err(format('SELECT public.account_set_plan(%L, ''legacy'')', (SELECT v FROM _c WHERE k = 'A'))) LIKE '%FORMULE_NON_PROPOSEE%');
+SELECT pg_temp.ok('conditions historiques conservées : un compte qui les a les garde (même formule acceptée)',
+  public.account_set_plan((SELECT v FROM _c WHERE k = 'B')::uuid, 'legacy')->>'plan' = 'legacy');
 
 -- ---------- Invitations ----------
 SELECT pg_temp.as_user('48484848-0000-4000-8000-000000000001');

@@ -6,14 +6,15 @@
 -- STATUT : PRÉPARÉ, NON APPLIQUÉ EN PRODUCTION. Application soumise à l'accord du propriétaire (migration structurante).
 --
 -- CE QUE FAIT CE SCRIPT (ajout pur, aucune donnée existante modifiée, aucun écran changé)
---  * plan_catalog : grille de référence validée le 11/11/2026 (79 / 179 / 299 / 499 DH HT, 1 / 2 / 3 / 5 utilisateurs)
---    et formule « legacy » pour les clients actuels (droits actuels conservés, 1 utilisateur). L'application ne lit pas
---    encore cette table : les prix affichés et les licences en production ne changent pas.
+--  * plan_catalog : grille de référence validée le 12/11/2026 (99 / 199 / 349 / 549 DH HT, 1 / 2 / 3 / 5 utilisateurs)
+--    et « legacy » = conditions historiques des clients existants (droits actuels conservés, 1 utilisateur), jamais
+--    proposées ni attribuables à un nouveau client (offered = false). L'application ne lit pas encore cette table :
+--    les prix affichés et les licences en production ne changent pas.
 --  * accounts, account_members, account_invitations, account_audit : le compte (l'entreprise), ses membres
 --    (owner / admin / member, profil, actif ou désactivé), les invitations (jeton à usage unique, haché, 7 jours) et le journal.
 --  * Fonctions : fp_my_account, fp_account_role, fp_account_can (rôles et permissions), account_ensure, account_info,
 --    account_invite, account_invitation_revoke, account_accept_invitation, account_member_update, account_set_plan (admin
---    FacturaPro), fp_accounts_backfill (reprise : un compte par utilisateur existant, propriétaire, formule legacy).
+--    FacturaPro), fp_accounts_backfill (reprise : un compte par utilisateur existant, propriétaire, conditions historiques).
 --
 -- CE QUE CE SCRIPT NE FAIT PAS (étapes suivantes, voir docs/COMPTES_ET_ABONNEMENTS.md)
 --  * T2 : colonne account_id sur les tables métier ; T3 : clients/produits en tables (modifications simultanées) ;
@@ -42,27 +43,32 @@ CREATE TABLE IF NOT EXISTS public.plan_catalog (
     months_paid_per_year INT NOT NULL DEFAULT 10 CHECK (months_paid_per_year BETWEEN 1 AND 12),
     max_users            INT NOT NULL CHECK (max_users BETWEEN 1 AND 50),
     features             TEXT[] NOT NULL,
-    sort_order           INT NOT NULL DEFAULT 0
+    sort_order           INT NOT NULL DEFAULT 0,
+    offered              BOOLEAN NOT NULL DEFAULT true          -- false : jamais proposée ni attribuable à un nouveau client
 );
+ALTER TABLE public.plan_catalog ADD COLUMN IF NOT EXISTS offered BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE public.plan_catalog ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.plan_catalog FROM PUBLIC, anon, authenticated;
 
+-- Grille validée le 12/11/2026 : 99 / 199 / 349 / 549 DH HT par mois (annuel = 10 mois facturés pour 12).
 -- Fonctions par formule (cumulatives). Libellés et écrans correspondants : docs/COMPTES_ET_ABONNEMENTS.md
-INSERT INTO public.plan_catalog (key, label, price_ht_month, max_users, sort_order, features) VALUES
- ('essentielle', 'Essentielle', 79, 1, 1, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees']),
- ('pro',         'Pro',        179, 2, 2, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
-                                              'achats', 'tva_deductions', 'livraisons', 'stock', 'relances', 'statistiques']),
- ('business',    'Business',   299, 3, 3, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
+-- « Rapports avancés » n'existe pas encore : aucune formule ne l'inclut tant qu'il n'est pas développé.
+INSERT INTO public.plan_catalog (key, label, price_ht_month, max_users, sort_order, features, offered) VALUES
+ ('essentielle', 'Essentielle', 99, 1, 1, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees'], true),
+ ('pro',         'Pro',        199, 2, 2, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
+                                              'achats', 'tva_deductions', 'livraisons', 'stock', 'relances', 'statistiques'], true),
+ ('business',    'Business',   349, 3, 3, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
                                               'achats', 'tva_deductions', 'livraisons', 'stock', 'relances', 'statistiques',
-                                              'exports_avances', 'pilotage', 'tresorerie', 'automatisations', 'cnss', 'cloture']),
- ('premium',     'Premium',    499, 5, 4, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
+                                              'exports_avances', 'pilotage', 'tresorerie', 'automatisations', 'cnss', 'cloture'], true),
+ ('premium',     'Premium',    549, 5, 4, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
                                               'achats', 'tva_deductions', 'livraisons', 'stock', 'relances', 'statistiques',
                                               'exports_avances', 'pilotage', 'tresorerie', 'automatisations', 'cnss', 'cloture',
-                                              'rapports_avances', 'support_prioritaire']),
- -- Clients actuels (essai, mensuel, annuel, à vie, Fondateurs) : on leur a promis « tout illimité ». Rien n'est retiré.
- ('legacy',      'Formule actuelle', NULL, 1, 9, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
+                                              'support_prioritaire'], true),
+ -- Conditions historiques : conservation des droits des clients existants à la date de la reprise (essai, mensuel, annuel,
+ -- à vie, Fondateurs : « tout illimité » promis). Pas une formule commerciale : jamais proposée ni attribuée à un nouveau client.
+ ('legacy',      'Conditions historiques (clients existants)', NULL, 1, 9, ARRAY['ventes', 'avoirs', 'clients_produits', 'paiements', 'pdf_partage', 'tableau_bord', 'tva_ventes', 'export_donnees',
                                               'achats', 'tva_deductions', 'livraisons', 'stock', 'relances', 'statistiques',
-                                              'exports_avances', 'pilotage', 'tresorerie', 'automatisations', 'cnss', 'cloture'])
+                                              'exports_avances', 'pilotage', 'tresorerie', 'automatisations', 'cnss', 'cloture'], false)
 ON CONFLICT (key) DO NOTHING;      -- une grille déjà en place n'est jamais écrasée par une réexécution
 
 -- ---------- Compte, membres, invitations, journal ----------
@@ -70,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.accounts (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id   UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,   -- T1 : aucune donnée métier rattachée encore
     name       TEXT NOT NULL DEFAULT '' CHECK (length(name) <= 200),
-    plan_key   TEXT NOT NULL DEFAULT 'legacy' REFERENCES public.plan_catalog(key),
+    plan_key   TEXT NOT NULL DEFAULT 'essentielle' REFERENCES public.plan_catalog(key),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -180,7 +186,8 @@ RETURNS VOID LANGUAGE sql SECURITY DEFINER SET search_path = public, auth AS $$
 $$;
 
 -- ---------- Création et lecture ----------
--- Premier accès : crée le compte de l'utilisateur s'il n'appartient à aucun compte (propriétaire, formule legacy).
+-- Premier accès d'un NOUVEAU client : crée son compte (propriétaire, formule Essentielle en attendant son choix, T7).
+-- Les clients existants reçoivent leur compte par la reprise (fp_accounts_backfill), avec les conditions historiques.
 -- Un invité doit accepter son invitation AVANT ce premier appel (l'écran le garantit en T6).
 CREATE OR REPLACE FUNCTION public.account_ensure(p_name TEXT DEFAULT NULL) RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
@@ -190,7 +197,7 @@ BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended('fp_account:' || v::text, 0));
     SELECT account_id INTO v_acc FROM public.account_members WHERE user_id = v;
     IF FOUND THEN RETURN jsonb_build_object('account_id', v_acc, 'created', false); END IF;
-    INSERT INTO public.accounts (owner_id, name) VALUES (v, left(COALESCE(btrim(p_name), ''), 200)) RETURNING id INTO v_acc;
+    INSERT INTO public.accounts (owner_id, name, plan_key) VALUES (v, left(COALESCE(btrim(p_name), ''), 200), 'essentielle') RETURNING id INTO v_acc;
     INSERT INTO public.account_members (account_id, user_id, role) VALUES (v_acc, v, 'owner');
     PERFORM public.fp_account_log(v_acc, 'compte_cree', v::text);
     RETURN jsonb_build_object('account_id', v_acc, 'created', true);
@@ -323,13 +330,15 @@ END; $$;
 -- le propriétaire désactive d'abord des membres (aucune exclusion automatique, aucune donnée supprimée).
 CREATE OR REPLACE FUNCTION public.account_set_plan(p_account UUID, p_plan TEXT) RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
-DECLARE s RECORD; v_max INT; v_old TEXT;
+DECLARE s RECORD; v_max INT; v_old TEXT; v_offered BOOLEAN;
 BEGIN
     IF NOT public.is_admin() THEN RAISE EXCEPTION 'DROIT_INSUFFISANT' USING ERRCODE = '42501'; END IF;
-    SELECT max_users INTO v_max FROM public.plan_catalog WHERE key = p_plan;
+    SELECT max_users, offered INTO v_max, v_offered FROM public.plan_catalog WHERE key = p_plan;
     IF NOT FOUND THEN RAISE EXCEPTION 'FORMULE_INCONNUE'; END IF;
     SELECT plan_key INTO v_old FROM public.accounts WHERE id = p_account FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'COMPTE_INTROUVABLE'; END IF;
+    -- Les conditions historiques se conservent, elles ne s'attribuent pas : un compte qui les a quittées ne les retrouve pas
+    IF NOT v_offered AND v_old IS DISTINCT FROM p_plan THEN RAISE EXCEPTION 'FORMULE_NON_PROPOSEE'; END IF;
     SELECT * INTO s FROM public.fp_account_seats(p_account);
     IF s.used > v_max THEN RAISE EXCEPTION 'TROP_D_UTILISATEURS_POUR_CETTE_FORMULE: % sur %', s.used, v_max; END IF;
     UPDATE public.accounts SET plan_key = p_plan, updated_at = now() WHERE id = p_account;
@@ -338,7 +347,7 @@ BEGIN
 END; $$;
 
 -- ---------- Reprise des comptes existants ----------
--- Un compte par utilisateur existant qui n'en a pas : propriétaire, formule legacy, nom repris de la fiche société.
+-- Un compte par utilisateur existant qui n'en a pas : propriétaire, conditions historiques (legacy), nom repris de la fiche société.
 -- Réservé à l'exécution par le propriétaire du projet (éditeur SQL, workflow) : aucun droit pour anon / authenticated.
 CREATE OR REPLACE FUNCTION public.fp_accounts_backfill() RETURNS INT
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
@@ -349,7 +358,7 @@ BEGIN
         IF to_regclass('public.user_data') IS NOT NULL THEN
             EXECUTE 'SELECT left(btrim(value->>''name''), 200) FROM public.user_data WHERE user_id = $1 AND key = ''company'' LIMIT 1' INTO v_name USING u.id;
         END IF;
-        INSERT INTO public.accounts (owner_id, name) VALUES (u.id, COALESCE(v_name, '')) RETURNING id INTO v_acc;
+        INSERT INTO public.accounts (owner_id, name, plan_key) VALUES (u.id, COALESCE(v_name, ''), 'legacy') RETURNING id INTO v_acc;
         INSERT INTO public.account_members (account_id, user_id, role) VALUES (v_acc, u.id, 'owner');
         INSERT INTO public.account_audit (account_id, actor_id, action, target) VALUES (v_acc, NULL, 'reprise', u.id::text);
         n := n + 1;
