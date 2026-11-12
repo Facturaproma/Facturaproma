@@ -52,6 +52,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const p = await open();
   await p.goto(`http://localhost:${PORT}/app.html?mode=login`); await sleep(800);
   await signup(p, ownerEmail);
+  // Contre la base de production, l'aperçu reste fermé même avec ?equipe=apercu (expression réelle de app.html, évaluée hors navigateur)
+  { const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app.html'), 'utf8'); const line = src.match(/^const TEAM_PREVIEW = (.*);$/m)[1];
+    const evalPreview = (url, search) => new Function('SUPABASE_URL', 'location', 'URLSearchParams', 'return ' + line)(url, { search }, URLSearchParams);
+    ok('aperçu Équipe fermé contre la base de production, même avec ?equipe=apercu',
+      evalPreview('https://mdozjptoecygmpkjlohr.supabase.co', '?equipe=apercu') === false && evalPreview('https://fake.supabase.test', '?equipe=apercu') === true
+      && evalPreview('https://fake.supabase.test', '') === false); }
   ok('sans ?equipe=apercu : entrée de menu masquée, page Équipe inaccessible (retour à l\'accueil)',
     await p.evaluate(() => { navTo('team'); return getComputedStyle(document.getElementById('navTeam')).display === 'none' && document.getElementById('page-dashboard').classList.contains('active'); }));
   ok('sans ?equipe=apercu : aucun compte créé sur le serveur', sql(`SELECT count(*) FROM public.account_members m JOIN auth.users u ON u.id = m.user_id WHERE u.email = '${ownerEmail}'`) === '0');

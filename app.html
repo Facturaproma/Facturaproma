@@ -13729,7 +13729,8 @@ function exportReportCSV(type) {
 // ÉQUIPE : comptes partagés (sql/48, étape T1). APERÇU seulement : visible avec ?equipe=apercu, tant que les données
 // ne sont pas rattachées au compte (étapes T2 à T5). Sans ce paramètre, la page reste masquée comme avant.
 // ============================================
-const TEAM_PREVIEW = (() => { try { return new URLSearchParams(location.search).get('equipe') === 'apercu'; } catch (e) { return false; } })();
+// Jamais contre la base de PRODUCTION : l'aperçu ne s'ouvre qu'en local ou en préproduction, même avec le paramètre.
+const TEAM_PREVIEW = (() => { try { return !/mdozjptoecygmpkjlohr/.test(SUPABASE_URL) && new URLSearchParams(location.search).get('equipe') === 'apercu'; } catch (e) { return false; } })();
 (function teamCaptureInvite() {      // le jeton du lien d'invitation est gardé le temps de l'inscription ou de la connexion
     try { const t = new URLSearchParams(location.search).get('invite'); if (TEAM_PREVIEW && t && /^[a-f0-9]{64}$/.test(t)) sessionStorage.setItem('fp_invite', t); } catch (e) {}
 })();
