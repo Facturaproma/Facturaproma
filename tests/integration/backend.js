@@ -23,6 +23,7 @@ function createDb(opts = {}) {
   if (opts.paiementCode) for (const f of ['20_formules_configurables', '32_paiement_lie_au_code'].concat(opts.documentsVente ? ['33_documents_vente'] : [])) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   if (opts.stock) for (const f of ['34_stock', '35_stock_achats_livraisons', '36_stock_cout', '37_achats_serveur', '38_livraisons_serveur', '39_tresorerie', '40_cloture', '41_indicateurs', '43_avoir_partiel', '44_avoir_fournisseur', '47_releve_deductions']) psql(db, ['-f', path.join(ROOT, 'sql', f + '.sql')]);
   if (opts.partage) psql(db, ['-f', path.join(ROOT, 'sql', '30_lien_client_facture.sql')]);
+  if (opts.comptes) psql(db, ['-f', path.join(ROOT, 'sql', '48_comptes_partages.sql')]);   // comptes partagés (étape T1)
   if (opts.docs) {
     // comme Supabase : privilèges par défaut larges, puis les scripts 15/16/17 retirent ce qui doit l'être
     psql(db, ['-c', 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated']);
@@ -67,7 +68,9 @@ function makeBackend(db) {
     cash_account_create: ['p'], cash_account_archive: ['p_id', 'p_archived'], cash_accounts_list: [], cash_movement_record: ['p'], supplier_settle: ['p'],
     cash_movement_reverse: ['p_id', 'p_reason'], cash_balances: ['p_date'], cash_list: ['p_from', 'p_to', 'p_account', 'p_limit', 'p_offset'],
     period_status: [], period_check: ['p_month'], period_close: ['p_month', 'p_note'], period_reopen: ['p_month', 'p_reason'],
-    fin_summary: ['p_from', 'p_to'], fin_monthly: ['p_from', 'p_to'] };
+    fin_summary: ['p_from', 'p_to'], fin_monthly: ['p_from', 'p_to'],
+    account_ensure: [], account_info: [], account_invite: ['p_email', 'p_role', 'p_profile'], account_invitation_revoke: ['p_id'],
+    account_accept_invitation: ['p_token'], account_member_update: ['p_user', 'p_role', 'p_profile', 'p_status'] };
   const RPC_SET = ['my_invoice_shares', 'support_my_messages', 'admin_support_threads', 'admin_support_messages', 'stock_levels', 'stock_period', 'stock_list', 'stock_valuation', 'purchase_list', 'purchase_credit_list', 'vat_deduction_payments', 'delivery_list', 'cash_accounts_list', 'cash_balances', 'cash_list', 'fin_monthly'];   // fonctions qui renvoient une table
   const GENERIC = ['subscription_requests', 'admin_codes', 'admin_settings', 'licenses', 'admins', 'admin_payments', 'plans', 'admin_documents'];
   const JSONB_PARAMS = ['p', 'p_items', 'p_moves', 'p_doc', 'p_payment', 'p_entries', 'p_snapshot'];
