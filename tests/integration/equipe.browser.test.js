@@ -56,13 +56,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.evaluate(() => { navTo('team'); return getComputedStyle(document.getElementById('navTeam')).display === 'none' && document.getElementById('page-dashboard').classList.contains('active'); }));
   ok('sans ?equipe=apercu : aucun compte créé sur le serveur', sql(`SELECT count(*) FROM public.account_members m JOIN auth.users u ON u.id = m.user_id WHERE u.email = '${ownerEmail}'`) === '0');
 
-  // ---------- Aperçu : formule actuelle, 1 utilisateur ----------
+  // ---------- Aperçu : nouveau client en Essentielle, 1 utilisateur ----------
   await p.goto(`http://localhost:${PORT}/app.html?equipe=apercu`); await sleep(2500);
   ok('aperçu : entrée de menu visible', await p.evaluate(() => getComputedStyle(document.getElementById('navTeam')).display !== 'none'));
   let txt = await team(p);
-  ok('aperçu : compte créé, propriétaire, formule actuelle, 1 / 1', /1 \/ 1/.test(txt) && /Formule actuelle/.test(txt) && /Propriétaire/.test(txt)
-    && sql(`SELECT m.role || ':' || a.plan_key FROM public.account_members m JOIN public.accounts a ON a.id = m.account_id JOIN auth.users u ON u.id = m.user_id WHERE u.email = '${ownerEmail}'`) === 'owner:legacy', txt.slice(0, 200));
-  ok('formule actuelle : pas de formulaire d\'invitation, message de limite', await p.isVisible('#teamFull') && !(await p.isVisible('#teamInviteForm')));
+  ok('aperçu : nouveau compte créé en Essentielle (jamais en conditions historiques), propriétaire, 1 / 1', /1 \/ 1/.test(txt) && /Essentielle/.test(txt) && !/Conditions historiques/.test(txt) && /Propriétaire/.test(txt)
+    && sql(`SELECT m.role || ':' || a.plan_key FROM public.account_members m JOIN public.accounts a ON a.id = m.account_id JOIN auth.users u ON u.id = m.user_id WHERE u.email = '${ownerEmail}'`) === 'owner:essentielle', txt.slice(0, 200));
+  ok('Essentielle : pas de formulaire d\'invitation, message de limite', await p.isVisible('#teamFull') && !(await p.isVisible('#teamInviteForm')));
 
   // ---------- Pro (2 utilisateurs) : invitation ----------
   sql(`UPDATE public.accounts SET plan_key = 'pro' WHERE owner_id = (SELECT id FROM auth.users WHERE email = '${ownerEmail}')`);
