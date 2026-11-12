@@ -160,7 +160,7 @@ CREATE POLICY documents_account_select ON public.documents FOR SELECT TO authent
 | T4 | Fonctions serveur par compte et par permission ; numérotation par compte | aucun pour un compte à 1 utilisateur | **élevé** | anciennes fonctions gardées sous un autre nom |
 | T5 | RLS par compte, en parallèle des anciennes règles puis seule | aucun | **élevé** (sécurité) | réactivation des anciennes règles |
 | T6 | Écrans : page Équipe réelle, invitation, rôles ; ouverture d'un lien d'invitation | **oui** | moyen | masquage de la page |
-| T7 | Limites par formule dans les écrans et le serveur ; console admin pour attribuer une formule ; page Tarifs | **oui** (commercial) | moyen | comptes existants en `legacy`, nouveaux en Essentielle |
+| T7 | Limites par formule dans les écrans et le serveur ; essai des nouveaux comptes (`docs/ESSAI_NOUVEAUX_COMPTES.md`) ; console admin pour attribuer une formule ; page Tarifs | **oui** (commercial) | moyen | comptes existants en `legacy`, nouveaux en Essentielle |
 
 Chaque étape : préproduction, sauvegarde, workflow lancé par le propriétaire (comme `releve-deductions-deploy`), contrôles avant et après dans la même transaction. **Aucune étape ne supprime de donnée.**
 
@@ -253,8 +253,17 @@ Hypothèses retenues :
 | Premium | 549 | 5 | 109,80 | +2 utilisateurs, support prioritaire |
 
 - **Pro double le prix pour doubler les utilisateurs** et ajoute la gestion des achats : le passage est facile à justifier.
-- **Business coûte plus cher par utilisateur que Pro et Premium.** Un client Pro qui veut seulement un 3e collaborateur paie +150 DH pour des modules dont il n'a peut-être pas besoin. C'est cohérent si Business se vend sur ses modules (comptabilité, trésorerie, clôture), pas sur le 3e utilisateur.
-- **Premium vaut surtout +2 utilisateurs (+200 DH, soit 100 DH par utilisateur) et le support prioritaire.** Sans « Rapports avancés », c'est son seul contenu propre : à présenter comme « formule équipe », pas comme « formule la plus complète ».
+- **Business coûte plus cher par utilisateur que Pro et Premium.** Un client Pro qui veut seulement un 3e collaborateur paie +150 DH pour des modules dont il n'a peut-être pas besoin. **Business se présente donc comme la formule entreprise, vendue sur ses fonctions métier**, jamais comme une simple augmentation du nombre d'utilisateurs.
+- **Premium vaut surtout +2 utilisateurs (+200 DH, soit 100 DH par utilisateur) et le support prioritaire.** Sans « Rapports avancés », c'est son seul contenu propre : présentée comme « équipe de 5 + support prioritaire », pas comme « formule la plus complète ».
 - Pas d'utilisateur supplémentaire à l'unité : simple à vendre et à contrôler, au prix de ces sauts. À réexaminer après les premiers clients.
+
+### Présentation commerciale (validée le 12/11/2026)
+
+| Formule | Message | À ne pas dire |
+|---|---|---|
+| Essentielle | La facturation complète et conforme, pour une personne seule | — |
+| **Pro** | **La formule de la petite équipe** : deux personnes travaillent sur le même compte, avec les achats, le stock et les relances | — |
+| **Business** | **La formule entreprise** : la gestion métier complète (export comptable, pilotage et trésorerie, factures récurrentes, CNSS, clôture mensuelle), pour une équipe de trois | « Pro avec un utilisateur de plus » : le 3e utilisateur seul ne justifie pas +150 DH |
+| **Premium** | **L'équipe de 5 personnes avec support prioritaire** : toutes les fonctions Business | « La formule la plus complète » : elle n'a pas de fonction métier en plus ; « Rapports avancés » n'existe pas |
 
 **Conclusion** : la grille reste cohérente avec un SaaS professionnel. Les marges techniques sont très élevées partout ; ce sont le support, l'encaissement et le statut fiscal, non confirmés, qui décideront de la marge réelle.
