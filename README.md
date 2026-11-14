@@ -48,8 +48,7 @@ FacturaPro/
 ├── index.html              # Landing page (vitrine)
 ├── app.html                # Application principale
 ├── admin.html              # Backoffice admin
-├── netlify.toml            # Configuration Netlify
-├── docs/                   # Documentation
+├── docs/                   # Documentation publique
 └── sql/                    # Scripts SQL Supabase
 ```
 
@@ -57,8 +56,7 @@ FacturaPro/
 - **Frontend** : HTML5 + CSS3 + JavaScript (vanilla)
 - **Backend** : Supabase (PostgreSQL + Auth + Realtime)
 - **PDF** : jsPDF + AutoTable
-- **Hosting** : Netlify
-- **Domain** : facturapro.ma (ou Netlify subdomain)
+- **Hosting** : GitHub Pages (branche `main`, racine du dépôt)
 
 ---
 
@@ -85,17 +83,9 @@ const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
 const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 ```
 
-### 3. Déployer sur Netlify
+### 3. Publier le site
 
-#### Option A : Auto-deploy depuis GitHub (recommandé)
-1. Connecte ton repo à Netlify
-2. Configuration auto via `netlify.toml`
-3. À chaque `git push` → déploiement automatique ✨
-
-#### Option B : Drag & drop manuel
-1. Va sur [app.netlify.com](https://app.netlify.com)
-2. Drag & drop le dossier complet
-3. ✅ En ligne !
+Le site est publié par GitHub Pages depuis la branche `main` (racine du dépôt) : chaque fusion sur `main` est mise en ligne automatiquement.
 
 ---
 
@@ -103,9 +93,6 @@ const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
 - 📖 [Guide de déploiement complet](docs/DEPLOY.md)
 - 🚀 [Plan de lancement](docs/PLAN_LANCEMENT.md)
-- 🧪 [Préproduction Supabase](docs/PREPRODUCTION_SUPABASE.md)
-- 💾 [Sauvegarde et restauration](docs/SAUVEGARDE_RESTAURATION.md)
-- ✅ [Plan de validation fonctionnelle](docs/PLAN_VALIDATION_FONCTIONNELLE.md)
 
 ---
 
