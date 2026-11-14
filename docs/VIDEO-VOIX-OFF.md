@@ -19,7 +19,7 @@ Aucune voix de synthèse en darija n'est disponible dans l'environnement de l'as
 | 0:21 – 0:28 | Émission, PDF | النيميرو كيتعطى أوتوماتيك، بلا ما يتعاود. صيفطها ف واتساب، PDF ولا طبعها. | N-numéro kayt3ta automatique, bla ma yt3awed. Sifetha f WhatsApp, PDF wla tba3ha. |
 | 0:28 – 0:34 | Paiement | ملي يخلصك الكليان، سجل الخلاص: الفاكتورة كتولي مخلصة. | Mlli ykhalsek l'client, sajjel l'khlas : l'facture katwelli mkhelsa. |
 | 0:34 – 0:39 | Tableau de bord | وف لوحة التحكم كتشوف كلشي: البيع، الخلاص، السلعة والفلوس. | W f tableau de bord katchouf kolchi : l-bi3, l-khlas, s-sel3a w l-flous. |
-| 0:39 – 0:44 | Fin | جرب فاكتورابرو بلاش، 14 يوم. | Jarreb FacturaPro b-blach, 14 youm. |
+| 0:39 – 0:44 | Fin | جرب فاكتورابرو بلاش، 30 يوم. | Jarreb FacturaPro b-blach, 30 youm. |
 
 Enregistrement : téléphone près de la bouche, pièce calme, une seule prise de 44 s, ou une prise par ligne. Un vocal WhatsApp suffit.
 Assemblage : `ffmpeg -i video.mp4 -i voix.m4a -map 0:v -map 1:a -c:v copy -c:a aac -b:a 128k -shortest sortie.mp4`, sans réencoder l'image.

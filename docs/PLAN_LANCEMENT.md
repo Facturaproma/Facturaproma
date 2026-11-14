@@ -29,7 +29,7 @@ Hors cible pour l'instant : PME avec retenue à la source ou acomptes complexes,
 
 | Offre | Prix | Rôle dans le test |
 |---|---|---|
-| Essai | 14 jours, sans carte | Mesurer l'activation (déjà 14 jours d'essai actif dans l'appli) |
+| Essai | 30 jours, sans carte (décision du 12/11/2026) | Mesurer l'activation (30 jours pour les comptes créés après l'activation ; 14 jours auparavant) |
 | Mensuel | 49 DH/mois | Prix d'entrée ; référence actuelle |
 | Annuel | 449 DH/an (≈ 37 DH/mois) | Réduit le désabonnement |
 | Fondateur (30 premiers clients) | 299 DH/an | Premiers clients, retours détaillés en échange |
@@ -54,7 +54,7 @@ Canaux à ne pas surévaluer : publicité payante (budget 300 MAD/mois, peu de m
 |---|---|---|
 | Activation | Essayeur ayant émis ≥ 1 facture dans les 24 h | ≥ 50 % |
 | Usage réel | ≥ 3 factures émises sur 14 jours | ≥ 30 % des essayeurs |
-| Conversion essai → payant | Paiement avant la fin des 14 jours | ≥ 10 % |
+| Conversion essai → payant | Paiement avant la fin des 30 jours | ≥ 10 % |
 | Rétention à 30 jours | Payants encore actifs 30 jours après | ≥ 80 % |
 | Fiabilité | Incidents de numérotation / perte de données | 0 |
 | Support | Délai médian de première réponse | ≤ 24 h |

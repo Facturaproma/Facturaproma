@@ -107,7 +107,7 @@ Une fois déployé :
 1. Va sur `/app`
 2. Crée un compte
 3. Complète l'onboarding
-4. ✅ Tu vois le dashboard avec banner "Période d'essai 14 jours"
+4. ✅ Tu vois le dashboard avec banner "Période d'essai 30 jours"
 
 ### Test 2 : Admin
 1. Va sur `/admin`
