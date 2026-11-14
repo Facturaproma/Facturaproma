@@ -1025,9 +1025,9 @@
                         <div class="form-group">
                             <label>Type de licence</label>
                             <select id="codeType">
-                                <option value="monthly">📅 Mensuel (49 DH/mois)</option>
-                                <option value="annual">🏆 Annuel (449 DH/an)</option>
-                                <option value="founder">🎁 Fondateur annuel (299 DH/an, 30 max)</option>
+                                <option value="monthly">📅 Ancienne grille — Mensuel 49 DH (comptes existants)</option>
+                                <option value="annual">🏆 Ancienne grille — Annuel 449 DH (comptes existants)</option>
+                                <option value="founder">🎁 Fondateur — historique, sur code (299 DH/an, 30 max)</option>
                             </select>
                             <small id="founderCounter" style="color: var(--ink-mute);"></small>
                         </div>
@@ -2247,9 +2247,9 @@
         <div class="form-group">
             <label>Type de licence</label>
             <select id="activateType">
-                <option value="monthly">📅 Mensuel (49 DH/mois)</option>
-                <option value="annual">🏆 Annuel (449 DH/an)</option>
-                <option value="founder">🎁 Fondateur (299 DH/an · 30 places)</option>
+                <option value="monthly">📅 Ancienne grille — Mensuel 49 DH (comptes existants)</option>
+                <option value="annual">🏆 Ancienne grille — Annuel 449 DH (comptes existants)</option>
+                <option value="founder">🎁 Fondateur — historique, sur code (299 DH/an · 30 places)</option>
                 <option value="lifetime">🎁 À vie (offert, hors vente)</option>
             </select>
         </div>
@@ -2341,9 +2341,9 @@
             <div class="form-group">
                 <label>Type</label>
                 <select id="paymentType">
-                    <option value="monthly">Mensuel (49 DH)</option>
-                    <option value="annual">Annuel (449 DH)</option>
-                    <option value="founder">Fondateur (299 DH)</option>
+                    <option value="monthly">Ancienne grille — Mensuel (49 DH)</option>
+                    <option value="annual">Ancienne grille — Annuel (449 DH)</option>
+                    <option value="founder">Fondateur — historique (299 DH)</option>
                     <option value="lifetime">À vie / autre</option>
                 </select>
             </div>
@@ -5661,18 +5661,26 @@ function applyCustomPlans() {
     Object.keys(TIER_LABELS).forEach(k => { if (!(k in BASE_TIER_LABELS)) delete TIER_LABELS[k]; });
     customPlans.forEach(p => { PLAN_LABEL[p.key] = p.label; TIER_PRICES[p.key] = Number(p.price_dh) || 0; TIER_LABELS[p.key] = '🧩 ' + p.label; });
     const active = customPlans.filter(p => p.active);
+    // Grille actuelle (table plans = source unique) en tête ; formule « Prochainement » visible mais non sélectionnable (refusée par la base)
     const fill = (id, withDays) => {
         const sel = document.getElementById(id);
         if (!sel) return;
-        [...sel.querySelectorAll('option[data-custom]')].forEach(o => o.remove());
+        [...sel.querySelectorAll('[data-custom]')].forEach(o => o.remove());
+        if (!active.length) return;
+        const grp = document.createElement('optgroup'); grp.label = 'Grille actuelle (prix TTC)'; grp.dataset.custom = '1';
         active.forEach(p => {
             const o = document.createElement('option');
             o.value = p.key; o.dataset.custom = '1';
-            o.textContent = `🧩 ${p.label} (${Number(p.price_dh)} DH${withDays ? ' / ' + p.duration_days + ' j' : ''})`;
-            sel.appendChild(o);
+            o.textContent = `${p.label} (${Number(p.price_dh)} DH TTC${withDays ? ' / ' + p.duration_days + ' j' : ''})` + (p.sellable === false ? ' — Prochainement' : '');
+            if (p.sellable === false) o.disabled = true;
+            grp.appendChild(o);
         });
+        sel.insertBefore(grp, sel.firstChild);
+        const first = active.find(p => p.sellable !== false);
+        if (first && ['monthly', 'annual', 'founder', ''].includes(sel.value)) sel.value = first.key;
     };
     fill('codeType', true);
+    fill('activateType', true);
     fill('paymentType', false);
 }
 
@@ -5696,15 +5704,15 @@ function renderPlans() {
     const tb = document.getElementById('plansTable');
     tb.innerHTML = customPlans.length ? customPlans.map(p => `
         <tr>
-            <td><strong>🧩 ${esc(p.label)}</strong>${p.tagline ? `<br><small style="color: var(--ink-mute);">${esc(p.tagline)}</small>` : ''}</td>
-            <td>${Number(p.price_dh).toLocaleString('fr-FR')} DH</td>
+            <td${p.sellable === false ? ' style="opacity: 0.55;"' : ''}><strong>${esc(p.label)}</strong>${p.tagline ? `<br><small style="color: var(--ink-mute);">${esc(p.tagline)}</small>` : ''}</td>
+            <td${p.sellable === false ? ' style="opacity: 0.55;"' : ''}>${Number(p.price_dh).toLocaleString('fr-FR')} DH TTC</td>
             <td>${esc(planPeriodText(p.duration_days))}</td>
-            <td>${p.active ? '<span class="badge badge-success">En vente</span>' : '<span class="badge">Désactivée</span>'}</td>
+            <td>${!p.active ? '<span class="badge">Désactivée</span>' : p.sellable === false ? '<span class="badge" title="Visible, non vendable : la base refuse demandes et codes">Prochainement</span>' : '<span class="badge badge-success">En vente</span>'}</td>
             <td style="white-space: nowrap;">
                 <button class="btn btn-secondary btn-sm" onclick="editPlan(${jsArg(p.key)})">✏️ Modifier</button>
                 <button class="btn btn-secondary btn-sm" onclick="togglePlan(${jsArg(p.key)})">${p.active ? '⏸️ Désactiver' : '▶️ Réactiver'}</button>
             </td>
-        </tr>`).join('') : '<tr><td colspan="5" class="empty">Aucune formule personnalisée. Les offres Mensuel, Annuel et Fondateur restent disponibles.</td></tr>';
+        </tr>`).join('') : '<tr><td colspan="5" class="empty">Aucune formule configurée.</td></tr>';
 }
 
 function resetPlanForm() {
