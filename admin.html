@@ -2062,7 +2062,7 @@
             <div class="alert alert-warning" style="margin-top: 24px;">
                 <strong>⚠️ Sécurité importante</strong> :
                 <ul style="margin: 8px 0 0 20px; font-size: 13px;">
-                    <li>Seul le compte Master (<strong id="masterEmailLabel"></strong>) peut créer/supprimer des admins</li>
+                    <li>Seul le compte Master peut créer/supprimer des admins</li>
                     <li>Le compte Master est <strong>irrévocable</strong></li>
                     <li>Les admins secondaires peuvent gérer demandes, codes, paiements</li>
                     <li>Ne donnez l'accès admin qu'à des personnes de confiance</li>
@@ -2455,8 +2455,9 @@ async function getCaptchaToken() {
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kb3pqcHRvZWN5Z21wa2psb2hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MjE2MzUsImV4cCI6MjA5Mjk5NzYzNX0.Q9D4NV_1NiGq7b9vbViT4iBJM7HMOYk5e8QrfhkZ9-Q';
 
 // 👑 Master account (irrévocable, accès permanent)
-const MASTER_EMAIL = 'webnour@gmail.com';
-document.addEventListener('DOMContentLoaded', () => { const el = document.getElementById('masterEmailLabel'); if (el) el.textContent = MASTER_EMAIL; });
+// E-mails des comptes Master, appris du serveur (admins.is_master / is_master()) : aucun e-mail n'est écrit dans le code.
+let masterEmails = new Set();
+function rememberMasters(list) { (list || []).forEach((e) => { if (e) masterEmails.add(String(e).toLowerCase()); }); }
 
 // ============================================
 // SETUP
@@ -2629,6 +2630,7 @@ async function adminLogin() {
 
         // ✅ Login OK
         currentAdmin = { email: email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
+        if (currentAdmin.isMaster) rememberMasters([email]);
         applyRoleMode();
         AdminSession.stamp(true); AdminSession.start();
 
@@ -5834,7 +5836,7 @@ const auditActionLabel = (a) => AUDIT_ACTION_LABELS[a] || ('• ' + a);
 // Libellé du rôle d'un login : owner (Master), assistant (table staff) ou administrateur
 function auditRoleOf(email) {
     const e = (email || '').toLowerCase();
-    if (typeof MASTER_EMAIL !== 'undefined' && e === MASTER_EMAIL.toLowerCase()) return 'owner';
+    if (masterEmails.has(e)) return 'owner';
     if (auditStaffEmails.has(e)) return 'assistant';
     return 'administrateur';
 }
@@ -6754,6 +6756,7 @@ async function loadAllAdmins() {
         
         if (error) throw error;
         allAdmins = data || [];
+        rememberMasters(allAdmins.filter((a) => a.is_master).map((a) => a.email));
     } catch (err) {
         console.warn('Admins fetch error:', err);
         allAdmins = [];
@@ -6858,7 +6861,7 @@ async function createAdmin() {
         return;
     }
 
-    if (email === MASTER_EMAIL) {
+    if (masterEmails.has(email)) {
         errEl.textContent = '❌ Cet email est réservé au Master';
         errEl.style.display = 'block';
         return;
@@ -7030,6 +7033,7 @@ function showToast(msg, type = 'info') {
         if (who && who.is_master && (!lvl || lvl.currentLevel !== 'aal2')) { try { await supaClient.auth.signOut(); } catch {} AdminSession.clear(); return; }
         if (!who || !(who.is_admin || who.is_staff)) return;
         currentAdmin = { email: who.email, isMaster: !!who.is_master, isStaff: !who.is_admin && !!who.is_staff };
+        if (currentAdmin.isMaster) rememberMasters([who.email]);
         const expired = AdminSession.check();
         if (expired) {
             try { await supaClient.auth.signOut(); } catch {}
