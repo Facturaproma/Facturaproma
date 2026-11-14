@@ -29,7 +29,7 @@
 - 📊 **Dashboard** avec graphique CA 12 mois
 - 📥 **Export PDF** (français et arabe), exports CSV / comptable et export JSON complet des données
 - 🌍 **Support multi-statuts** : AE, Freelance, SARL, Autre
-- ⏰ **Période d'essai 14 jours** (full access)
+- ⏰ **Période d'essai 30 jours** (full access)
 
 ### Pour l'admin
 - 📊 **Dashboard temps réel** avec stats
@@ -97,7 +97,7 @@ Le site est publié par GitHub Pages depuis la branche `main` (racine du dépôt
 | 🏆 **Annuel** | 449 DH / 365 jours | Toutes les fonctions |
 | 🎁 **Fondateur** | 299 DH / 365 jours (30 places) | Sur code personnel à usage unique |
 
-Essai gratuit de 14 jours, sans carte bancaire. Paiement par virement, puis activation par code de licence.
+Essai gratuit de 30 jours, sans carte bancaire. Paiement par virement, puis activation par code de licence.
 
 ---
 
@@ -109,7 +109,7 @@ Essai gratuit de 14 jours, sans carte bancaire. Paiement par virement, puis acti
 - [x] Module Paiements & Relances
 - [x] Page admin
 - [x] Cloud sync Supabase
-- [x] Période d'essai 14 jours
+- [x] Période d'essai 30 jours
 - [ ] Application mobile (Capacitor)
 - [ ] Intégration paiement CMI
 - [ ] Multi-langues (Arabe RTL)
