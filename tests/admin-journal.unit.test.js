@@ -5,7 +5,7 @@ const cut = (from, to) => { const a = html.indexOf(from), b = html.indexOf(to, a
 const src = cut('const AUDIT_ACTION_LABELS', 'function fillAuditSelects') + cut('function getDateRange(period, ids) {', 'function onReportPeriodChange') + cut('function isInRange(dateStr, range) {', 'function renderReports()');
 const t = (n, c) => { assert(c, n); console.log('PASS ' + n); };
 const doc = { getElementById: () => null };
-const api = new Function('document', 'MASTER_EMAIL', 'PLAN_LABEL', 'let auditStaffEmails = new Set(["aide@x.com"]);\n' + src + '\nreturn { auditRoleOf, auditDetailText, filterAuditRows, auditActionLabel, getDateRange };')(doc, 'owner@x.com', { monthly: 'Mensuel', annual: 'Annuel' });
+const api = new Function('document', 'masterEmails', 'PLAN_LABEL', 'let auditStaffEmails = new Set(["aide@x.com"]);\n' + src + '\nreturn { auditRoleOf, auditDetailText, filterAuditRows, auditActionLabel, getDateRange };')(doc, new Set(['owner@x.com']), { monthly: 'Mensuel', annual: 'Annuel' });
 const rows = [
   { at: '2026-10-02T10:00:00', admin_email: 'Owner@x.com', action: 'set_license', target_email: 'a@a.com', details: { before: { type: 'monthly' }, after: { type: 'annual', expires_at: '2027-10-02' }, note: 'upgrade' } },
   { at: '2026-10-03T10:00:00', admin_email: 'aide@x.com', action: 'staff_payment', target_email: 'b@b.com', details: { amount: 49, type: 'monthly' } },

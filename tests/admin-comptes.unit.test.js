@@ -15,4 +15,5 @@ console.log('OK');
 // Page de connexion admin : l'e-mail du compte Master n'est plus affiché ni pré-suggéré
 const a0 = html.indexOf('id="adminEmail"'), loginBlock = html.slice(a0 - 600, a0 + 2600);
 assert(/Se connecter/.test(loginBlock), 'bloc de connexion introuvable');
-t('connexion admin : e-mail Master absent du texte et des placeholders visibles', !/webnour@gmail\.com/.test(loginBlock));
+t('connexion admin : e-mail Master absent du texte et des placeholders visibles', !/[a-z0-9._%+-]+@(gmail|hotmail|yahoo|outlook)\./i.test(loginBlock));
+t('admin.html : aucun e-mail personnel écrit dans le code (le Master vient du serveur)', !/MASTER_EMAIL/.test(html) && !/[a-z0-9._%+-]+@(gmail|hotmail|yahoo|outlook)\./i.test(html) && /masterEmails\.has\(/.test(html));
