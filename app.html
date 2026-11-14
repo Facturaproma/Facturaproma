@@ -7468,6 +7468,12 @@ const Storage = {
                 return;
             }
             if (tr === 'doc' && !DocStoreGlue.usesDocuments()) { delete this._cache[baseKey]; DocStoreGlue.refusedToast(); return; }
+            // collaborateur : ses préférences d'affichage restent sur l'appareil (son accès dépend de l'abonnement de l'entreprise, pas d'un abonnement personnel)
+            if (tr === 'personal' && Team.isCollaborator()) {
+                this._cache[baseKey] = val;
+                try { localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(val)); } catch {}
+                return;
+            }
         }
         // Nouveau stockage : un seul chemin d'écriture par compte ; refus local explicite si le compte n'y est pas autorisé à écrire
         const docRoute = DocStoreGlue.route(baseKey);
