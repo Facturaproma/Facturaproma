@@ -1528,9 +1528,10 @@
         </p>
         
         <div class="alt-pricing" style="margin-top: 32px;">
-            <div class="alt-tier">
+            <div class="alt-tier featured" style="position: relative; background: linear-gradient(180deg, rgba(27, 58, 107, 0.02), rgba(201, 169, 91, 0.05));">
+                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">🏆 Meilleur choix</div>
                 <h4>Essentielle</h4>
-                <div class="alt-price">99 DH TTC<small>/mois</small></div>
+                <div class="alt-price">99 DH<small> TTC/mois</small></div>
                 <p class="price-calc">ou <strong>700 DH TTC/an</strong></p>
                 <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit ~58 DH TTC/mois en annuel</p>
                 <ul>
@@ -1539,15 +1540,15 @@
                     <li>PDF en français et en arabe</li>
                     <li>Tableau de bord et TVA</li>
                 </ul>
-                <a href="app.html?mode=signup" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px;">
+                <a href="app.html?mode=signup" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 16px;">
                     Commencer l'essai gratuit
                 </a>
             </div>
             
-            <div class="alt-tier featured" style="position: relative; background: linear-gradient(180deg, rgba(27, 58, 107, 0.02), rgba(201, 169, 91, 0.05));">
-                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">🏆 Meilleur choix</div>
+            <div class="alt-tier" style="position: relative; opacity: 0.6;" aria-disabled="true">
+                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--ink-mute); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">Prochainement</div>
                 <h4>Pro</h4>
-                <div class="alt-price">199 DH TTC<small>/mois</small></div>
+                <div class="alt-price">199 DH<small> TTC/mois</small></div>
                 <p class="price-calc">ou <strong>1 600 DH TTC/an</strong></p>
                 <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit ~133 DH TTC/mois en annuel</p>
                 <ul>
@@ -1556,14 +1557,15 @@
                     <li>Achats, stock et livraisons</li>
                     <li>Relances et statistiques</li>
                 </ul>
-                <a href="app.html?mode=signup" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 16px;">
-                    Commencer l'essai gratuit
-                </a>
+                <span class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px; cursor: not-allowed;" aria-disabled="true">
+                    Prochainement
+                </span>
             </div>
             
-            <div class="alt-tier">
+            <div class="alt-tier" style="position: relative; opacity: 0.6;" aria-disabled="true">
+                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--ink-mute); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">Prochainement</div>
                 <h4>Business</h4>
-                <div class="alt-price">349 DH TTC<small>/mois</small></div>
+                <div class="alt-price">349 DH<small> TTC/mois</small></div>
                 <p class="price-calc">ou <strong>2 500 DH TTC/an</strong></p>
                 <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit ~208 DH TTC/mois en annuel</p>
                 <ul>
@@ -1572,9 +1574,9 @@
                     <li>Trésorerie, pilotage et clôture</li>
                     <li>Exports avancés et CNSS</li>
                 </ul>
-                <a href="app.html?mode=signup" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px;">
-                    Commencer l'essai gratuit
-                </a>
+                <span class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px; cursor: not-allowed;" aria-disabled="true">
+                    Prochainement
+                </span>
             </div>
         </div>
 
@@ -1901,13 +1903,14 @@ const AR_DICT = {
 "Prêt à envoyer ou imprimer, avec vos coordonnées bancaires.": "جاهز للإرسال أو الطباعة، مع بياناتك البنكية.",
 "TARIFS": "الأسعار",
 "Choisissez votre <em>formule</em>": "اختر <em>عرضك</em>",
+"Prochainement": "قريباً",
 "Trois formules sans engagement. Prix TTC, TVA 20 % incluse.": "ثلاث صيغ بدون التزام. الأسعار شاملة للضريبة على القيمة المضافة (20 %).",
 "Essentielle": "الأساسية",
 "Pro": "Pro",
 "Business": "Business",
-"99 DH TTC<small>/mois</small>": "99 درهم<small> شامل الضريبة/شهر</small>",
-"199 DH TTC<small>/mois</small>": "199 درهم<small> شامل الضريبة/شهر</small>",
-"349 DH TTC<small>/mois</small>": "349 درهم<small> شامل الضريبة/شهر</small>",
+"99 DH<small> TTC/mois</small>": "99 درهم<small> شامل الضريبة/شهر</small>",
+"199 DH<small> TTC/mois</small>": "199 درهم<small> شامل الضريبة/شهر</small>",
+"349 DH<small> TTC/mois</small>": "349 درهم<small> شامل الضريبة/شهر</small>",
 "ou <strong>700 DH TTC/an</strong>": "أو <strong>700 درهم شامل الضريبة/سنة</strong>",
 "ou <strong>1 600 DH TTC/an</strong>": "أو <strong>1600 درهم شامل الضريبة/سنة</strong>",
 "ou <strong>2 500 DH TTC/an</strong>": "أو <strong>2500 درهم شامل الضريبة/سنة</strong>",
