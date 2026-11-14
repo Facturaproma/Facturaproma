@@ -48,33 +48,24 @@ FacturaPro/
 ├── index.html              # Landing page (vitrine)
 ├── app.html                # Application principale
 ├── admin.html              # Backoffice admin
-├── netlify.toml            # Configuration Netlify
-├── docs/                   # Documentation
-└── sql/                    # Scripts SQL Supabase
+└── docs/                   # Documentation publique
 ```
+
+Ce dépôt ne contient que le site publié. Les scripts SQL, les tests et les procédures d'exploitation ne sont pas publiés.
 
 ### Stack technique
 - **Frontend** : HTML5 + CSS3 + JavaScript (vanilla)
 - **Backend** : Supabase (PostgreSQL + Auth + Realtime)
 - **PDF** : jsPDF + AutoTable
-- **Hosting** : Netlify
-- **Domain** : facturapro.ma (ou Netlify subdomain)
+- **Hosting** : GitHub Pages (branche `main`, racine du dépôt)
 
 ---
 
 ## 🚀 Déploiement
 
-### 1. Configurer Supabase
+### 1. Base de données
 
-Crée un projet sur [supabase.com](https://supabase.com) et exécute les scripts SQL dans l'ordre :
-
-```bash
-sql/01_initial.sql           # Tables principales (user_data)
-sql/02_admin_tables.sql      # Tables admin (codes, payments)
-sql/03_subscriptions.sql     # Demandes d'abonnement
-sql/04_admin_settings.sql    # Paramètres admin
-sql/06_securite_rls.sql      # SÉCURITÉ : RLS + fonctions (à exécuter en dernier)
-```
+Le site s'appuie sur un projet [Supabase](https://supabase.com) (PostgreSQL + Auth). Le schéma, les règles d'accès (RLS) et les fonctions serveur sont gérés hors de ce dépôt.
 
 ### 2. Configurer les credentials
 
@@ -85,17 +76,9 @@ const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
 const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 ```
 
-### 3. Déployer sur Netlify
+### 3. Publier le site
 
-#### Option A : Auto-deploy depuis GitHub (recommandé)
-1. Connecte ton repo à Netlify
-2. Configuration auto via `netlify.toml`
-3. À chaque `git push` → déploiement automatique ✨
-
-#### Option B : Drag & drop manuel
-1. Va sur [app.netlify.com](https://app.netlify.com)
-2. Drag & drop le dossier complet
-3. ✅ En ligne !
+Le site est publié par GitHub Pages depuis la branche `main` (racine du dépôt) : chaque fusion sur `main` est mise en ligne automatiquement.
 
 ---
 
@@ -103,9 +86,6 @@ const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
 - 📖 [Guide de déploiement complet](docs/DEPLOY.md)
 - 🚀 [Plan de lancement](docs/PLAN_LANCEMENT.md)
-- 🧪 [Préproduction Supabase](docs/PREPRODUCTION_SUPABASE.md)
-- 💾 [Sauvegarde et restauration](docs/SAUVEGARDE_RESTAURATION.md)
-- ✅ [Plan de validation fonctionnelle](docs/PLAN_VALIDATION_FONCTIONNELLE.md)
 
 ---
 
