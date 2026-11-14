@@ -7092,14 +7092,14 @@ const DocStoreGlue = {
         this.store = null; this.mode = 'legacy'; this.refused = null; this.orphan = null; this._orphanHidden = false;
         this.renderBanner();
     },
-    async start(userId) {
+    async start(userId, dataUserId) {
         this.reset();
         if (typeof DocStore === 'undefined' || typeof supaClient === 'undefined' || !supaClient) return { active: false };
         try {
             let email = ''; try { const u = await Auth.getCurrentUser(); email = (u && u.email) || ''; } catch {}
             const self = this;
             this.store = DocStore.createStore({
-                client: supaClient, userId, email, url: SUPABASE_URL, storage: localStorage,
+                client: supaClient, userId, dataUserId: dataUserId || userId, email, url: SUPABASE_URL, storage: localStorage,
                 uuid: uuid,
                 notify: (lvl, msg) => { try { showToast(msg, lvl === 'error' ? 'error' : lvl === 'warning' ? 'warning' : 'success'); } catch {} },
                 onChange: () => self.renderBanner(),
@@ -7218,6 +7218,163 @@ const DocStoreGlue = {
 };
 
 // ============================================
+// TRAVAIL EN ÉQUIPE (T6, sql/55) : l'entreprise a plusieurs utilisateurs actifs, ou la personne connectée est un collaborateur.
+// Alors : clients, produits, fournisseurs, salariés et fiche entreprise passent par les fonctions partagées (shared_save…, versions) ;
+// réglages et registres de l'entreprise par team_blob_save (droits du rôle, verrouillage optimiste) ; factures, devis et paiements
+// par le stockage par document (déjà en place). Le serveur contrôle tout (MODE_EQUIPE) : l'interface ne fait que suivre.
+// Utilisateur seul (cas général) : rien ne change.
+// ============================================
+const TEAM_SHARED = { clients: 'client', products: 'product', suppliers: 'supplier', cnssEmployees: 'cnss_employee' };
+const TEAM_PERSONAL = ['onboarded', 'guideSeen', 'checklistDismissed', 'myRequests', 'activePromo', 'stockOutbox', 'stockOutboxRefused', 'purchasesMigrated', 'deliveriesMigrated', 'licenseInfo'];
+const TEAM_BLOB_PERM = { recurring: 'ecrire_ventes', counter: 'ecrire_ventes', vatPurchases: 'ecrire_gestion', vatLateDeductions: 'ecrire_gestion',
+    vatDeclarations: 'ecrire_gestion', stockMoves: 'ecrire_gestion', reminderTemplates: 'parametres', monthlyGoal: 'parametres',
+    fiscalPrefs: 'parametres', cnssEmployerConfig: 'parametres', aeCnssConfig: 'parametres' };
+const Team = {
+    ctx: null,              // réponse de team_context(), ou null (serveur sans T6, hors ligne)
+    serverReady: false,
+    _ver: {},               // 'kind:id' → version des fiches partagées
+    _data: {},              // 'kind:id' → empreinte canonique des fiches partagées (pour ne renvoyer que les changements)
+    _companyVer: null,
+    _blobAt: {},            // clé → updated_at lu
+    _q: Promise.resolve(),
+    _refreshedAt: 0,
+    reset() { this.ctx = null; this.serverReady = false; this._ver = {}; this._data = {}; this._companyVer = null; this._blobAt = {}; this._q = Promise.resolve(); },
+    active() { return !!(this.ctx && this.ctx.team && this.ctx.status === 'active'); },
+    disabled() { return !!(this.ctx && this.ctx.member && this.ctx.status && this.ctx.status !== 'active'); },
+    isCollaborator() { return !!(this.ctx && this.ctx.member && this.ctx.role && this.ctx.role !== 'owner'); },
+    can(perm) { return !this.active() || !!(this.ctx.perms && this.ctx.perms[perm]); },
+    ownerId() { return (this.ctx && this.ctx.owner_id) || null; },
+    plan() { return (this.ctx && this.ctx.plan) || null; },
+    canon(v) { if (v === null || typeof v !== 'object') return JSON.stringify(v); if (Array.isArray(v)) return '[' + v.map(x => this.canon(x)).join(',') + ']';
+        return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + this.canon(v[k])).join(',') + '}'; },
+    async load() {
+        this.reset();
+        if (!USE_SUPABASE || typeof supaClient === 'undefined' || !supaClient) return;
+        try {
+            const { data, error } = await supaClient.rpc('team_context');
+            if (error) { if (!teamServerMissing(error)) console.warn('[Équipe] contexte', error.message); return; }
+            this.serverReady = true; this.ctx = data || null;
+        } catch (e) { console.warn('[Équipe] contexte indisponible', e); }
+    },
+    route(baseKey) {   // 'personal' | 'doc' | 'shared' | 'company' | 'blob' | 'refused'
+        if (TEAM_PERSONAL.indexOf(baseKey) >= 0) return 'personal';
+        if (DOC_KEYS.indexOf(baseKey) >= 0) return 'doc';
+        if (TEAM_SHARED[baseKey]) return 'shared';
+        if (baseKey === 'company') return 'company';
+        if (TEAM_BLOB_PERM[baseKey]) return 'blob';
+        return 'refused';
+    },
+    // mêmes règles que le serveur (fp_t3_can_write, team_blob_save) : clients et produits = ventes ; fournisseurs et salariés = gestion
+    permFor(baseKey) { return baseKey === 'company' ? 'parametres' : (baseKey === 'clients' || baseKey === 'products') ? 'ecrire_ventes'
+        : (baseKey === 'suppliers' || baseKey === 'cnssEmployees') ? 'ecrire_gestion' : TEAM_BLOB_PERM[baseKey]; },
+    deny(msg) {
+        const t = Date.now(); if (this._denyAt && t - this._denyAt < 3000) return; this._denyAt = t;
+        try { showToast(msg || '🔒 Votre rôle dans l\'équipe ne permet pas cette modification.', 'error'); } catch {}
+    },
+    _store(baseKey, val) {
+        Storage._cache[baseKey] = val;
+        try { localStorage.setItem(Storage._buildLocalKey(baseKey, Storage._currentUserId), JSON.stringify(val)); } catch {}
+    },
+    // Chargement : fiches partagées et fiche entreprise depuis le serveur
+    async loadShared(only) {
+        for (const key of Object.keys(TEAM_SHARED)) {
+            if (only && only !== key) continue;
+            const kind = TEAM_SHARED[key];
+            const { data, error } = await supaClient.rpc('shared_list', { p_kind: kind });
+            if (error) throw error;
+            const arr = [];
+            Object.keys(this._ver).forEach(k => { if (k.indexOf(kind + ':') === 0) { delete this._ver[k]; delete this._data[k]; } });
+            (Array.isArray(data) ? data : []).forEach(x => { const d = x.data || {}; arr.push(d); this._ver[kind + ':' + x.id] = x.version; this._data[kind + ':' + x.id] = this.canon(d); });
+            this._store(key, arr);
+        }
+        if (!only || only === 'company') {
+            const { data, error } = await supaClient.rpc('company_profile_get');
+            if (error) throw error;
+            if (data && data.data) { this._companyVer = data.version || null; this._data['company'] = this.canon(data.data); this._store('company', data.data); }
+            else this._companyVer = null;
+        }
+    },
+    async loadBlobs(rows) {   // lignes user_data du titulaire (lecture « entreprise », T5)
+        (rows || []).forEach(r => { if (TEAM_BLOB_PERM[r.key]) { this._blobAt[r.key] = r.updated_at || null; this._store(r.key, r.value); } });
+    },
+    async reloadKey(baseKey) {
+        try {
+            if (TEAM_SHARED[baseKey] || baseKey === 'company') await this.loadShared(baseKey);
+            else if (TEAM_BLOB_PERM[baseKey]) {
+                const { data } = await supaClient.from('user_data').select('key, value, updated_at').eq('user_id', this.ownerId()).eq('key', baseKey);
+                if (data && data[0]) await this.loadBlobs(data); else { delete this._blobAt[baseKey]; delete Storage._cache[baseKey]; }
+            }
+        } catch (e) { console.warn('[Équipe] rechargement', baseKey, e); }
+        DocStoreGlue.rerender();
+    },
+    _fail(baseKey, error) {
+        const m = String((error && error.message) || error || '');
+        if (/CONFLIT_MODIFICATION/.test(m)) this.deny('⚠️ Modifié entre-temps par un autre membre de l\'équipe : données rechargées, refaites votre modification.');
+        else if (/LICENCE_INACTIVE/.test(m)) this.deny('🔒 Abonnement de l\'entreprise inactif : lecture seule.');
+        else if (/DROIT_INSUFFISANT/.test(m)) this.deny();
+        else this.deny('❌ Enregistrement impossible (connexion ?) : données rechargées.');
+        return this.reloadKey(baseKey);
+    },
+    // Écritures
+    saveShared(baseKey, val) {
+        const kind = TEAM_SHARED[baseKey], self = this;
+        const next = new Map(); (Array.isArray(val) ? val : []).forEach(d => { if (d && d.id != null) next.set(String(d.id), d); });
+        this._q = this._q.then(async () => {
+            try {
+                for (const [id, d] of next) {
+                    const k = kind + ':' + id, c = self.canon(d);
+                    if (self._data[k] === c) continue;
+                    const { data, error } = await supaClient.rpc('shared_save', { p_kind: kind, p_id: id, p_data: d, p_version: self._ver[k] || null });
+                    if (error) return self._fail(baseKey, error);
+                    self._ver[k] = (data && data.version) || ((self._ver[k] || 0) + 1); self._data[k] = c;
+                }
+                for (const k of Object.keys(self._ver)) {
+                    if (k.indexOf(kind + ':') !== 0) continue;
+                    const id = k.slice(kind.length + 1);
+                    if (next.has(id)) continue;
+                    const { error } = await supaClient.rpc('shared_remove', { p_kind: kind, p_id: id, p_version: self._ver[k] });
+                    if (error) return self._fail(baseKey, error);
+                    delete self._ver[k]; delete self._data[k];
+                }
+                if (typeof SyncManager !== 'undefined') { SyncManager.lastSyncTime = Date.now(); SyncManager.updateUI(); }
+            } catch (e) { return self._fail(baseKey, e); }
+        });
+    },
+    saveCompany(val) {
+        const self = this, c = this.canon(val);
+        this._q = this._q.then(async () => {
+            if (self._data['company'] === c) return;
+            const { data, error } = await supaClient.rpc('company_profile_save', { p_data: val, p_version: self._companyVer });
+            if (error) return self._fail('company', error);
+            self._companyVer = (data && data.version) || ((self._companyVer || 0) + 1); self._data['company'] = c;
+        });
+    },
+    saveBlob(baseKey, val) {
+        const self = this;
+        this._q = this._q.then(async () => {
+            const { data, error } = await supaClient.rpc('team_blob_save', { p_key: baseKey, p_value: val, p_lu: self._blobAt[baseKey] || null });
+            if (error) return self._fail(baseKey, error);
+            self._blobAt[baseKey] = data && data.updated_at;
+        });
+    },
+    // Retour sur l'application après une absence : relit le travail des autres membres
+    listen() {
+        if (this._listening) return; this._listening = true;
+        document.addEventListener('visibilitychange', async () => {
+            if (document.hidden || !this.active() || Date.now() - this._refreshedAt < 30000) return;
+            this._refreshedAt = Date.now();
+            await this._q;
+            try {
+                await this.loadShared();
+                const { data } = await supaClient.from('user_data').select('key, value, updated_at').eq('user_id', this.ownerId());
+                await this.loadBlobs(data);
+                DocStoreGlue.rerender();
+            } catch (e) { console.warn('[Équipe] relecture', e); }
+        });
+    }
+};
+
+// ============================================
 // STORAGE LAYER (Hybrid: Supabase OR Local)
 // ============================================
 const Storage = {
@@ -7293,6 +7450,31 @@ const Storage = {
         }
         // En mode cloud, la licence n'est jamais écrite par le navigateur
         if (USE_SUPABASE && baseKey === 'licenseInfo') return;
+        // Équipe : chaque donnée de l'entreprise passe par sa fonction contrôlée (jamais un bloc écrasant le travail d'un autre membre)
+        if (Team.active()) {
+            const tr = Team.route(baseKey);
+            if (tr !== 'personal' && tr !== 'doc') {
+                const perm = Team.permFor(baseKey);
+                if (tr === 'refused' || !Team.can(perm)) {
+                    delete this._cache[baseKey];
+                    Team.deny(tr === 'refused' ? '🔒 Cette donnée n\'est pas encore partagée en équipe : modification non enregistrée.' : undefined);
+                    Team.reloadKey(baseKey);
+                    return;
+                }
+                Team._store(baseKey, val);
+                if (tr === 'shared') Team.saveShared(baseKey, val);
+                else if (tr === 'company') Team.saveCompany(val);
+                else Team.saveBlob(baseKey, val);
+                return;
+            }
+            if (tr === 'doc' && !DocStoreGlue.usesDocuments()) { delete this._cache[baseKey]; DocStoreGlue.refusedToast(); return; }
+            // collaborateur : ses préférences d'affichage restent sur l'appareil (son accès dépend de l'abonnement de l'entreprise, pas d'un abonnement personnel)
+            if (tr === 'personal' && Team.isCollaborator()) {
+                this._cache[baseKey] = val;
+                try { localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(val)); } catch {}
+                return;
+            }
+        }
         // Nouveau stockage : un seul chemin d'écriture par compte ; refus local explicite si le compte n'y est pas autorisé à écrire
         const docRoute = DocStoreGlue.route(baseKey);
         if (docRoute === 'refused') { delete this._cache[baseKey]; DocStoreGlue.refusedToast(); return; }
@@ -7385,6 +7567,15 @@ const Storage = {
             if (error) {
                 // MODE_NOUVEAU_STOCKAGE (SQLSTATE 42501 aussi !) : le compte est passé au nouveau stockage — ce n'est PAS une licence expirée, et on ne réessaie pas
                 if (DocStoreGlue.handleLegacyRefusal(error, key, value)) return 'dropped';
+                // MODE_EQUIPE : l'entreprise travaille désormais en équipe (un membre a rejoint) : rechargement pour passer par les fonctions d'équipe
+                if (/MODE_EQUIPE/.test(String(error.message || ''))) {
+                    DocStoreGlue.archiveRefused(key, value, 'MODE_EQUIPE');
+                    try { SyncManager.pendingChanges = SyncManager.pendingChanges.filter(c => c.key !== key); SyncManager.savePendingChanges(); SyncManager.updateUI(); } catch {}
+                    let again = false; try { again = sessionStorage.getItem('fp_team_reload') === '1'; sessionStorage.setItem('fp_team_reload', '1'); } catch {}
+                    if (typeof showToast === 'function') showToast('👥 Votre entreprise travaille en équipe : rechargement des données partagées…', 'warning');
+                    if (!again) setTimeout(() => location.reload(), 1500);
+                    return 'dropped';
+                }
                 // 42501 = refus RLS : licence expirée côté serveur
                 if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
                     console.warn('Écriture refusée par le serveur (licence) : conservée en attente.');
@@ -7469,14 +7660,19 @@ const Storage = {
         
         this._currentUserId = userId;
         
+        // Équipe (T6) : le serveur dit si l'entreprise travaille à plusieurs, et qui en est le titulaire (données de l'entreprise)
+        await Team.load();
+        if (Team.disabled()) { console.warn('[Équipe] accès désactivé'); return; }
+        const team = Team.active(), owner = team ? Team.ownerId() : userId;
+        try { sessionStorage.removeItem('fp_team_reload'); } catch {}
+
         // Nouveau stockage : le SERVEUR dit si ce compte est en mode « documents » (jamais un indicateur local)
-        const doc = await DocStoreGlue.start(userId);
+        const doc = await DocStoreGlue.start(userId, owner);
         
         try {
-            const { data, error } = await supaClient
-                .from('user_data')
-                .select('key, value')
-                .eq('user_id', userId);
+            let q = supaClient.from('user_data').select(team ? 'key, value, updated_at, user_id' : 'key, value');
+            q = team ? q.in('user_id', [...new Set([userId, owner])]) : q.eq('user_id', userId);
+            const { data, error } = await q;
             
             if (error) throw error;
             
@@ -7484,9 +7680,19 @@ const Storage = {
             (data || []).forEach(row => {
                 // en mode documents (ou bloqué) l'ancien tableau est FIGÉ : il ne doit jamais redevenir la source de ces 4 clés
                 if (DocStoreGlue.active() && DOC_KEYS.indexOf(row.key) >= 0) return;
+                if (team) {   // équipe : clés personnelles = les siennes ; données de l'entreprise = celles du titulaire (fiches par les fonctions partagées)
+                    const tr = Team.route(row.key);
+                    if (tr === 'personal') { if (row.user_id !== userId) return; }
+                    else if (row.user_id !== owner || tr !== 'blob') return;
+                }
                 this._cache[row.key] = row.value;
                 localStorage.setItem(this._buildLocalKey(row.key, userId), JSON.stringify(row.value));
             });
+            if (team) {
+                await Team.loadBlobs((data || []).filter(r => r.user_id === owner));
+                await Team.loadShared();
+                Team.listen();
+            }
             if (doc && doc.active && doc.state) DocStoreGlue.install(doc.state);
             
             console.log(`✓ Loaded ${data?.length || 0} records from cloud`);
@@ -7830,7 +8036,7 @@ async function checkOnboarding() {
     }
     // Licence : état officiel depuis le serveur
     try { await License.refresh(); } catch {}
-    try { await teamOnLogin(); } catch (e) {}   // équipe (aperçu ?equipe=apercu) : invitation en attente
+    try { await teamOnLogin(); } catch (e) {}   // équipe (T6) : invitation en attente, menu Équipe
     
     // Update sidebar with user info
     updateSidebarUser(session);
@@ -8498,7 +8704,7 @@ function navTo(page) {
     if (page === 'cnss') { cnssPart = null; renderCNSS(); }
     if (page === 'taxes') renderTaxes();
     if (page === 'company') loadCompanyForm();
-    if (page === 'team') { if (!TEAM_PREVIEW) { navTo('dashboard'); return; } renderTeam(); }
+    if (page === 'team') { if (!Team.serverReady) { navTo('dashboard'); return; } renderTeam(); }
     if (page === 'reports') initReports();
     if (page === 'license') renderLicensePage();
     if (page === 'messages') openSupportMessages();
@@ -13709,14 +13915,27 @@ function exportReportCSV(type) {
 }
 
 // ============================================
-// ÉQUIPE : comptes partagés (sql/48, étape T1). APERÇU seulement : visible avec ?equipe=apercu, tant que les données
-// ne sont pas rattachées au compte (étapes T2 à T5). Sans ce paramètre, la page reste masquée comme avant.
+// ÉQUIPE (T6) : page visible dès que le serveur gère les équipes (team_context) ET que l'entreprise a une formule à plusieurs
+// utilisateurs (Pro) ou travaille déjà en équipe. Sinon masquée, comme avant.
 // ============================================
-// Jamais contre la base de PRODUCTION : l'aperçu ne s'ouvre qu'en local ou en préproduction, même avec le paramètre.
-const TEAM_PREVIEW = (() => { try { return !/mdozjptoecygmpkjlohr/.test(SUPABASE_URL) && new URLSearchParams(location.search).get('equipe') === 'apercu'; } catch (e) { return false; } })();
-(function teamCaptureInvite() {      // le jeton du lien d'invitation est gardé le temps de l'inscription ou de la connexion
-    try { const t = new URLSearchParams(location.search).get('invite'); if (TEAM_PREVIEW && t && /^[a-f0-9]{64}$/.test(t)) sessionStorage.setItem('fp_invite', t); } catch (e) {}
+(function teamCaptureInvite() {      // le jeton du lien d'invitation est gardé le temps de l'inscription (et de la confirmation de l'adresse)
+    try {
+        const t = new URLSearchParams(location.search).get('invite');
+        if (t && /^[a-f0-9]{64}$/.test(t)) localStorage.setItem('fp_invite', JSON.stringify({ t, at: Date.now() }));
+    } catch (e) {}
 })();
+function teamPendingInvite() {
+    try {
+        const v = JSON.parse(localStorage.getItem('fp_invite') || 'null');
+        if (!v || !v.t || Date.now() - (v.at || 0) > 7 * 86400000) { localStorage.removeItem('fp_invite'); return null; }
+        return v.t;
+    } catch (e) { return null; }
+}
+function teamNavUpdate() {
+    const nav = document.getElementById('navTeam'); if (!nav) return;
+    const ok = Team.serverReady && Team.ctx && (Team.active() || ['pro', 'business'].indexOf(Team.plan()) >= 0);
+    nav.style.display = ok ? '' : 'none';
+}
 const TEAM_ROLE = { owner: 'Propriétaire', admin: 'Administrateur', member: 'Collaborateur' };
 const TEAM_PROFILE = { complet: 'Gestion complète', ventes: 'Ventes', lecture: 'Lecture seule' };
 const TEAM_PLAN = { essentielle: 'Essentielle', pro: 'Pro', business: 'Business', premium: 'Premium', legacy: 'Conditions historiques' };   // clients existants : droits conservés, pas une formule proposée
@@ -13729,7 +13948,11 @@ const TEAM_ERR = {
     EMAIL_INVALIDE: 'Adresse e-mail invalide.',
     LICENCE_INACTIVE: 'Abonnement inactif : activez votre abonnement pour inviter.',
     DROIT_INSUFFISANT: 'Action réservée au propriétaire ou à un administrateur.',
-    PROPRIETAIRE_NON_MODIFIABLE: 'Le propriétaire ne peut pas être modifié.'
+    PROPRIETAIRE_NON_MODIFIABLE: 'Le propriétaire ne peut pas être modifié ni retiré.',
+    RETRAIT_DE_SOI_INTERDIT: 'Vous ne pouvez pas vous retirer vous-même.',
+    MEMBRE_INTROUVABLE: 'Ce membre ne fait plus partie de l\'équipe.',
+    MODE_DOCUMENTS_REQUIS: 'Le passage de votre entreprise au travail en équipe n\'a pas pu être fait : contactez le support.',
+    ABONNEMENT_RESERVE_PROPRIETAIRE: 'L\'abonnement de l\'entreprise est géré par son titulaire.'
 };
 let _teamInfo = null, _teamLink = '';
 
@@ -13740,16 +13963,25 @@ function teamErr(e) {
 }
 function teamServerMissing(e) { return /PGRST202|42883|does not exist|Could not find the function/i.test(((e && (e.code || '')) + ' ' + ((e && e.message) || ''))); }
 
-// Après connexion : affiche l'entrée du menu (aperçu) et accepte une invitation en attente
+// Après connexion : accepte une invitation en attente (puis recharge en mode équipe), affiche l'entrée du menu
 async function teamOnLogin() {
-    if (!TEAM_PREVIEW) return;
-    const nav = document.getElementById('navTeam'); if (nav) nav.style.display = '';
-    let tok = null; try { tok = sessionStorage.getItem('fp_invite'); } catch (e) {}
-    if (!tok || !USE_SUPABASE || !ensureSupabase()) return;
-    const { error } = await supaClient.rpc('account_accept_invitation', { p_token: tok });
-    try { sessionStorage.removeItem('fp_invite'); } catch (e) {}
-    try { const u = new URL(location.href); u.searchParams.delete('invite'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) {}
-    if (error) showToast(teamErr(error), 'error'); else showToast('Invitation acceptée : vous faites partie de l\'équipe.', 'success');
+    const tok = teamPendingInvite();
+    if (tok && USE_SUPABASE && ensureSupabase() && Team.serverReady) {
+        const { error } = await supaClient.rpc('account_accept_invitation', { p_token: tok });
+        try { localStorage.removeItem('fp_invite'); } catch (e) {}
+        try { const u = new URL(location.href); u.searchParams.delete('invite'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) {}
+        if (error) showToast(teamErr(error), 'error');
+        else {
+            try { sessionStorage.setItem('fp_team_joined', '1'); } catch (e) {}
+            await Storage.setCurrentUser(Storage._currentUserId);      // entre dans l'entreprise : données partagées, licence de l'entreprise
+            await License.refresh();
+        }
+    }
+    try { if (sessionStorage.getItem('fp_team_joined') === '1' && Team.isCollaborator()) { sessionStorage.removeItem('fp_team_joined'); showToast('Invitation acceptée : vous travaillez maintenant dans l\'entreprise de votre équipe.', 'success'); } } catch (e) {}
+    // un collaborateur n'a pas d'assistant de démarrage : l'entreprise est déjà configurée par son titulaire
+    if (Team.isCollaborator() && !Storage.get('onboarded')) Storage.set('onboarded', true);
+    if (Team.disabled()) showToast('Votre accès à l\'équipe est désactivé. Contactez le titulaire du compte.', 'error');
+    teamNavUpdate();
 }
 
 async function renderTeam() {
@@ -13778,7 +14010,8 @@ async function renderTeam() {
                 : escapeHtml(TEAM_PROFILE[m.profile] || m.profile)}</td>
             <td data-label="Statut"><span class="status-pill ${m.status === 'active' ? 'status-paid' : 'status-draft'}">${m.status === 'active' ? 'Actif' : 'Désactivé'}</span></td>
             <td data-label="">${canEdit(m)
-                ? `<button class="btn btn-secondary btn-sm" onclick="teamUpdate(${jsArg(m.user_id)}, null, null, ${jsArg(m.status === 'active' ? 'disabled' : 'active')})">${m.status === 'active' ? 'Désactiver' : 'Réactiver'}</button>`
+                ? `<button class="btn btn-secondary btn-sm" onclick="teamUpdate(${jsArg(m.user_id)}, null, null, ${jsArg(m.status === 'active' ? 'disabled' : 'active')})">${m.status === 'active' ? 'Désactiver' : 'Réactiver'}</button>
+                   <button class="btn btn-ghost btn-sm" onclick="teamRemove(${jsArg(m.user_id)}, ${jsArg(m.email)})">Retirer de l'équipe</button>`
                 : ''}</td></tr>`).join('');
     const invRows = invites.map(i => `<tr>
             <td data-label="Adresse">${escapeHtml(i.email)}</td>
@@ -13797,7 +14030,7 @@ async function renderTeam() {
         ${mgr && invites.length ? `<div class="table-card" style="margin-bottom: 16px;"><table class="tbl-act tbl-cards">
             <thead><tr><th>Invitation en attente</th><th>Accès</th><th>Expire</th><th></th></tr></thead><tbody id="teamInviteRows">${invRows}</tbody></table></div>` : ''}
         ${mgr ? (full
-            ? `<div class="notice" id="teamFull">Toutes les places de votre formule sont occupées. Désactivez un membre, annulez une invitation ou passez à la formule supérieure.</div>`
+            ? `<div class="notice" id="teamFull">Toutes les places de votre formule sont occupées (${Number(t.seats_max) || 1} utilisateur${(Number(t.seats_max) || 1) > 1 ? 's' : ''}). Retirez ou désactivez un membre, ou annulez une invitation, pour libérer une place.${t.plan !== 'pro' && (Number(t.seats_max) || 1) < 2 ? ' La formule Pro permet 2 utilisateurs.' : ''}</div>`
             : `<div class="calc-card" id="teamInviteForm"><h3>Inviter un collaborateur</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
                     <div class="form-group" style="flex: 2; min-width: 220px; margin: 0;"><label for="teamInviteEmail">Adresse e-mail</label><input type="email" id="teamInviteEmail" autocomplete="off" placeholder="prenom@entreprise.ma"></div>
@@ -13805,7 +14038,7 @@ async function renderTeam() {
                     <div class="form-group" style="flex: 1; min-width: 150px; margin: 0;"><label for="teamInviteProfile">Accès</label><select id="teamInviteProfile">${opt(TEAM_PROFILE, 'complet')}</select></div>
                     <button class="btn btn-primary" onclick="teamInvite()">Créer l'invitation</button>
                 </div>
-                <p style="font-size: 12px; color: var(--ink-mute); margin-top: 10px;">Un lien personnel est créé, valable 7 jours. Votre collaborateur se connecte avec cette adresse et son propre mot de passe : ne partagez jamais le vôtre.</p>
+                <p style="font-size: 12px; color: var(--ink-mute); margin-top: 10px;">Un lien personnel est créé, valable 7 jours. Votre collaborateur crée son accès avec CETTE adresse e-mail et son propre mot de passe (ne partagez jamais le vôtre), puis travaille sur les données de votre entreprise selon l'accès choisi.</p>
                 </div>`)
           : ''}
         ${mgr ? '<div id="teamLinkBox"></div>' : ''}`;
@@ -13813,6 +14046,7 @@ async function renderTeam() {
 }
 
 function teamShowLink() {
+    try { const l = sessionStorage.getItem('fp_team_link'); if (l) { _teamLink = l; sessionStorage.removeItem('fp_team_link'); } } catch (e) {}
     const box = document.getElementById('teamLinkBox');
     if (!box || !_teamLink) return;
     box.innerHTML = `<div class="notice" style="margin-top: 12px;"><strong>Lien d'invitation</strong> (affiché une seule fois)
@@ -13828,9 +14062,11 @@ async function teamInvite() {
         p_role: (document.getElementById('teamInviteRole') || {}).value || 'member', p_profile: (document.getElementById('teamInviteProfile') || {}).value || 'complet' });
     if (error) return showToast(teamErr(error), 'error');
     const u = new URL(location.origin + location.pathname);
-    u.searchParams.set('equipe', 'apercu'); u.searchParams.set('invite', data.token);
+    u.searchParams.set('mode', 'signup'); u.searchParams.set('invite', data.token);
     _teamLink = u.toString();
     showToast('Invitation créée.', 'success');
+    // première invitation : l'entreprise passe au stockage par document (fait par le serveur) ; l'application se recharge pour l'utiliser
+    if (!DocStoreGlue.usesDocuments()) { try { sessionStorage.setItem('fp_team_link', _teamLink); } catch (e) {} setTimeout(() => location.reload(), 1200); return; }
     await renderTeam();
 }
 async function teamCopyLink() {
@@ -13845,6 +14081,12 @@ async function teamRevoke(id) {
     const { error } = await supaClient.rpc('account_invitation_revoke', { p_id: id });
     if (error) return showToast(teamErr(error), 'error');
     showToast('Invitation annulée.', 'success'); _teamLink = '';
+    await renderTeam();
+}
+async function teamRemove(userId, email) {
+    if (!confirm(`Retirer ${email} de l'équipe ?\n\nSon accès cesse immédiatement et sa place est libérée. Tout ce qu'il a créé (factures, clients…) reste dans l'entreprise.`)) return;
+    const { error } = await supaClient.rpc('account_member_remove', { p_user: userId });
+    if (error) showToast(teamErr(error), 'error'); else showToast('Membre retiré de l\'équipe. Sa place est libérée.', 'success');
     await renderTeam();
 }
 async function teamUpdate(userId, role, profile, status) {
@@ -14647,7 +14889,17 @@ const License = {
     async refresh() {
         if (!USE_SUPABASE || !Storage._currentUserId) return;
         try {
-            const { data, error } = await supaClient.rpc('my_license');
+            // Collaborateur d'une équipe : c'est l'abonnement de l'ENTREPRISE (celui du titulaire) qui ouvre ou ferme l'écriture
+            let data = null, error = null;
+            if (Team.isCollaborator()) {   // relu à chaque contrôle : un retrait ou une désactivation prend effet sans attendre
+                const r = await supaClient.rpc('team_context');
+                if (!r.error && r.data) {
+                    const was = Team.ctx; Team.ctx = r.data;
+                    if (!Team.isCollaborator() || (Team.disabled() && !(was && was.status && was.status !== 'active'))) { try { showToast('Votre accès à l\'équipe a changé : rechargement.', 'warning'); } catch {} setTimeout(() => location.reload(), 1500); Team.ctx = was; return; }
+                }
+            }
+            if (Team.isCollaborator() && Team.ctx.license) data = Object.assign({ ok: true, server_now: Team.ctx.server_now }, Team.ctx.license);
+            else ({ data, error } = await supaClient.rpc('my_license'));
             if (error || !data || !data.ok) throw (error || new Error('my_license'));
             this._offset = Date.parse(data.server_now) - Date.now();
             this._srv = this._fromServer(data);
@@ -15255,6 +15507,7 @@ async function logoutFromLicense() {
 }
 
 async function purchaseLicense(tier) {
+    if (Team.isCollaborator()) { showToast('L\'abonnement de l\'entreprise est géré par son titulaire.', 'error'); return; }
     const _storedPromo = Storage.get('activePromo', null);
     const promo = (_storedPromo && PROMO_CODES[_storedPromo.code]) ? _storedPromo : null;   // un ancien code mémorisé n'est plus honoré
     const company = Storage.get('company', {});

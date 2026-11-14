@@ -71,6 +71,7 @@
 
   function createStore(cfg) {
     const { client, userId, email, url } = cfg;
+    const dataUserId = cfg.dataUserId || userId;   // équipe (T6) : les documents de l'entreprise sont rangés sous l'identifiant du titulaire
     const storage = cfg.storage || { getItem() { return null; }, setItem() {}, removeItem() {} };
     const uuid = cfg.uuid || (() => 'x' + Math.random().toString(36).slice(2) + Date.now().toString(36));
     const notify = cfg.notify || (() => {});
@@ -111,7 +112,7 @@
     async function fetchAll(table, cols, orderCols) {   // tri TOTAL (clé primaire en départage) : sans cela, deux lignes de même created_at peuvent changer de page d'une requête à l'autre (doublon ou manque)
       const out = []; const PAGE = 1000;
       for (let from = 0; ; from += PAGE) {
-        let rq = client.from(table).select(cols).eq('user_id', userId);
+        let rq = client.from(table).select(cols).eq('user_id', dataUserId);
         for (const oc of [].concat(orderCols)) rq = rq.order(oc, { ascending: true });
         const r = await rq.range(from, from + PAGE - 1);
         if (r.error) { const e = new Error(r.error.message || 'lecture impossible'); e.code = r.error.code; e.status = r.status; e.cause = r.error; throw e; }
