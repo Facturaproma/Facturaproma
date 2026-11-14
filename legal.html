@@ -20,15 +20,16 @@ section{background:var(--surface);border:1px solid var(--border);border-radius:1
 nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
 nav.toc a{padding:8px 14px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--ink);text-decoration:none;font-size:.9rem}
 .todo{background:#FFF3CD;color:#6b4e00;padding:0 4px;border-radius:4px;font-weight:600}
-.note{border-left:4px solid var(--gold);padding:8px 14px;background:var(--surface);border-radius:0 8px 8px 0;color:var(--soft);font-size:.92rem}
-ul{padding-left:1.2em} li{margin:.25em 0}
+.note{border-inline-start:4px solid var(--gold);padding:8px 14px;background:var(--surface);border-radius:8px;color:var(--soft);font-size:.92rem}
+ul{padding:0;padding-inline-start:1.2em} li{margin:.25em 0}
 p,li{overflow-wrap:anywhere}
 .upd{color:var(--soft);font-size:.9rem}
 </style>
 </head>
 <body>
 <div class="wrap">
-<header><a class="back" href="index.html">← FacturaPro</a></header>
+<header style="display:flex;justify-content:space-between;align-items:center;gap:12px"><a class="back" href="index.html" id="legalBack">← FacturaPro</a><button type="button" id="langBtn" onclick="toggleLang()" style="font:inherit;font-size:.9rem;padding:6px 14px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--ink);cursor:pointer">العربية</button></header>
+<div id="legal-fr">
 <h1>Informations légales</h1>
 <p class="upd">Dernière mise à jour : octobre 2026</p>
 <nav class="toc">
@@ -114,5 +115,108 @@ p,li{overflow-wrap:anywhere}
 
 <p class="note">Document type, à faire relire par un juriste avant l'ouverture commerciale.</p>
 </div>
+<div id="legal-ar" lang="ar" dir="rtl" hidden>
+<p class="note">النص الفرنسي هو المرجع القانوني ؛ هذه الترجمة العربية مقدَّمة للتسهيل.</p>
+<h1>المعلومات القانونية</h1>
+<p class="upd">آخر تحديث : أكتوبر 2026</p>
+<nav class="toc">
+<a href="#ar-mentions">الإشعارات القانونية</a><a href="#ar-cgu">شروط الاستخدام</a><a href="#ar-confidentialite">السرية</a>
+</nav>
+<p class="note">ستُستكمل الحقول المميَّزة <span class="todo">[À compléter]</span> عند تسجيل الشركة الناشرة.</p>
+
+<section id="ar-mentions">
+<h2>الإشعارات القانونية</h2>
+<h3>ناشر الخدمة</h3>
+<ul>
+<li>التسمية : <span class="todo">[Nom de la SARL]</span>، شركة ذات مسؤولية محدودة خاضعة للقانون المغربي</li>
+<li>رأس المال : <span class="todo">[montant]</span> درهم</li>
+<li>المقر الاجتماعي : <span class="todo">[adresse], Maroc</span></li>
+<li>السجل التجاري : <span class="todo">[n° et tribunal]</span> — ICE : <span class="todo">[n°]</span> — التعريف الضريبي : <span class="todo">[n°]</span></li>
+<li>المسيّر ومدير النشر : نور الدين بلقايد (Noureddine BELCAID)</li>
+<li>التواصل : <span class="todo">[e-mail de contact à créer et confirmer]</span></li>
+</ul>
+<h3>الاستضافة</h3>
+<ul>
+<li>الموقع والتطبيق (ملفات ثابتة) : GitHub Pages — شركة GitHub, Inc.، سان فرانسيسكو، الولايات المتحدة.</li>
+<li>قاعدة البيانات والمصادقة : Supabase، منطقة أوروبا (ستوكهولم، السويد).</li>
+</ul>
+<h3>الملكية الفكرية</h3>
+<p>اسم FacturaPro والبرنامج والنصوص والتصاميم محمية. يُمنع أي نسخ دون إذن كتابي. البيانات التي يُدخلها المستخدم ملك له.</p>
+</section>
+
+<section id="ar-cgu">
+<h2>الشروط العامة للاستخدام</h2>
+<h3>1. الموضوع</h3>
+<p>FacturaPro خدمة على الإنترنت للمساعدة في الفوترة (فواتير، عروض أسعار، عملاء، منتجات، تتبّع الأداءات، تصدير). استعمال الخدمة يعني قبول هذه الشروط.</p>
+<h3>2. الحساب</h3>
+<p>الحساب شخصي. يقدّم المستخدم بريدًا إلكترونيًا صالحًا، ويحافظ على سرية كلمة مروره، ويتحمّل مسؤولية العمليات المنجزة من حسابه. يجب أن يكون راشدًا وأن يتصرف في إطار مهني.</p>
+<h3>3. العروض والأسعار</h3>
+<ul>
+<li><strong>التجربة المجانية :</strong> 30 يومًا ابتداءً من إنشاء الحساب، بدون التزام. تحمل وثائق PDF علامة مائية.</li>
+<li><strong>الأساسية (Essentielle) :</strong> 99 درهمًا شاملة للضريبة شهريًا أو 700 درهم شاملة للضريبة سنويًا (مستخدم واحد).</li>
+<li><strong>Pro :</strong> 179 درهمًا شاملة للضريبة شهريًا أو 1300 درهم شاملة للضريبة سنويًا (مستخدمان : صاحب الحساب ومتعاون يدعوه ؛ يدخل كل واحد بمعرّفاته الخاصة).</li>
+<li><strong>عرض المؤسسين :</strong> 299 درهمًا لمدة 365 يومًا، محدود في 30 مقعدًا، برمز شخصي.</li>
+</ul>
+<p>الأسعار بالدرهم المغربي، شاملة لجميع الضرائب، بما فيها الضريبة على القيمة المضافة بنسبة 20 % : تُبيّن الفاتورة المبلغ دون احتساب الضريبة ومبلغ الضريبة. قد تتغير الأسعار مستقبلًا ؛ ولا يتغير سعر فترة سبق أداؤها.</p>
+<h3>4. الأداء والمدة</h3>
+<p>يُؤدّى الاشتراك مسبقًا بالوسائل المبيّنة عند الطلب (<span class="todo">[virement, CMI, etc.]</span>)، ثم يُفعَّل برمز. <strong>لا يُجدَّد تلقائيًا</strong> : يجدّد المستخدم متى شاء، وتُضاف الفترة الجديدة إلى نهاية الفترة الجارية.</p>
+<h3>5. نهاية الاشتراك</h3>
+<p>عند انتهاء التجربة أو الاشتراك، ينتقل الحساب إلى <strong>القراءة فقط</strong> : يمكن للمستخدم الاطلاع على بياناته وتصدير وثائقه، دون إنشاء أو تعديل إلى حين التجديد. لا تُحذف البيانات بمجرد انتهاء الاشتراك.</p>
+<h3>6. الاسترجاع</h3>
+<p><span class="todo">[À définir avec la société : par exemple remboursement sur demande sous 7 jours après un premier paiement, si le service n'a pas été utilisé.]</span></p>
+<h3>7. التزامات المستخدم</h3>
+<p>يبقى المستخدم وحده مسؤولًا عن محتوى فواتيره وصحة بياناتها (ICE، التعريف الضريبي، الضريبة على القيمة المضافة، إلخ) واحترام التزاماته الضريبية والمحاسبية. FacturaPro أداة مساعدة ؛ لا تعوّض محاسبًا ولا استشارة قانونية أو ضريبية. يُمنع الاستعمال الاحتيالي أو مشاركة الحساب.</p>
+<h3>8. التوفر والمسؤولية</h3>
+<p>يسعى الناشر إلى ضمان ولوج مستمر، دون ضمان عدم الانقطاع. تقتصر مسؤوليته على الأضرار المباشرة، وفي جميع الأحوال على المبلغ المؤدّى عن الفترة الجارية، في حدود ما يسمح به القانون. يُنصح بتصدير البيانات بانتظام.</p>
+<h3>9. التعليق</h3>
+<p>يمكن للناشر تعليق حساب في حالة الاحتيال أو عدم الأداء الثابت أو عدم احترام هذه الشروط.</p>
+<h3>10. القانون المطبق</h3>
+<p>القانون المغربي. يسعى الطرفان أولًا إلى حل ودّي ؛ وإلا فإن محاكم <span class="todo">[ville du siège]</span> هي المختصة، مع مراعاة القواعد الحمائية المطبقة على المستهلكين.</p>
+</section>
+
+<section id="ar-confidentialite">
+<h2>سياسة السرية</h2>
+<p>وُضعت هذه السياسة في ضوء القانون المغربي رقم 09-08 المتعلق بحماية الأشخاص الذاتيين تجاه معالجة المعطيات ذات الطابع الشخصي.</p>
+<h3>المسؤول عن المعالجة</h3>
+<p><span class="todo">[Nom de la SARL]</span>، التواصل : <span class="todo">[e-mail de contact à créer et confirmer]</span>. <span class="todo">[N° de déclaration / autorisation CNDP]</span></p>
+<h3>المعطيات المعالَجة</h3>
+<ul>
+<li>الحساب : البريد الإلكتروني، كلمة المرور (مخزّنة مشفّرة لدى خدمة المصادقة، غير قابلة للقراءة أبدًا).</li>
+<li>المحتوى المهني الذي يُدخله المستخدم : معلومات مؤسسته، العملاء، المنتجات، الفواتير، عروض الأسعار، الأداءات.</li>
+<li>الاشتراك : العرض، التواريخ، رموز التفعيل، الأداءات المسجلة.</li>
+<li>معطيات تقنية دنيا : تاريخ آخر دخول.</li>
+</ul>
+<h3>الأغراض</h3>
+<p>تقديم الخدمة، تدبير الاشتراك، ضمان الأمان، الرد على طلبات الدعم وإرسال الرسائل المتعلقة بالحساب (الانتهاء، التجديد). لا بيع للمعطيات ولا إشهار موجَّه.</p>
+<h3>معطيات عملائك</h3>
+<p>تبقى معطيات عملائك التي تُدخلها تحت مسؤوليتك ؛ ولا تستضيفها FacturaPro إلا لتقديم الخدمة لك.</p>
+<h3>الاستضافة والنقل</h3>
+<p>تُستضاف المعطيات لدى Supabase في أوروبا. تُقدَّم ملفات الموقع عبر GitHub Pages. تُحفظ نسخة احتياطية مشفّرة على منصة GitHub. يعمل هؤلاء المزوّدون بصفتهم مناولين.</p>
+<h3>مدة الحفظ</h3>
+<p>تُحفظ المعطيات ما دام الحساب قائمًا. بطلب منك، يُحذف الحساب ومعطياته، مع مراعاة التزامات الحفظ القانونية. تُستبدل النسخ الاحتياطية المشفّرة في أجل أقصاه 90 يومًا بعد ذلك.</p>
+<h3>حقوقك</h3>
+<p>الولوج والتصحيح والحذف والتعرض : راسلنا على <span class="todo">[e-mail de contact à créer et confirmer]</span>. الرد خلال 30 يومًا. يمكنك أيضًا اللجوء إلى اللجنة الوطنية لمراقبة حماية المعطيات ذات الطابع الشخصي (<a href="https://www.cndp.ma" rel="noopener">cndp.ma</a>).</p>
+<h3>ملفات الارتباط والتخزين المحلي</h3>
+<p>يستعمل التطبيق التخزين المحلي للمتصفح من أجل اشتغاله (الجلسة، نسخة من بياناتك، التفضيلات). لا تُستعمل أي ملفات ارتباط إشهارية ولا أدوات تتبّع من أطراف أخرى.</p>
+</section>
+
+<p class="note">وثيقة نموذجية، يجب أن يراجعها قانوني قبل الافتتاح التجاري.</p>
+</div>
+</div>
+<script>
+// Langue partagée avec l'accueil et l'application (préférence fp_lang)
+function applyLang(lang) {
+    const ar = lang === 'ar';
+    document.documentElement.lang = ar ? 'ar' : 'fr';
+    document.documentElement.dir = ar ? 'rtl' : 'ltr';
+    document.getElementById('legal-fr').hidden = ar;
+    document.getElementById('legal-ar').hidden = !ar;
+    document.getElementById('langBtn').textContent = ar ? 'Français' : 'العربية';
+    document.getElementById('legalBack').textContent = ar ? '→ FacturaPro' : '← FacturaPro';
+    try { localStorage.setItem('fp_lang', lang); } catch (e) {}
+}
+function toggleLang() { applyLang(document.documentElement.dir === 'rtl' ? 'fr' : 'ar'); }
+(function () { let l = null; try { l = new URLSearchParams(location.search).get('lang') || localStorage.getItem('fp_lang'); } catch (e) {} if (l === 'ar') applyLang('ar'); })();
+</script>
 </body>
 </html>

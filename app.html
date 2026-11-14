@@ -3147,6 +3147,9 @@
 <!-- ============ AUTH SCREEN ============ -->
 <div id="authScreen" class="hidden">
     <div class="auth-card">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">
+            <button type="button" id="authLangBtn" onclick="setLanguage(I18n.currentLang === 'ar' ? 'fr' : 'ar')" style="font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--ink-soft, inherit); cursor: pointer;" lang="ar">العربية</button>
+        </div>
         <div class="auth-logo">
             <div class="auth-logo-mark">F</div>
             <div class="auth-logo-text">FacturaPro</div>
@@ -3545,9 +3548,6 @@
                         <a onclick="closeUserMenu(); installPWA();">
                             📱 <span data-i18n="user.installApp">Installer l'app</span>
                         </a>
-                        <!-- Sélecteur de langue retiré temporairement.
-                             Sera ré-activé en V2 quand l'i18n sera complet (FR + AR).
-                             Code de l'i18n conservé en place pour réactivation rapide.
                         <div class="user-menu-separator" style="border-top: 1px solid var(--border); margin: 4px 0;"></div>
                         <a onclick="setLanguage('fr'); closeUserMenu();" id="langMenuFr">
                             🇫🇷 <span>Français</span> <span id="langCheckFr" style="margin-left: auto;">✓</span>
@@ -3555,7 +3555,6 @@
                         <a onclick="setLanguage('ar'); closeUserMenu();" id="langMenuAr">
                             🇲🇦 <span>العربية</span> <span id="langCheckAr" style="margin-left: auto;"></span>
                         </a>
-                        -->
                         <div class="user-menu-separator" style="border-top: 1px solid var(--border); margin: 4px 0;"></div>
                         <a class="danger" onclick="closeUserMenu(); handleLogout();">
                             🚪 <span data-i18n="user.logout">Se déconnecter</span>
@@ -6238,15 +6237,14 @@ const I18n = {
     currentLang: 'fr',
     
     init() {
-        // TEMPORAIRE : i18n incomplet, on force le français.
-        // À ré-activer quand l'arabe sera traduit à 80%+.
+        // Langue : ?lang=ar|fr dans l'adresse, sinon le choix mémorisé (le même que sur l'accueil et les conditions : fp_lang), sinon français.
+        // Tous les écrans sont traduits (tests/integration/app-arabe.browser.test.js : aucun texte français résiduel).
         this.currentLang = 'fr';
-        // Aperçu arabe (étape 2) : uniquement via l'URL ?lang=ar, sans bouton visible ni mémorisation
-        try { if (new URLSearchParams(location.search).get('lang') === 'ar') this.currentLang = 'ar'; } catch (e) {}
-        // Effacer toute préférence AR sauvegardée par les bêta-testeurs internes
         try {
+            const q = new URLSearchParams(location.search).get('lang');
             const saved = localStorage.getItem('fp_lang');
-            if (saved === 'ar') localStorage.removeItem('fp_lang');
+            this.currentLang = (q === 'ar' || q === 'fr') ? q : (saved === 'ar' ? 'ar' : 'fr');
+            if (q === 'ar' || q === 'fr') localStorage.setItem('fp_lang', q);
         } catch (e) {}
         
         this.apply();
@@ -6311,6 +6309,7 @@ const I18n = {
         });
         
         // Update language menu checkmarks
+        const ab = document.getElementById('authLangBtn'); if (ab) ab.textContent = lang === 'ar' ? 'Français' : 'العربية';
         const fr = document.getElementById('langCheckFr');
         const ar = document.getElementById('langCheckAr');
         if (fr) fr.textContent = lang === 'fr' ? '✓' : '';
@@ -6320,8 +6319,11 @@ const I18n = {
 
 // Global helpers
 function setLanguage(lang) {
-    I18n.setLang(lang);
-    try { showToast(lang === 'ar' ? '🇲🇦 تم تغيير اللغة' : '🇫🇷 Langue changée', 'success'); } catch(e) {}
+    if (lang !== 'ar' && lang !== 'fr') return;
+    try { localStorage.setItem('fp_lang', lang); } catch (e) {}
+    if (lang === I18n.currentLang) return;
+    // la traduction s'applique à l'affichage de chaque écran : rechargement pour repartir proprement dans la langue choisie
+    try { const u = new URL(location.href); u.searchParams.delete('lang'); location.replace(u.toString()); } catch (e) { location.reload(); }
 }
 
 // Init au chargement
