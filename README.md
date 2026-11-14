@@ -48,9 +48,10 @@ FacturaPro/
 ├── index.html              # Landing page (vitrine)
 ├── app.html                # Application principale
 ├── admin.html              # Backoffice admin
-├── docs/                   # Documentation publique
-└── sql/                    # Scripts SQL Supabase
+└── docs/                   # Documentation publique
 ```
+
+Ce dépôt ne contient que le site publié. Les scripts SQL, les tests et les procédures d'exploitation ne sont pas publiés.
 
 ### Stack technique
 - **Frontend** : HTML5 + CSS3 + JavaScript (vanilla)
@@ -62,17 +63,9 @@ FacturaPro/
 
 ## 🚀 Déploiement
 
-### 1. Configurer Supabase
+### 1. Base de données
 
-Crée un projet sur [supabase.com](https://supabase.com) et exécute les scripts SQL dans l'ordre :
-
-```bash
-sql/01_initial.sql           # Tables principales (user_data)
-sql/02_admin_tables.sql      # Tables admin (codes, payments)
-sql/03_subscriptions.sql     # Demandes d'abonnement
-sql/04_admin_settings.sql    # Paramètres admin
-sql/06_securite_rls.sql      # SÉCURITÉ : RLS + fonctions (à exécuter en dernier)
-```
+Le site s'appuie sur un projet [Supabase](https://supabase.com) (PostgreSQL + Auth). Le schéma, les règles d'accès (RLS) et les fonctions serveur sont gérés hors de ce dépôt.
 
 ### 2. Configurer les credentials
 
