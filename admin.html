@@ -3003,6 +3003,16 @@ function acctKind(a) {
 const ACCT_KIND_LABEL = { staff: '🛡️ Administrateurs du site', team: '👥 Équipes', solo: '👤 Comptes solo' };
 const ACCT_KIND_ORDER = { staff: 0, team: 1, solo: 2 };
 const TEAM_ROLE_LABEL = { owner: 'Propriétaire', admin: 'Administrateur', member: 'Collaborateur' };
+function sectionCount(rows, k) {
+    const list = rows.filter(r => acctKind(r) === k);
+    if (k !== 'team') return list.length;
+    const n = new Set(list.map(r => r.team.account_id)).size;
+    return n + (n > 1 ? ' équipes' : ' équipe') + ' · ' + list.length + ' membres';
+}
+function teamOwnerEmail(a) {
+    const o = allAccounts.find(x => x.team && a.team && x.team.account_id === a.team.account_id && x.team.role === 'owner');
+    return o ? o.email : '';
+}
 function isRealAccount(a) { return !!(a.last_sign_in || a.is_staff || PAID_TYPES.includes(a.type)); }
 
 // ---- Pagination des listes (10 par page, onglets 1 2 3…) --------------------
@@ -3636,7 +3646,7 @@ function renderUsers() {
         return pg_users.items.map(a => {
         const k = acctKind(a), tk = teamKey(a);
         let head = '';
-        if (teamsAvailable && k !== prevKind) head += `<tr><td colspan="8" style="background:var(--bg-soft, #eef1f6); font-weight:700; font-size:13px; padding:10px 14px;">${ACCT_KIND_LABEL[k]} <span class="badge badge-mute">${rows.filter(r => acctKind(r) === k).length}</span></td></tr>`;
+        if (teamsAvailable && k !== prevKind) head += `<tr><td colspan="8" style="background:var(--bg-soft, #eef1f6); font-weight:700; font-size:13px; padding:10px 14px;">${ACCT_KIND_LABEL[k]} <span class="badge badge-mute">${sectionCount(rows, k)}</span></td></tr>`;
         if (k === 'team' && tk !== prevTeam) {
             head += `<tr><td colspan="8" style="padding:8px 14px 6px 24px; font-size:12px; color:var(--ink-mute); border-bottom:none;">🏢 <strong>${esc(a.team.account_name || a.company_name || 'Entreprise')}</strong> · formule ${esc(a.team.plan_key)} · ${a.team.members} membres</td></tr>`;
         }
@@ -3662,7 +3672,7 @@ function renderUsers() {
             <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount(${jsArg(a.user_id)})">🗑️ Supprimer</button>`;
         return head + `
             <tr>
-                <td><strong>${esc(a.email)}</strong>${k === 'team' ? ` <span class="badge badge-mute">${esc(TEAM_ROLE_LABEL[a.team.role] || a.team.role)}${a.team.status === 'disabled' ? ' · désactivé' : ''}</span>` : ''}${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
+                <td><strong>${esc(a.email)}</strong>${k === 'team' ? ` <span class="badge badge-mute">${esc(TEAM_ROLE_LABEL[a.team.role] || a.team.role)}${a.team.status === 'disabled' ? ' · désactivé' : ''}</span>` : ''}${k === 'team' ? `<div style="font-size:12px; color:var(--ink-mute);">${a.team.role === 'owner' ? '(titulaire du compte : le patron)' : '(collaborateur ajouté' + (teamOwnerEmail(a) ? ' par ' + esc(teamOwnerEmail(a)) : '') + ')'}</div>` : ''}${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
                 <td>${formatDate(a.created_at)}</td>
                 <td>${activity}</td>
                 <td style="font-size:12px;">${a.invoices_count} fact.<br>${a.clients_count} clients</td>
