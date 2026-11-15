@@ -6135,7 +6135,7 @@ const I18N_DICT = {
         'nav.payments': 'المدفوعات',
         'nav.reminders': 'التذكيرات',
         'nav.reports': 'التقارير',
-        'nav.cnss': 'الصندوق الوطني',
+        'nav.cnss': 'الصندوق الوطني للضمان الاجتماعي',
         'nav.taxes': 'الضرائب والقيمة المضافة',
         'nav.company': 'مؤسستي',
         'nav.team': 'فريقي',
@@ -15125,8 +15125,13 @@ function updateTrialUI() {
             const dl = License.getDaysRemaining();
             const soon = info.type !== 'lifetime' && dl >= 0 && dl <= 7;
             banner.className = soon ? (dl <= 1 ? 'trial-banner urgent' : 'trial-banner warning') : 'trial-banner licensed';
-            const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '';
-            document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierData.icon}</span> ${escapeHtml(tierData.name)} actif${expDate ? ` · Renouvellement le ${expDate}` : ''}`;
+            // formule de la grille (Essentielle, Pro…) : son nom ; sinon le palier historique. Texte construit directement dans la langue choisie.
+            const ar = typeof I18n !== 'undefined' && I18n.currentLang === 'ar';
+            const name = info.planLabel ? (ar && AR_TEXT[info.planLabel] ? AR_TEXT[info.planLabel] : info.planLabel) : (ar && AR_TEXT[tierData.name] ? AR_TEXT[tierData.name] : tierData.name);
+            const expDate = info.expiresAt ? new Date(info.expiresAt).toLocaleDateString(ar ? 'ar-MA' : 'fr-FR', { day: '2-digit', month: 'short' }) : '';
+            document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${tierData.icon}</span> ` + escapeHtml(ar
+                ? `${name} نشطة${expDate ? ` · التجديد في ${expDate}` : ''}`
+                : `${name} actif${expDate ? ` · Renouvellement le ${expDate}` : ''}`);
             document.getElementById('trialBannerCountdown').style.display = 'none';
             if (soon) {
                 document.getElementById('trialBannerText').innerHTML = `<span class="trial-banner-icon">${dl <= 1 ? '🔴' : '⏰'}</span> ${escapeHtml(tierData.name)} : fin ${dl <= 0 ? 'aujourd\'hui' : dl === 1 ? 'demain' : 'dans ' + dl + ' jours'} — pensez à renouveler`;
