@@ -14606,7 +14606,7 @@ async function teamOnLogin() {
         }
     }
     // Invitation perdue (lien de confirmation ouvert dans un autre navigateur) : le serveur rattache l'utilisateur par son adresse CONFIRMÉE
-    if (!tok && USE_SUPABASE && ensureSupabase() && Team.serverReady && !(Team.ctx && Team.ctx.member)) {
+    if (!tok && USE_SUPABASE && ensureSupabase() && Team.serverReady && !Team.isCollaborator()) {   // aussi pour un compte solo vide créé avant l'acceptation : le serveur ne touche jamais un compte réel
         try {
             const r = await supaClient.rpc('account_accept_my_invitation');
             if (r && !r.error && r.data) {
