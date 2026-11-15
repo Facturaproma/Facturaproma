@@ -1028,7 +1028,6 @@
                                 <option value="monthly">📅 Ancienne grille — Mensuel 49 DH (comptes existants)</option>
                                 <option value="annual">🏆 Ancienne grille — Annuel 449 DH (comptes existants)</option>
                             </select>
-                            <small id="founderCounter" style="color: var(--ink-mute);"></small>
                         </div>
                         <div class="form-group">
                             <label>Email du client</label>
@@ -1381,20 +1380,7 @@
             </div>
 
             <div class="alert">
-                <strong>📋 Offres en vente</strong> — Essai gratuit 30 jours (nouveaux comptes ; 14 jours pour les comptes créés avant l'activation), formules Essentielle (99 / 700 DH, 1 utilisateur) et Pro (179 / 1 300 DH, 2 utilisateurs : le titulaire et un collaborateur qu'il invite) — prix TTC, TVA 20 % incluse, configurés dans « Formules » ; Business désactivée (ni visible ni vendable), et l'offre Fondateur (299 DH/an, 30 places, sur code). Mensuel 49 DH et Annuel 449 DH : ancienne grille, conservée pour les comptes existants. Les chiffres ci-dessous viennent des vrais comptes.
-            </div>
-
-            <div class="card" id="founderCard" style="margin-bottom: 20px; display: none;">
-                <div class="card-header">
-                    <h2>🎁 Offre Fondateur <small style="color: var(--ink-mute); font-weight: 400;">(299 DH/an, 30 places)</small></h2>
-                </div>
-                <div style="padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
-                    <div>
-                        <div id="founderState" style="font-weight: 700; font-size: 15px;">—</div>
-                        <div id="founderStateNote" style="font-size: 12px; color: var(--ink-mute); margin-top: 4px;">Les codes déjà émis restent valables, même offre fermée.</div>
-                    </div>
-                    <button class="btn btn-secondary" id="founderToggleBtn" onclick="toggleFounderOffer()" style="display: none;">—</button>
-                </div>
+                <strong>📋 Offres en vente</strong> — Essai gratuit 30 jours (nouveaux comptes ; 14 jours pour les comptes créés avant l'activation), formules Essentielle (99 / 700 DH, 1 utilisateur) et Pro (179 / 1 300 DH, 2 utilisateurs : le titulaire et un collaborateur qu'il invite) — prix TTC, TVA 20 % incluse, configurés dans « Formules » ; Business désactivée (ni visible ni vendable). Mensuel 49 DH et Annuel 449 DH : ancienne grille, conservée pour les comptes existants. Les chiffres ci-dessous viennent des vrais comptes.
             </div>
 
             <div class="card master-only" id="plansCard" style="margin-bottom: 20px;">
@@ -1435,11 +1421,6 @@
                     <div class="stat-value" id="tierAnnualCount">0</div>
                     <div class="stat-trend" id="tierAnnualNote">—</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">🎁 Fondateur · 299 DH</div>
-                    <div class="stat-value" id="tierFounderCount">0</div>
-                    <div class="stat-trend" id="tierFounderNote">—</div>
-                </div>
             </div>
 
             <div class="card" style="margin-bottom: 24px;">
@@ -1452,18 +1433,17 @@
                             <th style="text-align: center;">🆓 Essai<br><small style="font-weight: 400;">30 jours</small></th>
                             <th style="text-align: center;">📅 Mensuel<br><small style="font-weight: 400;">49 DH / 30 j</small></th>
                             <th style="text-align: center;">🏆 Annuel<br><small style="font-weight: 400;">449 DH / 365 j</small></th>
-                            <th style="text-align: center;">🎁 Fondateur<br><small style="font-weight: 400;">299 DH / 365 j</small></th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td><strong>Factures, devis, clients, produits</strong><br><small style="color: var(--ink-mute);">Mentions Maroc, ICE, TVA, délais loi 69-21</small></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-                        <tr><td><strong>Paiements, relances, CNSS / impôts</strong></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-                        <tr><td><strong>Sauvegarde cloud multi-appareils</strong></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-                        <tr><td><strong>Export comptable (CSV)</strong></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-                        <tr><td><strong>PDF sans filigrane</strong></td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-                        <tr><td><strong>Logo personnalisé sur les PDF</strong></td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-                        <tr><td><strong>Après expiration</strong><br><small style="color: var(--ink-mute);">Lecture seule : consultation, PDF et export restent possibles</small></td><td align="center">Lecture seule</td><td align="center">Lecture seule</td><td align="center">Lecture seule</td><td align="center">Lecture seule</td></tr>
-                        <tr><td><strong>Économie vs mensuel</strong></td><td align="center">—</td><td align="center">—</td><td align="center">139 DH (−24 %)</td><td align="center">289 DH (−49 %)</td></tr>
+                        <tr><td><strong>Factures, devis, clients, produits</strong><br><small style="color: var(--ink-mute);">Mentions Maroc, ICE, TVA, délais loi 69-21</small></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+                        <tr><td><strong>Paiements, relances, CNSS / impôts</strong></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+                        <tr><td><strong>Sauvegarde cloud multi-appareils</strong></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+                        <tr><td><strong>Export comptable (CSV)</strong></td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+                        <tr><td><strong>PDF sans filigrane</strong></td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+                        <tr><td><strong>Logo personnalisé sur les PDF</strong></td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+                        <tr><td><strong>Après expiration</strong><br><small style="color: var(--ink-mute);">Lecture seule : consultation, PDF et export restent possibles</small></td><td align="center">Lecture seule</td><td align="center">Lecture seule</td><td align="center">Lecture seule</td></tr>
+                        <tr><td><strong>Économie vs mensuel</strong></td><td align="center">—</td><td align="center">—</td><td align="center">139 DH (−24 %)</td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -1473,7 +1453,6 @@
                 <div class="card-header"><h2>🧭 Règles de l'offre</h2></div>
                 <ul style="margin: 0; padding: 4px 24px 20px 40px; font-size: 14px; line-height: 1.7;">
                     <li><strong>Essai :</strong> 30 jours dès la création du compte pour les nouveaux comptes (14 jours pour les comptes créés avant l'activation), accès complet avec filigrane sur les PDF. Prolongeable depuis « Clients > Licence ».</li>
-                    <li><strong>Fondateur :</strong> 30 codes maximum, chacun à usage unique et lié à l'e-mail du client. Ils s'ajoutent à l'offre annuelle (365 jours).</li>
                     <li><strong>Renouvellement :</strong> un nouveau code prolonge à partir de la fin en cours : le client ne perd pas ses jours restants.</li>
                     <li><strong>Pro à 2 utilisateurs :</strong> un code Pro activé met l'entreprise du client en Pro (2 places). Le 2e utilisateur est invité par le titulaire depuis la page Équipe de l'application : ne jamais créer de second compte à l'achat.</li>
                     <li><strong>Pas encore vendu :</strong> plus de 2 utilisateurs (Business), multi-sociétés, facturation électronique DGI. À ne pas promettre tant qu'ils ne sont pas livrés et testés.</li>
@@ -2342,7 +2321,6 @@
                 <select id="paymentType">
                     <option value="monthly">Ancienne grille — Mensuel (49 DH)</option>
                     <option value="annual">Ancienne grille — Annuel (449 DH)</option>
-                    <option value="founder">Fondateur — historique (299 DH)</option>
                     <option value="lifetime">À vie / autre</option>
                 </select>
             </div>
@@ -2873,7 +2851,7 @@ function renderStaffRequests() {
     const box = document.getElementById('staffRequestsBody');
     if (!box) return;
     if (!staffRequests.length) { box.innerHTML = '<div class="empty" style="padding:16px;">Aucune demande en attente</div>'; return; }
-    const lbl = { ...planLabelMap(), monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur' };
+    const lbl = { ...planLabelMap(), monthly: 'Mensuel', annual: 'Annuel' };
     box.innerHTML = '<table><thead><tr><th>Date</th><th>Client</th><th>Offre</th><th>Montant attendu</th><th></th></tr></thead><tbody>' +
         staffRequests.map(r => `<tr>
             <td>${formatDate(r.created_at)}</td>
@@ -2916,14 +2894,12 @@ async function loadAllData() {
             .order('created_at', { ascending: false });
         if (codesErr) throw codesErr;
         allCodes = codes || [];
-        refreshFounderCounter();
     } catch (err) {
         console.warn('Codes table error:', err);
         allCodes = [];
     }
     
     await loadCustomPlans();
-    await loadFounderSetting();
 
     // Load payments
     try {
@@ -3007,7 +2983,7 @@ let accountsAvailable = false;
 let accountsError = '';
 const PAID_TYPES = ['monthly', 'semestrial', 'annual', 'business', 'lifetime'];
 const DAY_MS = 86400000;
-const PLAN_LABEL = { trial: 'Essai', monthly: 'Mensuel', semestrial: 'Semestriel', annual: 'Annuel', business: 'Business', lifetime: 'À vie', founder: 'Fondateur' };
+const PLAN_LABEL = { trial: 'Essai', monthly: 'Mensuel', semestrial: 'Semestriel', annual: 'Annuel', business: 'Business', lifetime: 'À vie' };
 
 // Compte « réel » : s'est déjà connecté (lien de confirmation cliqué), ou possède une offre payante, ou fait partie de l'équipe.
 // Les inscriptions jamais confirmées (adresses bidon) ne comptent pas et sont masquées par défaut.
@@ -3122,11 +3098,8 @@ function acctState(a) {
     return a.active ? 'trial' : 'trial_expired';
 }
 
-// Fondateur : reconnu grâce au code utilisé (note commençant par FONDATEUR)
 function acctPlanKey(a) {
     if (a.code) {
-        const c = allCodes.find(x => x.code === a.code);
-        if (c && /^FONDATEUR/i.test(c.note || '')) return 'founder';
     }
     return a.type;
 }
@@ -3136,7 +3109,6 @@ function acctMonthly(a) {
     const k = acctPlanKey(a);
     if (k === 'monthly') return 49;
     if (k === 'annual') return 449 / 12;
-    if (k === 'founder') return 299 / 12;
     return 0;
 }
 
@@ -3179,7 +3151,7 @@ function relanceMessage(kind, a) {
         if (g !== null) return `Bonjour,\nVotre abonnement FacturaPro a pris fin le ${when}. Par courtoisie, votre accès reste complet encore ${g} jour${g > 1 ? 's' : ''}, puis le compte passera en lecture seule (vos données sont conservées). Pour renouveler : ${offers}.\nRépondez à ce message et je vous envoie le code de renouvellement.\n— FacturaPro`;
         return `Bonjour,\nVotre abonnement FacturaPro a pris fin le ${when}. Votre compte est en lecture seule et vos données sont conservées. Pour reprendre : ${offers}.\nRépondez à ce message et je vous envoie votre code d'activation.\n— FacturaPro`;
     }
-    return `Bonjour,\nVotre essai FacturaPro est terminé : votre compte est en lecture seule et vos données sont conservées. Pour reprendre la facturation : ${offers}.\nOffre fondateur limitée si vous êtes parmi les premiers clients. Je peux vous envoyer le code d'activation dès réception du paiement.\n— FacturaPro`;
+    return `Bonjour,\nVotre essai FacturaPro est terminé : votre compte est en lecture seule et vos données sont conservées. Pour reprendre la facturation : ${offers}. Je peux vous envoyer le code d'activation dès réception du paiement.\n— FacturaPro`;
 }
 
 function relanceCopy(uid, kind) {
@@ -3275,7 +3247,7 @@ function renderDashboard() {
         document.getElementById('statTrialUsers').textContent = trials.length;
         document.getElementById('statTrialNote').textContent = `${trialsExp.length} terminé${trialsExp.length > 1 ? 's' : ''}, non converti${trialsExp.length > 1 ? 's' : ''}`;
         document.getElementById('statActiveLicenses').textContent = paid.length;
-        document.getElementById('statActiveNote').textContent = `Mensuel ${cnt('monthly')} · Annuel ${cnt('annual')} · Fondateur ${cnt('founder')}`;
+        document.getElementById('statActiveNote').textContent = `Mensuel ${cnt('monthly')} · Annuel ${cnt('annual')}`;
         document.getElementById('statMRR').innerHTML = money(mrr);
         document.getElementById('statMRRNote').textContent = `≈ ${Math.round(mrr * 12).toLocaleString('fr-FR')} DH / an`;
         document.getElementById('statConversion').textContent = accts.length ? Math.round(everPaid / accts.length * 100) + '%' : '0%';
@@ -3351,7 +3323,6 @@ function renderRequests() {
         lifetime: '🎁 À vie',
         monthly: '⭐ Mensuel',
         annual: '🏆 Annuel',
-        founder: '🎁 Fondateur',
         business: '👔 Business'
     };
     
@@ -3442,7 +3413,7 @@ async function readBankSettings() {
     return cfg;
 }
 
-const requestTierLabel = (tier) => ({ ...planLabelMap(), lifetime: 'À vie (offert)', monthly: 'Mensuel (49 DH/mois)', annual: 'Annuel (449 DH/an)', founder: 'Fondateur (299 DH/an)', business: 'Business Mensuel' })[tier] || tier;
+const requestTierLabel = (tier) => ({ ...planLabelMap(), lifetime: 'À vie (offert)', monthly: 'Mensuel (49 DH/mois)', annual: 'Annuel (449 DH/an)', business: 'Business Mensuel' })[tier] || tier;
 
 // Étape 1 : envoyer montant + RIB au client (e-mail ou WhatsApp) ; la demande passe à « Contacté » après l'envoi
 async function contactRequest(requestId) {
@@ -3470,7 +3441,7 @@ async function contactRequest(requestId) {
 // Étape 2 (après paiement) : génère le code puis l'envoie au client (e-mail ou WhatsApp)
 // ---- Règle « pas de double abonnement » (aussi appliquée par la base, sql/22) ----
 // Un client avec un abonnement payant ACTIF ne reçoit un nouveau code que pour une formule PLUS LONGUE.
-const ADMIN_TIER_DAYS = { monthly: 30, business: 30, semestrial: 183, annual: 365, founder: 365, lifetime: 1e9 };
+const ADMIN_TIER_DAYS = { monthly: 30, business: 30, semestrial: 183, annual: 365, lifetime: 1e9 };
 function adminTierDays(key) {
     if (ADMIN_TIER_DAYS[key] != null) return ADMIN_TIER_DAYS[key];
     const p = (typeof customPlans !== 'undefined' ? customPlans : []).find(x => x.key === key);
@@ -3879,7 +3850,7 @@ const pg_licenses = fpPaginate('licenses', usedCodes, fpSig(usedCodes, ''), rend
         return `
         <tr>
             <td><strong>${esc(c.client_email || '—')}</strong></td>
-            <td><span class="badge badge-trial">${esc(/^FONDATEUR/i.test(c.note || '') ? 'fondateur' : c.type)}</span></td>
+            <td><span class="badge badge-trial">${esc(c.type)}</span></td>
             <td>${formatDate(c.activated_at || c.created_at)}</td>
             <td>${expire}</td>
             <td><code>${esc(c.code)}</code></td>
@@ -3950,69 +3921,11 @@ const pg_codes = fpPaginate('codes', allCodes, fpSig(allCodes, ''), renderCodes)
     }).join('');
 }
 
-const FOUNDER_LIMIT = 30;
-// Interrupteur « offre ouverte / fermée » : réglage admin_settings.founder_open (écriture réservée au Master, contrôlée par la base : sql/27)
-let founderOpen = true;
-async function loadFounderSetting() {
-    try {
-        const { data, error } = await supaClient.from('admin_settings').select('value').eq('key', 'founder_open').maybeSingle();
-        if (error) throw error;
-        founderOpen = !(data && /^(false|0|non|fermee|fermée)$/i.test(String(data.value || '').trim()));
-    } catch (err) { console.warn('Réglage de l\'offre Fondateur illisible (offre considérée ouverte) :', err.message || err); founderOpen = true; }
-    refreshFounderCounter();
-}
-// Message d'impossibilité d'émettre un code fondateur (null = possible). La base applique les mêmes règles (sql/27) : ceci évite seulement un aller-retour.
-function founderBlockMessage() {
-    if (!founderOpen) return 'L\'offre Fondateur est fermée. Le propriétaire peut la rouvrir dans Tarifs & Plans.';
-    if (countFounderCodes() >= FOUNDER_LIMIT) return `Limite atteinte : ${FOUNDER_LIMIT} codes fondateurs déjà émis`;
-    return null;
-}
+// Offre Fondateur retirée (sql/62) : la base refuse toute création de code Fondateur
 function founderErrorText(err) {
-    const m = String((err && err.message) || err || '');
-    if (/OFFRE_FONDATEUR_FERMEE/.test(m)) return 'L\'offre Fondateur est fermée.';
-    if (/LIMITE_FONDATEUR_ATTEINTE/.test(m)) return `Limite atteinte : ${FOUNDER_LIMIT} codes fondateurs déjà émis.`;
-    if (/MASTER_REQUIS/.test(m)) return 'Seul le propriétaire peut ouvrir ou fermer l\'offre Fondateur.';
-    return null;
-}
-async function toggleFounderOffer() {
-    if (!currentAdmin || !currentAdmin.isMaster) { showToast('Réservé au propriétaire', 'error'); return; }
-    const next = !founderOpen;
-    if (!confirm(next ? 'Rouvrir l\'offre Fondateur ?' : 'Fermer l\'offre Fondateur ? Plus aucun code fondateur ne pourra être émis. Les codes déjà émis restent valables.')) return;
-    try {
-        const { error } = await supaClient.from('admin_settings').upsert({ key: 'founder_open', value: next ? 'true' : 'false' }, { onConflict: 'key' });
-        if (error) throw error;
-        founderOpen = next;
-        refreshFounderCounter();
-        showToast(next ? 'Offre Fondateur rouverte' : 'Offre Fondateur fermée', 'success');
-    } catch (err) {
-        showToast(founderErrorText(err) || 'Erreur : ' + (err.message || err) + ' (script sql/27 appliqué ?)', 'error');
-    }
-}
-
-function countFounderCodes() {
-    // Les codes révoqués ne comptent pas : la place est libérée
-    return (allCodes || []).filter(c => (c.note || '').startsWith('FONDATEUR') && c.status !== 'revoked').length;
-}
-function refreshFounderCounter() {
-    const n = countFounderCodes();
-    const full = n >= FOUNDER_LIMIT;
-    const el = document.getElementById('founderCounter');
-    if (el) el.textContent = `Fondateurs émis : ${n} / ${FOUNDER_LIMIT}` + (!founderOpen ? ' · offre FERMÉE' : (full ? ' · complète' : ''));
-    // Les options « Fondateur » des deux formulaires sont désactivées quand l'offre est fermée ou complète
-    ['codeType', 'activateType'].forEach(id => {
-        const sel = document.getElementById(id); if (!sel) return;
-        const o = [...sel.options].find(x => x.value === 'founder'); if (!o) return;
-        if (!o.dataset.label) o.dataset.label = o.textContent;
-        o.disabled = !founderOpen || full;
-        o.textContent = o.dataset.label + (!founderOpen ? ' — fermée' : (full ? ' — complète' : ''));
-        if (o.disabled && sel.value === 'founder') sel.value = 'annual';
-    });
-    const st = document.getElementById('founderState');
-    if (st) {
-        st.innerHTML = (founderOpen ? '🟢 Offre ouverte' : '🔴 Offre fermée') + ` · ${n} / ${FOUNDER_LIMIT} codes émis` + (full ? ' · complète' : '');
-        const btn = document.getElementById('founderToggleBtn');
-        if (btn) { const master = !!(currentAdmin && currentAdmin.isMaster); btn.style.display = master ? '' : 'none'; btn.textContent = founderOpen ? '⏸️ Fermer l\'offre' : '▶️ Rouvrir l\'offre'; }
-    }
+    const m = String((err && (err.message || err.details)) || err || '');
+    if (/OFFRE_FONDATEUR_RETIREE/.test(m)) return 'L\'offre Fondateur est retirée : seules les formules Essentielle et Pro sont émises.';
+    return '';
 }
 
 function generateLicenseCode() {
@@ -4031,13 +3944,6 @@ async function generateCode() {
         return;
     }
 
-    // Offre fondateurs : licence annuelle, 30 codes maximum, chacun à usage unique et lié à un e-mail
-    if (type === 'founder') {
-        const fb = founderBlockMessage();
-        if (fb) { showToast(fb, 'error'); return; }
-        type = 'annual';
-        note = ('FONDATEUR 299 DH/an ' + note).trim();
-    }
     const blockedGen = doubleSubscriptionBlock(email, type);
     if (blockedGen) { showToast(blockedGen, 'error'); return; }
     
@@ -4276,14 +4182,7 @@ async function activateLicense() {
         return;
     }
     
-    // Offre fondateurs : licence annuelle, 30 codes maximum (même règle que « Générer codes »)
     let type = rawType, finalNote = note;
-    if (rawType === 'founder') {
-        const fb = founderBlockMessage();
-        if (fb) { showToast(fb, 'error'); return; }
-        type = 'annual';
-        finalNote = ('FONDATEUR 299 DH/an ' + note).trim();
-    }
     const blockedAct = doubleSubscriptionBlock(email, type);
     if (blockedAct) { showToast(blockedAct, 'error'); return; }
 
@@ -4373,7 +4272,7 @@ function renderTreasury() {
     document.getElementById('trBilledCount').textContent = `${invoicesEmitted.length} facture${invoicesEmitted.length > 1 ? 's' : ''}`;
     
     // En attente = codes pending
-    const TIER_PRICES_TR = { ...planPriceMap(), lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
+    const TIER_PRICES_TR = { ...planPriceMap(), lifetime: 0, monthly: 49, annual: 449, business: 199 };
     const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
     const pendingAmount = pendingCodes.reduce((s, c) => s + (TIER_PRICES_TR[c.type] || 0), 0);
     document.getElementById('trPending').textContent = formatCurrency(pendingAmount);
@@ -4454,7 +4353,7 @@ function renderTreasuryReconciled() {
     const tbody = document.getElementById('trReconciledTable');
     if (!tbody) return;
     
-    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', business: '👔 Business' };
     
     // Grouper les docs par payment_db_id
     const reconciliations = {};
@@ -4514,8 +4413,8 @@ function renderTreasuryPending() {
     const tbody = document.getElementById('trPendingTable');
     if (!tbody) return;
     
-    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
-    const TIER_PRICES_TR = { ...planPriceMap(), lifetime: 0, monthly: 49, annual: 449, founder: 299, business: 199 };
+    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', business: '👔 Business' };
+    const TIER_PRICES_TR = { ...planPriceMap(), lifetime: 0, monthly: 49, annual: 449, business: 199 };
     
     const pendingCodes = (allCodes || []).filter(c => c.status === 'pending');
     const sorted = pendingCodes.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -4559,7 +4458,7 @@ function renderTreasuryPending() {
 // ONGLET 3 : ANOMALIES
 // ============================================
 function renderTreasuryOrphan() {
-    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const TIER_LABELS_TR = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', business: '👔 Business' };
     
     // === Paiements orphelins ===
     const linkedPaymentIds = new Set();
@@ -5107,7 +5006,7 @@ function renderFpDocuments() {
     const pg = fpPaginate('fpdocs', groups, fpSig(groups, filter + '|' + search), renderFpDocuments);
     fpHost(host, pg.html);
 
-    const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', business: '👔 Business' };
     const stLabel = { paid: '✅ Soldée', issued: '⏳ À régler', void: '🚫 Annulée' };
     const line = (d, icon, label) => d
         ? `<div class="fp-docline"><div class="fp-docline-main"><span>${icon} ${label}</span><code>${esc(d.number || '—')}</code><small>${formatDate(d.created_at)}${d.payment_mode ? ' · ' + esc(d.payment_mode) : ''}</small></div>
@@ -5238,7 +5137,7 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
     if (doc.client_name && doc.client_email) { pdf.text(pdf.splitTextToSize(doc.client_email, bw - 10)[0], cx, cy); cy += 4.5; }
     else if (!doc.client_name && doc.client_email) { /* e-mail déjà affiché comme nom */ }
     if (doc.client_ice) { pdf.text(`ICE : ${doc.client_ice}`, cx, cy); cy += 4.5; }
-    const planName = ({ ...planLabelMap(), lifetime: 'Accès à vie', monthly: 'Mensuelle', annual: 'Annuelle', founder: 'Fondateur', business: 'Business' })[doc.tier];
+    const planName = ({ ...planLabelMap(), lifetime: 'Accès à vie', monthly: 'Mensuelle', annual: 'Annuelle', business: 'Business' })[doc.tier];
     if (planName) { pdf.text(`Licence : ${planName}`, cx, cy); cy += 4.5; }
     if (doc.code) { pdf.text(`Code : ${doc.code}`, cx, cy); cy += 4.5; }
     yPos += bh + 8;
@@ -5265,7 +5164,6 @@ async function generateFpDocPDF(doc, downloadDirectly = true) {
         lifetime: 'Licence FacturaPro - Accès à vie', 
         monthly: 'Licence FacturaPro Mensuelle', 
         annual: 'Licence FacturaPro Annuelle', 
-        founder: 'Licence FacturaPro Fondateur (annuelle)', 
         business: 'Licence FacturaPro Business' 
     };
     
@@ -5448,7 +5346,7 @@ async function sendFpDoc(docId) {
     if (!doc) return showToast('Document introuvable', 'error');
     
     const docTypeLabel = doc.docType === 'invoice' ? 'facture' : 'reçu';
-    const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
+    const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', business: 'Business' };
     
     const msg = `Bonjour ${esc(doc.client_name || '')} 🇲🇦,\n\n` +
         `Merci pour votre confiance !\n\n` +
@@ -5544,7 +5442,7 @@ async function renderFpStats() {
         byType[t].ttc += d.totalTTC || 0;
     });
     
-    const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', founder: '🎁 Fondateur', business: '👔 Business' };
+    const tierLabels = { ...planLabelMap(), lifetime: '🎁 À vie', monthly: '⭐ Mensuel', annual: '🏆 Annuel', business: '👔 Business' };
     const sorted = Object.values(byType).sort((a, b) => b.ttc - a.ttc);
     const tbody = document.getElementById('fpStatsByType');
     if (sorted.length === 0) {
@@ -5603,7 +5501,7 @@ function exportFpDocuments() {
     }
     
     const headers = ['Type', 'Numéro', 'Date', 'Client Email', 'Client Nom', 'Type Licence', 'Total HT', 'TVA', 'Total TTC'];
-    const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', founder: 'Fondateur', business: 'Business' };
+    const tierLabels = { ...planLabelMap(), lifetime: 'À vie', monthly: 'Mensuel', annual: 'Annuel', business: 'Business' };
     
     const rows = fpDocuments.map(d => [
         d.docType === 'invoice' ? 'Facture' : 'Reçu',
@@ -5676,7 +5574,7 @@ function applyCustomPlans() {
         });
         sel.insertBefore(grp, sel.firstChild);
         const first = active.find(p => p.sellable !== false);
-        if (first && ['monthly', 'annual', 'founder', ''].includes(sel.value)) sel.value = first.key;
+        if (first && ['monthly', 'annual', ''].includes(sel.value)) sel.value = first.key;
     };
     fill('codeType', true);
     fill('activateType', true);
@@ -5786,9 +5684,8 @@ function renderTiers() {
     const sum = list => list.reduce((t, p) => t + (parseFloat(p.amount) || 0), 0);
     const money = n => Math.round(n).toLocaleString('fr-FR') + ' DH';
     const pendingBy = f => allCodes.filter(c => c.status === 'pending' && f(c)).length;
-    const isFounderCode = c => /^FONDATEUR/i.test(c.note || '');
 
-    let trials = 0, trialsExp = 0, mActive = 0, aActive = 0, fActive = 0;
+    let trials = 0, trialsExp = 0, mActive = 0, aActive = 0;
     if (accountsAvailable) {
         const accts = allAccounts.filter(a => !a.is_staff && isRealAccount(a));
         trials = accts.filter(a => acctState(a) === 'trial').length;
@@ -5796,9 +5693,7 @@ function renderTiers() {
         const paid = accts.filter(a => acctState(a) === 'paid');
         mActive = paid.filter(a => acctPlanKey(a) === 'monthly').length;
         aActive = paid.filter(a => acctPlanKey(a) === 'annual').length;
-        fActive = paid.filter(a => acctPlanKey(a) === 'founder').length;
     }
-    const founderIssued = allCodes.filter(c => isFounderCode(c) && c.status !== 'revoked').length;
     const na = accountsAvailable ? null : 'Indisponible sans sql/08';
 
     document.getElementById('tierTrialCount').textContent = accountsAvailable ? trials : '—';
@@ -5807,13 +5702,10 @@ function renderTiers() {
     document.getElementById('tierMonthlyNote').textContent = na || `${money(sum(paidPay('monthly')))} encaissés`;
     document.getElementById('tierAnnualCount').textContent = accountsAvailable ? aActive : '—';
     document.getElementById('tierAnnualNote').textContent = na || `${money(sum(paidPay('annual')))} encaissés`;
-    document.getElementById('tierFounderCount').textContent = accountsAvailable ? fActive : '—';
-    document.getElementById('tierFounderNote').textContent = `${founderIssued} / ${FOUNDER_LIMIT} codes émis`;
 
     const rows = [
-        { name: 'Mensuel', price: '49 DH / 30 jours', count: accountsAvailable ? mActive : '—', rev: sum(paidPay('monthly')), pending: pendingBy(c => c.type === 'monthly' && !isFounderCode(c)) },
-        { name: 'Annuel', price: '449 DH / 365 jours', count: accountsAvailable ? aActive : '—', rev: sum(paidPay('annual')), pending: pendingBy(c => c.type === 'annual' && !isFounderCode(c)) },
-        { name: 'Fondateur', price: '299 DH / 365 jours (30 places)', count: accountsAvailable ? fActive : '—', rev: sum(paidPay('founder')), pending: pendingBy(isFounderCode) }
+        { name: 'Mensuel', price: '49 DH / 30 jours', count: accountsAvailable ? mActive : '—', rev: sum(paidPay('monthly')), pending: pendingBy(c => c.type === 'monthly') },
+        { name: 'Annuel', price: '449 DH / 365 jours', count: accountsAvailable ? aActive : '—', rev: sum(paidPay('annual')), pending: pendingBy(c => c.type === 'annual') }
     ];
     document.getElementById('tiersPerformanceTable').innerHTML = rows.map(r => `
         <tr>
@@ -5951,7 +5843,6 @@ const TIER_PRICES = {
     lifetime: 0,
     monthly: 49,
     annual: 449,
-    founder: 299,
     business: 199
 };
 
@@ -5959,7 +5850,6 @@ const TIER_LABELS = {
     lifetime: '🎁 À vie',
     monthly: '⭐ Mensuel',
     annual: '🏆 Annuel',
-    founder: '🎁 Fondateur',
     business: '👔 Business'
 };
 
@@ -6195,10 +6085,8 @@ function renderReports() {
 // ============================================
 // RAPPROCHEMENT codes générés ↔ paiements reçus
 // ============================================
-function codeOfferKey(c) { return /^FONDATEUR/i.test(c.note || '') ? 'founder' : c.type; }
+function codeOfferKey(c) { return c.type; }
 function paymentOfferKey(p) {
-    const amt = parseFloat(p.amount) || 0;
-    if (p.type === 'founder' || (p.type === 'annual' && amt === 299)) return 'founder';
     return p.type;
 }
 
@@ -6244,7 +6132,7 @@ function renderReconciliation(range) {
         : n < 0 ? `<span class="badge badge-danger">${fmt(n)} DH manquant</span>`
         : `<span class="badge badge-warning">+${fmt(n)} DH en plus</span>`;
 
-    const order = ['monthly', 'annual', 'founder', 'semestrial', 'business', 'lifetime'];
+    const order = ['monthly', 'annual', 'semestrial', 'business', 'lifetime'];
     const rank = k => order.indexOf(k) < 0 ? 99 : order.indexOf(k);
     const keys = Object.keys(offers).sort((a, b) => rank(a) - rank(b));
     let tot = { gen: 0, pending: 0, used: 0, revoked: 0, expected: 0, received: 0 };
@@ -6715,7 +6603,7 @@ function applyRoleMode() {
     document.body.classList.toggle('role-assistant', isStaffMode());
     if (isStaffMode()) {
         const sel = document.getElementById('paymentType');
-        if (sel) [...sel.options].forEach(o => { if (!['monthly', 'annual', 'founder'].includes(o.value)) o.remove(); });
+        if (sel) [...sel.options].forEach(o => { if (!['monthly', 'annual'].includes(o.value)) o.remove(); });
         navTo('payments');
     }
 }
