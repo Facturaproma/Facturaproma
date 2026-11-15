@@ -91,11 +91,10 @@ Le site est publié par GitHub Pages depuis la branche `main` (racine du dépôt
 
 ## 💰 Pricing
 
-| Plan | Prix | Description |
+| Plan | Prix (TTC, TVA 20 % incluse) | Utilisateurs |
 |------|------|-------------|
-| 📅 **Mensuel** | 49 DH / 30 jours | Toutes les fonctions |
-| 🏆 **Annuel** | 449 DH / 365 jours | Toutes les fonctions |
-| 🎁 **Fondateur** | 299 DH / 365 jours (30 places) | Sur code personnel à usage unique |
+| **Essentielle** | 99 DH / mois ou 700 DH / an | 1 |
+| **Pro** | 179 DH / mois ou 1 300 DH / an | 2 |
 
 Essai gratuit de 30 jours, sans carte bancaire. Paiement par virement, puis activation par code de licence.
 

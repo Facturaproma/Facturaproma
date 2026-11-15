@@ -32,9 +32,8 @@ Hors cible pour l'instant : PME avec retenue à la source ou acomptes complexes,
 | Essai | 30 jours, sans carte (décision du 12/11/2026) | Mesurer l'activation (30 jours pour les comptes créés après l'activation ; 14 jours auparavant) |
 | Mensuel | 49 DH/mois | Prix d'entrée ; référence actuelle |
 | Annuel | 449 DH/an (≈ 37 DH/mois) | Réduit le désabonnement |
-| Fondateur (30 premiers clients) | 299 DH/an | Premiers clients, retours détaillés en échange |
 
-Test proposé : proposer le Fondateur aux 30 premiers essayeurs ; à partir du 31e, tester Mensuel 49 vs 69 DH sur deux groupes aléatoires de 30 pour mesurer la sensibilité au prix. Ne rien déduire avant ~30 essayeurs par variante. Moyens de paiement : via le mécanisme actuel d'activation par code après paiement (virement, etc.) — **à confirmer** sur les moyens réellement acceptés légalement par votre statut ; ne pas annoncer un paiement par carte tant qu'il n'existe pas.
+Test proposé : tester Mensuel 49 vs 69 DH sur deux groupes aléatoires de 30 pour mesurer la sensibilité au prix. Ne rien déduire avant ~30 essayeurs par variante. Moyens de paiement : via le mécanisme actuel d'activation par code après paiement (virement, etc.) — **à confirmer** sur les moyens réellement acceptés légalement par votre statut ; ne pas annoncer un paiement par carte tant qu'il n'existe pas.
 
 ## 5. Plan sur 30 jours
 
@@ -43,7 +42,7 @@ Test proposé : proposer le Fondateur aux 30 premiers essayeurs ; à partir du 3
 | 0 (préalable) | Production prête et sûre | Préproduction validée ; accord écrit ; sauvegarde ; SQL 14 puis appli |
 | 1 | 10 premiers utilisateurs en essai | Votre réseau personnel et professionnel (collègues, anciens stagiaires, freelances connus) ; 1 appel de 15 min chacun |
 | 2 | 20 essayeurs | Groupes Facebook/WhatsApp de freelances et auto-entrepreneurs (en respectant leurs règles), démonstration vidéo courte de 60 s |
-| 3 | Premiers paiements | Relance des essayeurs actifs ; offre Fondateur limitée dans le temps |
+| 3 | Premiers paiements | Relance des essayeurs actifs  |
 | 4 | Décision | Bilan chiffré ; on garde, on change le prix ou la cible |
 
 Canaux à ne pas surévaluer : publicité payante (budget 300 MAD/mois, peu de marge d'apprentissage), annuaires. Priorité au bouche-à-oreille et aux démonstrations.
@@ -68,6 +67,5 @@ Compter uniquement des événements agrégés (factures émises, relances envoy�
 
 ## 8. Décisions à prendre ensemble
 
-- Fondateur 299 DH/an : on le garde tel quel ou on le limite à 30 ?
 - Statut fiscal pour encaisser (déclaration des revenus de FacturaPro) : à vérifier avec votre comptable.
 - Premier groupe pilote : 10 personnes de votre entourage professionnel prêtes à donner un retour écrit.
