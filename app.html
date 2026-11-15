@@ -14605,6 +14605,17 @@ async function teamOnLogin() {
             await License.refresh();
         }
     }
+    // Invitation perdue (lien de confirmation ouvert dans un autre navigateur) : le serveur rattache l'utilisateur par son adresse CONFIRMÉE
+    if (!tok && USE_SUPABASE && ensureSupabase() && Team.serverReady && !(Team.ctx && Team.ctx.member)) {
+        try {
+            const r = await supaClient.rpc('account_accept_my_invitation');
+            if (r && !r.error && r.data) {
+                try { sessionStorage.setItem('fp_team_joined', '1'); } catch (e) {}
+                await Storage.setCurrentUser(Storage._currentUserId);
+                await License.refresh();
+            } else if (r && r.error && !teamServerMissing(r.error)) showToast(teamErr(r.error), 'error');
+        } catch (e) {}
+    }
     try { if (sessionStorage.getItem('fp_team_joined') === '1' && Team.isCollaborator()) { sessionStorage.removeItem('fp_team_joined'); showToast('Invitation acceptée : vous travaillez maintenant dans l\'entreprise de votre équipe.', 'success'); } } catch (e) {}
     // un collaborateur n'a pas d'assistant de démarrage : l'entreprise est déjà configurée par son titulaire
     if (Team.isCollaborator() && !Storage.get('onboarded')) Storage.set('onboarded', true);
