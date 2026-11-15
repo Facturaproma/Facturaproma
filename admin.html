@@ -940,6 +940,12 @@
                         <option value="expired">Expirés</option>
                         <option value="suspended">Suspendus</option>
                     </select>
+                    <select id="filterKind" class="search-input" onchange="renderUsers()" style="max-width: 190px;">
+                        <option value="all">Tous les types</option>
+                        <option value="staff">Administrateurs du site</option>
+                        <option value="team">Équipes</option>
+                        <option value="solo">Comptes solo</option>
+                    </select>
                     <select id="filterConnected" class="search-input" onchange="renderUsers()" style="max-width: 210px;">
                         <option value="real">Comptes connectés</option>
                         <option value="unconfirmed">Jamais connectés (non confirmés)</option>
@@ -2987,6 +2993,16 @@ const PLAN_LABEL = { trial: 'Essai', monthly: 'Mensuel', semestrial: 'Semestriel
 
 // Compte « réel » : s'est déjà connecté (lien de confirmation cliqué), ou possède une offre payante, ou fait partie de l'équipe.
 // Les inscriptions jamais confirmées (adresses bidon) ne comptent pas et sont masquées par défaut.
+let teamsAvailable = false;
+// Type d'un compte pour l'administration : administrateur du site, membre d'une équipe (entreprise à 2 personnes ou plus) ou solo.
+function acctKind(a) {
+    if (a.is_staff) return 'staff';
+    if (teamsAvailable && a.team && a.team.members >= 2) return 'team';
+    return 'solo';
+}
+const ACCT_KIND_LABEL = { staff: '🛡️ Administrateurs du site', team: '👥 Équipes', solo: '👤 Comptes solo' };
+const ACCT_KIND_ORDER = { staff: 0, team: 1, solo: 2 };
+const TEAM_ROLE_LABEL = { owner: 'Propriétaire', admin: 'Administrateur', member: 'Collaborateur' };
 function isRealAccount(a) { return !!(a.last_sign_in || a.is_staff || PAID_TYPES.includes(a.type)); }
 
 // ---- Pagination des listes (10 par page, onglets 1 2 3…) --------------------
@@ -3063,6 +3079,16 @@ async function loadAccounts() {
                 allAccounts.forEach(a => { a.company_name = byId.get(a.user_id) || ''; });
             }
         } catch (e) { /* sql/28 absent : on continue sans nom de société */ }
+        // Équipes (sql/65) : facultatif. Sans la fonction, aucun regroupement : les comptes restent listés à plat.
+        teamsAvailable = false;
+        try {
+            const { data: tm, error: tErr } = await supaClient.rpc('admin_account_equipes');
+            if (!tErr && Array.isArray(tm)) {
+                const byUser = new Map(tm.map(t => [t.user_id, t]));
+                allAccounts.forEach(a => { a.team = byUser.get(a.user_id) || null; });
+                teamsAvailable = true;
+            }
+        } catch (e) { /* sql/65 absent : on continue sans regroupement */ }
         accountsAvailable = true;
         accountsError = '';
     } catch (e) {
@@ -3126,7 +3152,7 @@ function acctStatusBadge(a) {
         if (g !== null) return `<span class="badge badge-warning">En grâce (${g} j)</span>`;
     }
     return {
-        staff: '<span class="badge badge-mute">Équipe</span>',
+        staff: '<span class="badge badge-mute">Admin du site</span>',
         suspended: '<span class="badge badge-danger">Suspendu</span>',
         paid: '<span class="badge badge-success">Actif</span>',
         paid_expired: '<span class="badge badge-danger">Expiré</span>',
@@ -3578,8 +3604,10 @@ function renderUsers() {
     const search = (document.getElementById('searchUsers')?.value || '').toLowerCase();
     const filter = document.getElementById('filterUsers')?.value || 'all';
     const scope = document.getElementById('filterConnected')?.value || 'real';
+    const kind = document.getElementById('filterKind')?.value || 'all';
     const hidden = allAccounts.filter(a => !isRealAccount(a)).length;
     const rows = allAccounts.filter(a => {
+        if (kind !== 'all' && acctKind(a) !== kind) return false;
         if (search && !((a.email || '').toLowerCase().includes(search) || (a.company_name || '').toLowerCase().includes(search))) return false;
         if (scope === 'real' && !isRealAccount(a)) return false;
         if (scope === 'unconfirmed' && isRealAccount(a)) return false;
@@ -3590,6 +3618,11 @@ function renderUsers() {
         if (filter === 'suspended') return st === 'suspended';
         return true;
     });
+    // Ordre : administrateurs du site, puis équipes (une entreprise après l'autre, propriétaire en tête), puis comptes solo
+    const teamKey = a => acctKind(a) === 'team' ? ((a.team.account_name || '') + '|' + a.team.account_id) : '';
+    const roleRank = a => a.team ? ({ owner: 0, admin: 1, member: 2 }[a.team.role] ?? 3) : 0;
+    rows.sort((x, y) => (ACCT_KIND_ORDER[acctKind(x)] - ACCT_KIND_ORDER[acctKind(y)])
+        || teamKey(x).localeCompare(teamKey(y), 'fr') || (roleRank(x) - roleRank(y)) || (new Date(y.created_at) - new Date(x.created_at)));
 
     const tbody = document.getElementById('usersTable');
     if (rows.length === 0) {
@@ -3597,8 +3630,17 @@ function renderUsers() {
         return;
     }
 
-    const pg_users = fpPaginate('users', rows, fpSig(rows, search + '|' + filter + '|' + scope), renderUsers); fpHost(tbody, pg_users.html);
-    tbody.innerHTML = (scope === 'real' && hidden ? `<tr><td colspan="8" class="empty" style="padding:8px;"><small>${hidden} inscription(s) jamais connectée(s) masquée(s) — voir « Jamais connectés ».</small></td></tr>` : '') + pg_users.items.map(a => {
+    const pg_users = fpPaginate('users', rows, fpSig(rows, search + '|' + filter + '|' + scope + '|' + kind), renderUsers); fpHost(tbody, pg_users.html);
+    tbody.innerHTML = (scope === 'real' && hidden ? `<tr><td colspan="8" class="empty" style="padding:8px;"><small>${hidden} inscription(s) jamais connectée(s) masquée(s) — voir « Jamais connectés ».</small></td></tr>` : '') + (() => {
+        let prevKind = null, prevTeam = null;
+        return pg_users.items.map(a => {
+        const k = acctKind(a), tk = teamKey(a);
+        let head = '';
+        if (teamsAvailable && k !== prevKind) head += `<tr><td colspan="8" style="background:var(--bg-soft, #eef1f6); font-weight:700; font-size:13px; padding:10px 14px;">${ACCT_KIND_LABEL[k]} <span class="badge badge-mute">${rows.filter(r => acctKind(r) === k).length}</span></td></tr>`;
+        if (k === 'team' && tk !== prevTeam) {
+            head += `<tr><td colspan="8" style="padding:8px 14px 6px 24px; font-size:12px; color:var(--ink-mute); border-bottom:none;">🏢 <strong>${esc(a.team.account_name || a.company_name || 'Entreprise')}</strong> · formule ${esc(a.team.plan_key)} · ${a.team.members} membres</td></tr>`;
+        }
+        prevKind = k; prevTeam = tk;
         const st = acctState(a);
         const d = acctDaysLeft(a);
         const plan = PLAN_LABEL[acctPlanKey(a)] || a.type;
@@ -3618,9 +3660,9 @@ function renderUsers() {
             <button class="btn btn-secondary btn-sm" onclick="openLicenseModal(${jsArg(a.user_id)})">⚙️ Licence</button>
             <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend(${jsArg(a.user_id)})">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>
             <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount(${jsArg(a.user_id)})">🗑️ Supprimer</button>`;
-        return `
+        return head + `
             <tr>
-                <td><strong>${esc(a.email)}</strong>${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
+                <td><strong>${esc(a.email)}</strong>${k === 'team' ? ` <span class="badge badge-mute">${esc(TEAM_ROLE_LABEL[a.team.role] || a.team.role)}${a.team.status === 'disabled' ? ' · désactivé' : ''}</span>` : ''}${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
                 <td>${formatDate(a.created_at)}</td>
                 <td>${activity}</td>
                 <td style="font-size:12px;">${a.invoices_count} fact.<br>${a.clients_count} clients</td>
@@ -3629,7 +3671,8 @@ function renderUsers() {
                 <td>${acctStatusBadge(a)}</td>
                 <td style="white-space:nowrap;">${actions}</td>
             </tr>`;
-    }).join('');
+        }).join('');
+    })();
 }
 
 function renderUsersLegacy() {
