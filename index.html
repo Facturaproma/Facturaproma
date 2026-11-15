@@ -617,6 +617,12 @@
         }
 
         /* === FEATURES === */
+        .nv-list { list-style: none; padding: 0; margin: 12px 0 0; font-size: 14px; }
+        .nv-list li { position: relative; padding: 5px 0 5px 20px; color: var(--ink-soft, inherit); }
+        .nv-list li::before { content: "✓"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+        [dir="rtl"] .nv-list li { padding: 5px 20px 5px 0; }
+        [dir="rtl"] .nv-list li::before { left: auto; right: 0; }
+        .nv-card { text-align: start; }
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1181,6 +1187,8 @@
             section { padding-top: 40px !important; padding-bottom: 40px !important; }
             .features-grid { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
             .feature { padding: 14px !important; }
+            #nouveautes .features-grid { grid-template-columns: 1fr !important; }
+            #nouveautes .feature { padding: 18px !important; }
             .feature p { font-size: 13px; }
             .alt-pricing { gap: 14px !important; }
             .social-proof { display: none; }
@@ -1341,11 +1349,7 @@
                     <span>🇲🇦 Pensé pour la facturation au Maroc</span>
                 </div>
                 <h1>La facturation<br>marocaine, <em>enfin simple</em>.</h1>
-                <p class="hero-tagline">
-                    Le logiciel pensé par et pour les <strong>auto-entrepreneurs</strong>, 
-                    <strong>freelances</strong> et <strong>SARL</strong> du Maroc. 
-                    ICE, IF, RC, CNSS, TVA — tout est déjà intégré.
-                </p>
+                <p class="hero-tagline">Facturez, gérez et suivez votre activité simplement avec un outil pensé pour les entreprises marocaines.</p>
                 <div class="hero-cta">
                     <a href="app.html?mode=signup" class="btn btn-primary btn-large">
                         Essayer gratuitement →
@@ -1476,6 +1480,63 @@
     </div>
 </section>
 
+<!-- ============ PRICING ============ -->
+<section id="tarifs">
+    <div class="container">
+        <div class="section-eyebrow">TARIFS</div>
+        <h2 class="section-title">Choisissez votre <em>formule</em></h2>
+        <p class="section-subtitle">
+            Deux formules sans engagement. Prix TTC, TVA 20 % incluse.
+        </p>
+        
+        <div class="alt-pricing" style="margin-top: 32px;">
+            <div class="alt-tier featured" style="position: relative; background: linear-gradient(180deg, rgba(27, 58, 107, 0.02), rgba(201, 169, 91, 0.05));">
+                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">🏆 Meilleur choix</div>
+                <h4>Essentielle</h4>
+                <div class="alt-price">99 DH<small> TTC/mois</small></div>
+                <p class="price-calc">ou <strong>700 DH TTC/an</strong></p>
+                <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit ~58 DH TTC/mois en annuel</p>
+                <ul>
+                    <li>1 utilisateur</li>
+                    <li>Factures, devis, avoirs, clients et produits</li>
+                    <li>PDF en français et en arabe</li>
+                    <li>Tableau de bord et TVA</li>
+                    <li>Achats, fournisseurs et retenue à la source</li>
+                </ul>
+                <a href="app.html?mode=signup" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 16px;">
+                    Commencer l'essai gratuit
+                </a>
+            </div>
+            
+            <div class="alt-tier" style="position: relative;">
+                <h4>Pro</h4>
+                <div class="alt-price">179 DH<small> TTC/mois</small></div>
+                <p class="price-calc">ou <strong>1 300 DH TTC/an</strong></p>
+                <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit ~108 DH TTC/mois en annuel</p>
+                <ul>
+                    <li>2 utilisateurs : vous et un collaborateur</li>
+                    <li>Tout l'Essentielle</li>
+                    <li>Les mêmes clients, factures et devis pour les deux</li>
+                    <li>Accès au choix : gestion complète, ventes ou lecture seule</li>
+                    <li>CNSS et rapports</li>
+                </ul>
+                <a href="app.html?mode=signup" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px;">
+                    Commencer l'essai gratuit
+                </a>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 48px; padding: 24px; background: rgba(201, 169, 91, 0.05); border-radius: 16px; border-left: 4px solid var(--accent);">
+            <div style="font-size: 20px; margin-bottom: 8px;">🎁</div>
+            <p style="font-weight: 600; margin-bottom: 4px;">Essayez 30 jours gratuitement</p>
+            <p style="color: var(--ink-mute); font-size: 14px; margin-bottom: 12px;">Sans carte bancaire. Sans engagement. Annulable à tout moment.</p>
+            <a href="app.html?mode=signup" class="btn btn-accent" style="margin-top: 4px;">
+                Commencer l'essai gratuit →
+            </a>
+        </div>
+    </div>
+</section>
+
 <!-- ============ FEATURES ============ -->
 <section id="fonctionnalites">
     <div class="container">
@@ -1514,62 +1575,40 @@
                 <h3>PDF professionnel</h3>
                 <p>Prêt à envoyer ou imprimer, avec vos coordonnées bancaires.</p>
             </div>
+            <div class="feature"><div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11H6.2z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div><h3>Achats et fournisseurs</h3><p>Suivez vos achats, vos fournisseurs et vos règlements, avec les dettes restant à payer.</p></div>
+            <div class="feature"><div class="feature-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></div><h3>Rapports</h3><p>Suivez votre activité et vos impayés d'un coup d'œil (formule Pro).</p></div>
         </div>
     </div>
 </section>
 
-<!-- ============ PRICING ============ -->
-<section id="tarifs">
+<!-- ============ NOUVEAUTÉS ============ -->
+<section id="nouveautes">
     <div class="container">
-        <div class="section-eyebrow">TARIFS</div>
-        <h2 class="section-title">Choisissez votre <em>formule</em></h2>
-        <p class="section-subtitle">
-            Deux formules sans engagement. Prix TTC, TVA 20 % incluse.
-        </p>
-        
-        <div class="alt-pricing" style="margin-top: 32px;">
-            <div class="alt-tier featured" style="position: relative; background: linear-gradient(180deg, rgba(27, 58, 107, 0.02), rgba(201, 169, 91, 0.05));">
-                <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">🏆 Meilleur choix</div>
-                <h4>Essentielle</h4>
-                <div class="alt-price">99 DH<small> TTC/mois</small></div>
-                <p class="price-calc">ou <strong>700 DH TTC/an</strong></p>
-                <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit ~58 DH TTC/mois en annuel</p>
-                <ul>
-                    <li>1 utilisateur</li>
-                    <li>Factures, devis, avoirs, clients et produits</li>
-                    <li>PDF en français et en arabe</li>
-                    <li>Tableau de bord et TVA</li>
-                </ul>
-                <a href="app.html?mode=signup" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 16px;">
-                    Commencer l'essai gratuit
-                </a>
-            </div>
-            
-            <div class="alt-tier" style="position: relative;">
-                <h4>Pro</h4>
-                <div class="alt-price">179 DH<small> TTC/mois</small></div>
-                <p class="price-calc">ou <strong>1 300 DH TTC/an</strong></p>
-                <p style="font-size: 12px; color: var(--ink-mute); margin-bottom: 12px;">Soit ~108 DH TTC/mois en annuel</p>
-                <ul>
-                    <li>2 utilisateurs : vous et un collaborateur</li>
-                    <li>Tout l'Essentielle</li>
-                    <li>Les mêmes clients, factures et devis pour les deux</li>
-                    <li>Accès au choix : gestion complète, ventes ou lecture seule</li>
-                    <li>CNSS et rapports</li>
-                </ul>
-                <a href="app.html?mode=signup" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 16px;">
-                    Commencer l'essai gratuit
-                </a>
-            </div>
+        <div class="section-eyebrow">NOUVEAUTÉS</div>
+        <h2 class="section-title">Nouvelles fonctionnalités fiscales et de gestion</h2>
+        <p class="section-subtitle">Des contrôles automatiques pour les cas pris en charge. Une situation insuffisamment déterminée est bloquée : c'est un contrôle de sécurité du logiciel.</p>
+        <div class="features-grid">
+<div class="feature nv-card"><h3>Retenue à la source sur les fournisseurs</h3><p>Gestion de la retenue à la source sur la TVA des fournisseurs : calcul automatique lorsque les conditions sont déterminées.</p><ul class="nv-list"><li>Contrôle des conditions applicables</li><li>Gestion des attestations</li><li>Dette fournisseur et trésorerie distinguées</li><li>Suivi de la retenue</li><li>Fichier préparé pour SIMPL-TVA lorsque le cas est pris en charge</li><li>Blocage automatique des situations non suffisamment déterminées</li></ul></div>
+<div class="feature nv-card"><h3>Retenue à la source sur vos ventes</h3><p>Gestion de la retenue à la source sur vos ventes.</p><ul class="nv-list"><li>Calcul automatique</li><li>Montant facturé, retenue et montant encaissé distingués</li><li>Traçabilité des opérations</li><li>Préparation du relevé RDRS et export dans le format actuellement intégré</li></ul></div>
+<div class="feature nv-card"><h3>Exonérations et attestations</h3><p>Gestion des exonérations fiscales.</p><ul class="nv-list"><li>Choix du régime et du motif</li><li>Référence de l'attestation et période de validité</li><li>Justificatif joint</li><li>Contrôle avant émission</li><li>Traçabilité conservée</li></ul></div>
+<div class="feature nv-card"><h3>Travaillez à plusieurs sur la même entreprise</h3><p>Avec la formule Pro, deux personnes travaillent sur les mêmes données.</p><ul class="nv-list"><li>2 utilisateurs avec Pro</li><li>Gestion des accès</li><li>Partage des clients et documents selon les droits</li><li>Retrait d'un membre sans suppression des données</li></ul></div>
         </div>
+        <p class="section-subtitle" style="margin-top: 24px; font-size: 13px;">Les règles fiscales actuellement prises en charge évoluent : vérifiez vos obligations auprès de la DGI ou de votre comptable.</p>
+    </div>
+</section>
 
-        <div style="text-align: center; margin-top: 48px; padding: 24px; background: rgba(201, 169, 91, 0.05); border-radius: 16px; border-left: 4px solid var(--accent);">
-            <div style="font-size: 20px; margin-bottom: 8px;">🎁</div>
-            <p style="font-weight: 600; margin-bottom: 4px;">Essayez 30 jours gratuitement</p>
-            <p style="color: var(--ink-mute); font-size: 14px; margin-bottom: 12px;">Sans carte bancaire. Sans engagement. Annulable à tout moment.</p>
-            <a href="app.html?mode=signup" class="btn btn-accent" style="margin-top: 4px;">
-                Commencer l'essai gratuit →
-            </a>
+<!-- ============ POURQUOI FACTURAPRO ============ -->
+<section id="avantages">
+    <div class="container">
+        <div class="section-eyebrow">AVANTAGES</div>
+        <h2 class="section-title">Pourquoi FacturaPro ?</h2>
+        <div class="features-grid">
+            <div class="feature"><h3>Pensé pour les entreprises marocaines</h3><p>Une gestion adaptée aux besoins administratifs et fiscaux des entreprises marocaines.</p></div>
+            <div class="feature"><h3>Simple</h3><p>Créez vos devis, factures, avoirs et paiements sans complexité inutile.</p></div>
+            <div class="feature"><h3>Fiscalité intégrée</h3><p>TVA, exonérations et retenues à la source intégrées directement dans vos processus.</p></div>
+            <div class="feature"><h3>Sécurisé</h3><p>Vos données sont isolées par entreprise et les opérations sensibles sont contrôlées côté serveur.</p></div>
+            <div class="feature"><h3>Travail en équipe</h3><p>Avec Pro, plusieurs utilisateurs peuvent travailler sur la même entreprise avec des accès adaptés.</p></div>
+            <div class="feature"><h3>Accessible</h3><p>Utilisez FacturaPro depuis votre ordinateur ou votre téléphone.</p></div>
         </div>
     </div>
 </section>
@@ -1848,6 +1887,57 @@
 <script>
 /* ===== Bascule français / arabe (traduction par texte exact) ===== */
 const AR_DICT = {
+"Facturez, gérez et suivez votre activité simplement avec un outil pensé pour les entreprises marocaines.": "فوتِر وسيّر وتابع نشاطك ببساطة مع أداة مصمَّمة للمقاولات المغربية.",
+"Achats et fournisseurs": "المشتريات والموردون",
+"Suivez vos achats, vos fournisseurs et vos règlements, avec les dettes restant à payer.": "تابع مشترياتك وموردِيك ودفعاتك، مع الديون المتبقية للأداء.",
+"Rapports": "التقارير",
+"Suivez votre activité et vos impayés d'un coup d'œil (formule Pro).": "تابع نشاطك ومستحقاتك غير المؤداة بنظرة واحدة (صيغة Pro).",
+"NOUVEAUTÉS": "المستجدات",
+"Nouvelles fonctionnalités fiscales et de gestion": "ميزات جبائية وتدبيرية جديدة",
+"Des contrôles automatiques pour les cas pris en charge. Une situation insuffisamment déterminée est bloquée : c'est un contrôle de sécurité du logiciel.": "مراقبات تلقائية للحالات المدعومة. أي حالة غير محدّدة بما يكفي تُحجب : إنها مراقبة أمان في البرنامج.",
+"Retenue à la source sur les fournisseurs": "الاقتطاع من المنبع على الموردين",
+"Gestion de la retenue à la source sur la TVA des fournisseurs : calcul automatique lorsque les conditions sont déterminées.": "تدبير الاقتطاع من المنبع على الضريبة على القيمة المضافة للموردين : احتساب تلقائي عندما تكون الشروط محدّدة.",
+"Contrôle des conditions applicables": "مراقبة الشروط المطبّقة",
+"Gestion des attestations": "تدبير الشهادات",
+"Dette fournisseur et trésorerie distinguées": "التمييز بين دين المورد والخزينة",
+"Suivi de la retenue": "تتبّع الاقتطاع",
+"Fichier préparé pour SIMPL-TVA lorsque le cas est pris en charge": "ملف مُعَدّ لـ SIMPL-TVA عندما تكون الحالة مدعومة",
+"Blocage automatique des situations non suffisamment déterminées": "حجب تلقائي للحالات غير المحدّدة بما يكفي",
+"Retenue à la source sur vos ventes": "الاقتطاع من المنبع على مبيعاتك",
+"Gestion de la retenue à la source sur vos ventes.": "تدبير الاقتطاع من المنبع على مبيعاتك.",
+"Calcul automatique": "احتساب تلقائي",
+"Montant facturé, retenue et montant encaissé distingués": "التمييز بين المبلغ المفوتر والاقتطاع والمبلغ المقبوض",
+"Traçabilité des opérations": "تتبّع العمليات",
+"Préparation du relevé RDRS et export dans le format actuellement intégré": "إعداد بيان RDRS وتصديره بالصيغة المدمجة حاليًا",
+"Exonérations et attestations": "الإعفاءات والشهادات",
+"Gestion des exonérations fiscales.": "تدبير الإعفاءات الضريبية.",
+"Choix du régime et du motif": "اختيار النظام والسبب",
+"Référence de l'attestation et période de validité": "مرجع الشهادة ومدة صلاحيتها",
+"Justificatif joint": "وثيقة إثبات مرفقة",
+"Contrôle avant émission": "مراقبة قبل الإصدار",
+"Traçabilité conservée": "تتبّع محفوظ",
+"Travaillez à plusieurs sur la même entreprise": "اشتغلوا معًا على نفس المقاولة",
+"Avec la formule Pro, deux personnes travaillent sur les mêmes données.": "مع صيغة Pro، يشتغل شخصان على نفس المعطيات.",
+"2 utilisateurs avec Pro": "مستخدمان مع Pro",
+"Gestion des accès": "تدبير الولوج",
+"Partage des clients et documents selon les droits": "تقاسم الزبناء والوثائق حسب الصلاحيات",
+"Retrait d'un membre sans suppression des données": "سحب عضو دون حذف المعطيات",
+"Les règles fiscales actuellement prises en charge évoluent : vérifiez vos obligations auprès de la DGI ou de votre comptable.": "القواعد الجبائية المدعومة حاليًا تتغيّر : تحقّق من التزاماتك لدى المديرية العامة للضرائب أو محاسبك.",
+"AVANTAGES": "المزايا",
+"Pourquoi FacturaPro ?": "لماذا FacturaPro ؟",
+"Pensé pour les entreprises marocaines": "مصمَّم للمقاولات المغربية",
+"Une gestion adaptée aux besoins administratifs et fiscaux des entreprises marocaines.": "تدبير يتلاءم مع الحاجيات الإدارية والجبائية للمقاولات المغربية.",
+"Simple": "بسيط",
+"Créez vos devis, factures, avoirs et paiements sans complexité inutile.": "أنشئ عروض الأثمان والفواتير والأصول الدائنة والدفعات دون تعقيد غير ضروري.",
+"Fiscalité intégrée": "جباية مدمجة",
+"TVA, exonérations et retenues à la source intégrées directement dans vos processus.": "الضريبة على القيمة المضافة والإعفاءات والاقتطاعات من المنبع مدمجة مباشرة في عملك اليومي.",
+"Sécurisé": "آمن",
+"Vos données sont isolées par entreprise et les opérations sensibles sont contrôlées côté serveur.": "معطياتك معزولة لكل مقاولة والعمليات الحساسة تُراقَب على مستوى الخادم.",
+"Travail en équipe": "عمل جماعي",
+"Avec Pro, plusieurs utilisateurs peuvent travailler sur la même entreprise avec des accès adaptés.": "مع Pro، يمكن لعدة مستخدمين الاشتغال على نفس المقاولة بصلاحيات ملائمة.",
+"Accessible": "في المتناول",
+"Utilisez FacturaPro depuis votre ordinateur ou votre téléphone.": "استعمل FacturaPro من حاسوبك أو هاتفك.",
+"Achats, fournisseurs et retenue à la source": "المشتريات والموردون والاقتطاع من المنبع",
 "Fonctionnalités": "المميزات",
 "Tarifs": "الأسعار",
 "FAQ": "أسئلة شائعة",
