@@ -4713,6 +4713,7 @@
                             <button class="btn btn-secondary" style="margin-top: 12px;" onclick="exportVatReportCSV()">⬇️ Exporter le rapport (CSV)</button>
                             <button class="btn btn-ghost" style="margin-top: 8px;" onclick="exportRasReleveCSV()">⬇️ Retenues à la source subies (CSV)</button>
                             <button class="btn btn-ghost" style="margin-top: 8px;" onclick="openRdrsExport()" id="rdrsExportBtn">📄 Export RDRS (retenues subies)</button>
+                            <button class="btn btn-ghost" style="margin-top: 8px;" onclick="openTvarsExport()" id="tvarsExportBtn">📄 Export TVARS (retenues pratiquées)</button>
                         </div>
                         <div class="notice" id="tvaExemptNotice" style="display:none; margin-top: 12px;">
                             Les auto-entrepreneurs ne facturent pas de TVA : aucun rapport TVA à produire. Voir l'onglet IR / la page CNSS pour les déclarations de chiffre d'affaires.
@@ -5617,6 +5618,29 @@
     </div>
 </div>
 
+<div class="modal-overlay" id="tvarsModal" onclick="closeModalIfBg(event, 'tvarsModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 820px;">
+        <h2>TVA retenue à la source sur vos fournisseurs (TVARS)</h2>
+        <p class="fiscal-hint">Bordereau d'avis de versement de la TVA que vous avez retenue sur vos fournisseurs (régimes de retenue IV et V de la TVA), au format EDI TVARS V2.0 de la DGI. Fichier préparé pour SIMPL-TVA : vérifiez-le avant le dépôt. Ce module est distinct du relevé RDRS (retenues subies sur vos ventes).</p>
+        <details id="tvPayeurBox" style="margin-bottom: 12px;"><summary><strong>Votre statut de payeur</strong> <span id="tvPayeurEtat"></span></summary>
+            <div class="form-group"><label for="tvForme">Vous êtes *</label><select id="tvForme"><option value="">— À renseigner —</option>
+                <option value="pm_prive">Personne morale de droit privé</option><option value="pp_rnr_rns">Personne physique (résultat net réel ou simplifié)</option><option value="pp_autre">Autre personne physique</option>
+                <option value="public_marches">État, collectivité, établissement public ou autre personne morale de droit public soumise aux marchés publics</option><option value="entreprise_publique">Entreprise publique</option></select></div>
+            <div class="form-group"><label for="tvCredit">Établissement de crédit, organisme assimilé, assurance ou réassurance *</label><select id="tvCredit"><option value="">— À renseigner —</option><option value="non">Non</option><option value="oui">Oui</option></select></div>
+            <div class="form-row"><div><label for="tvCA">Chiffre d'affaires hors TVA du dernier exercice clos (DH)</label><input type="number" id="tvCA" min="0" step="0.01" inputmode="decimal"></div>
+                <div><label for="tvCAAn">Exercice</label><input type="number" id="tvCAAn" min="2000" max="2099" step="1" inputmode="numeric"></div></div>
+            <p class="fiscal-hint">Le chiffre d'affaires sert à déterminer l'extension de la retenue (LF 2026 : 500 MDH au 01/07/2026, 350 MDH au 01/01/2027, 200 MDH au 01/01/2028). Rien n'est supposé : sans ces informations, les achats concernés sont bloqués.</p>
+            <button class="btn btn-secondary" onclick="tvarsPayeurSave()">Enregistrer mon statut</button></details>
+        <div class="form-row"><div><label for="tvMonth">Mois du paiement aux fournisseurs *</label><input type="month" id="tvMonth" onchange="tvarsReset()"></div></div>
+        <div id="tvarsResult" aria-live="polite"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('tvarsModal')">Fermer</button>
+            <button class="btn btn-secondary" id="tvarsCheckBtn" onclick="tvarsControler()">Contrôler les retenues</button>
+            <button class="btn btn-primary" id="tvarsDownloadBtn" onclick="tvarsTelecharger()" style="display: none;">Télécharger le fichier (.zip)</button>
+        </div>
+    </div>
+</div>
+
 <!-- ============ ACCOUNTING EXPORT MODAL ============ -->
 <div class="modal-overlay" id="accountingExportModal" onclick="closeModalIfBg(event, 'accountingExportModal')">
     <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 560px;">
@@ -5892,7 +5916,16 @@
         <div class="form-group"><label for="stMode">Mode de paiement *</label><select id="stMode"><option value="especes">1-Espèces</option><option value="cheque">2-Chèque</option><option value="prelevement">3-Prélèvement</option><option value="virement" selected>4-Virement</option><option value="effet">5-Effet</option><option value="compensation">6-Compensation</option><option value="autre">7-Autres</option></select></div>
         <div class="form-row">
             <div><label>Montant (DH) *</label><input type="number" id="stAmount" min="0.01" step="0.01" inputmode="decimal"></div>
-            <div><label>Date du règlement *</label><input type="date" id="stDate"></div>
+            <div><label>Date du règlement *</label><input type="date" id="stDate" onchange="tvarsSettleEval()"></div>
+        </div>
+        <div id="stTvars" style="display: none; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px;">
+            <strong>Retenue à la source de la TVA</strong>
+            <div class="form-group"><label for="stTvNature">Nature de l'achat *</label><select id="stTvNature" onchange="tvarsSettleEval()"><option value="">— À choisir —</option>
+                <option value="bien_equipement">Biens d'équipement</option><option value="travaux">Travaux</option><option value="service">Services</option><option value="non_concerne">Non concerné (ex. marchandises destinées à la vente)</option></select></div>
+            <div class="form-group" id="stTvListeRow" style="display: none;"><label for="stTvListe">Liste de la prestation *</label><select id="stTvListe" onchange="tvarsSettleEval()"><option value="">— À choisir —</option>
+                <option value="A">Liste A</option><option value="B">Liste B</option><option value="hors_liste">Ni A ni B</option></select>
+                <p class="fiscal-hint">Les listes A et B figurent en annexe du décret n° 2-06-574 : consultez-les, FacturaPro ne les devine pas.</p></div>
+            <div id="stTvResult" aria-live="polite"></div>
         </div>
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('settleModal')">Annuler</button>
@@ -5979,6 +6012,18 @@
         <div class="form-row">
             <div><label>Téléphone *</label><input type="tel" id="supPhone" maxlength="30" placeholder="06 12 34 56 78"></div>
             <div><label>E-mail</label><input type="email" id="supEmail" maxlength="120"></div>
+        </div>
+        <div id="supTvarsBox" style="display: none; border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px;">
+            <strong>Retenue à la source de la TVA (TVARS)</strong>
+            <div class="form-row"><div><label for="supTvPers">Personne *</label><select id="supTvPers"><option value="">— À renseigner —</option><option value="physique">Personne physique</option><option value="morale">Personne morale</option></select></div>
+                <div><label for="supTvIf">IF du fournisseur (8 caractères au plus)</label><input type="text" id="supTvIf" maxlength="8"></div></div>
+            <div class="form-group"><label for="supTvAss">Assujetti à la TVA *</label><select id="supTvAss"><option value="">— À renseigner —</option><option value="oui">Oui</option><option value="non">Non (hors champ ou exonéré sans droit à déduction)</option></select></div>
+            <details><summary>Attestation de régularité fiscale</summary>
+                <div id="supTvAttList" class="fiscal-hint"></div>
+                <div class="form-row"><div><label for="supAttRef">Référence</label><input type="text" id="supAttRef" maxlength="60"></div><div><label for="supAttDeliv">Délivrée le</label><input type="date" id="supAttDeliv"></div></div>
+                <div class="form-row"><div><label for="supAttPres">Présentée le</label><input type="date" id="supAttPres"></div>
+                    <div><label for="supAttVer">Authenticité vérifiée sur le site de la DGI</label><select id="supAttVer"><option value="">— À renseigner —</option><option value="oui">Oui</option><option value="non">Non</option></select></div></div>
+                <p class="fiscal-hint">Valable moins de 6 mois ; à présenter au plus tard au paiement. Une attestation non vérifiée n'est pas prise en compte.</p></details>
         </div>
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('supplierModal')">Annuler</button>
@@ -11089,13 +11134,17 @@ async function purLoad(force) {
         list.forEach(pu => { pu.credits = credits.filter(c => c.purchase_id === pu.id).map(c => ({ id: c.id, number: c.number, date: c.doc_date, supplierRef: c.supplier_ref || '', reason: c.reason,
             totalHT: Number(c.total_ht), totalTVA: Number(c.total_tva), totalTTC: Number(c.total_ttc), lines: (c.lines || []).map(l => ({ lineNo: l.line_no, qty: Number(l.qty), price: Number(l.unit_price), totalHT: Number(l.total_ht), totalTVA: Number(l.total_tva), returned: Number(l.returned_qty) || 0, description: l.description, nature: l.nature, category: l.category, tva: Number(l.tva_rate) })) }));
             pu.credited = purR2(pu.credits.reduce((t, c) => t + c.totalTTC, 0)); });
+        // Retenues à la source de TVA (sql/61) : réduisent la dette ; serveur sans sql/61 → aucune retenue
+        const rt = await supaClient.rpc('fiscal_tvars_retenues_achats');
+        const ret = rt.error ? [] : (rt.data || []);
+        list.forEach(pu => { const r = ret.find(x => x.purchase_id === pu.id); pu.retenue = r ? Number(r.retenue) : 0; });
         _purCache = list;
         return _purCache;
     })();
     try { return await _purLoading; } finally { _purLoading = null; }
 }
 // Reste dû à un fournisseur : TTC − règlements − avoirs fournisseurs (jamais négatif)
-function purDue(p) { return p ? Math.max(0, purR2(p.totalTTC - (p.paid || 0) - (p.credited || 0))) : 0; }
+function purDue(p) { return p ? Math.max(0, purR2(p.totalTTC - (p.paid || 0) - (p.credited || 0) - (p.retenue || 0))) : 0; }
 function purTotals(lines) {
     let ht = 0, tva = 0;
     (lines || []).forEach(l => { const h = purR2((Number(l.qty) || 0) * (Number(l.price) || 0)); ht += h; tva += purR2(h * (Number(l.tva) || 0) / 100); });
@@ -11374,6 +11423,7 @@ function openSupplierModal(id, fromPurchase) {
     document.getElementById('supplierModalTitle').textContent = s ? 'Modifier le fournisseur' : 'Nouveau fournisseur';
     [['supName', 'name'], ['supICE', 'ice'], ['supIF', 'if'], ['supRC', 'rc'], ['supPhone', 'phone'], ['supEmail', 'email'], ['supAddress', 'address'], ['supCity', 'city']].forEach(([el, k]) => { document.getElementById(el).value = (s && s[k]) || ''; });
     document.getElementById('supKind').value = partyKindOf(s); partyKindUI('sup');
+    tvarsSupplierFill(s ? s.id : null, s);
     document.getElementById('supplierModal').classList.add('active');
 }
 function saveSupplier() {
@@ -11388,6 +11438,7 @@ function saveSupplier() {
     const i = list.findIndex(x => x.id === data.id);
     if (i >= 0) list[i] = { ...list[i], ...data }; else list.push({ ...data, createdAt: new Date().toISOString() });
     Storage.set('suppliers', list);
+    tvarsSupplierSave(data.id);
     closeModal('supplierModal');
     showToast('Fournisseur enregistré ✓', 'success');
     if (_supplierFromPurchase) fillSupplierSelect(data.id);
@@ -11966,11 +12017,26 @@ async function openSettle(purchaseId) {
     payModeFollowAccount('stAccount', 'stMode');
     document.getElementById('stAmount').value = rest > 0 ? rest : '';
     document.getElementById('stDate').value = todayISO();
+    tvarsSettleInit(p);
     document.getElementById('settleModal').classList.add('active');
 }
 async function saveSettle() {
     const amount = Math.round(parseFloat(document.getElementById('stAmount').value) * 100) / 100;
     if (!(amount > 0)) return showToast('Montant invalide', 'error');
+    const tv = _tvSettle && _tvSettle.ev;
+    if (_tvSettle && _tvSettle.active) {
+        if (!tv || tv.statut === 'bloque') return showToast('Retenue à la source : cas bloqué, corrigez les points indiqués avant de régler.', 'error');
+        if (tv.statut === 'retenue') {
+            const r = await supaClient.rpc('fiscal_tvars_regler', { p: { key: _cashKey, purchase_id: _settleId, account_id: document.getElementById('stAccount').value, date: document.getElementById('stDate').value,
+                nature: document.getElementById('stTvNature').value, liste: document.getElementById('stTvListe').value || null } });
+            if (r.error) return showToast(fiscalErrMsg(r.error), 'error');
+            closeModal('settleModal');
+            await purLoad(true).catch(() => {});
+            showToast(`Règlement net enregistré ✓ — TVA retenue à la source ${formatCurrency(r.data.montant)} (à verser à la DGI avant la fin du mois suivant)`, 'success');
+            if (document.getElementById('page-treasury').classList.contains('active')) renderTreasury(); else renderPurchases();
+            return;
+        }
+    }
     const { data, error } = await supaClient.rpc('supplier_settle', { p: { key: _cashKey, purchase_id: _settleId, account_id: document.getElementById('stAccount').value, amount, date: document.getElementById('stDate').value, mode: document.getElementById('stMode').value } });
     if (error) return showToast(/REGLEMENT_SUPERIEUR_A_LA_DETTE/.test(error.message) ? 'Montant supérieur au reste à payer.' : finErrorText(error.message), 'error');
     closeModal('settleModal');
@@ -13332,6 +13398,187 @@ async function rdrsTelecharger() {
         dedDownload(zipStore([{ name: stem + '.xml', data: xml }]), stem + '.zip');
         window.__rdrsLast = { xml, stem };
         showToast('Fichier préparé pour Simpl-TVA ✓ (XML validé par le XSD officiel, zippé)', 'success');
+    } finally { btn.disabled = false; }
+}
+
+// ============================================
+// TVARS — TVA RETENUE À LA SOURCE PRATIQUÉE SUR LES FOURNISSEURS (sql/61)
+// Sources : Note 735 (régimes IV et V), Note 737 (LF 2026), communiqués DGI, cahier EDI TVARS V2.0, annexe 1, XSD (Annexe 3).
+// Le SERVEUR décide (régime, taux, montant) : l'application n'a aucun champ de taux libre. Le cas non défini par les textes est BLOQUÉ.
+// Module distinct du RDRS : autre fichier (VersementRetenueSources), autres natures (1 équipement, 2 travaux, 3 services), autres tables.
+// ============================================
+const TVARS_XSD_URL = 'vendor/dgi/tvars-v2.0-Annexe3_TVARetenueSource.xsd';
+const TVARS_XSD_SHA256 = '4e59d8e53219293d66da3e77ec96511bb7d6a7a1aa898e08c6377e499e1abb52';   // fichier officiel fourni, octet pour octet
+const Tvars = {
+    ctx: null, unsupported: false, _p: null,
+    async load(force) {
+        if (!Fiscal.available()) return null;
+        if (this.ctx && !force) return this.ctx;
+        if (this._p && !force) return this._p;
+        this._p = (async () => {
+            try {
+                const { data, error } = await supaClient.rpc('fiscal_tvars_context');
+                if (error) { if (error.code === 'PGRST202' || error.code === '42883') this.unsupported = true; return this.ctx; }
+                this.ctx = data || null; this.unsupported = false; return this.ctx;
+            } catch (e) { return this.ctx; } finally { this._p = null; }
+        })();
+        return this._p;
+    },
+    supplier(id) { return ((this.ctx && this.ctx.fournisseurs) || []).find(f => f.supplier_id === id) || null; },
+    attestations(id) { return ((this.ctx && this.ctx.attestations) || []).filter(a => a.supplier_id === id && a.statut === 'active'); },
+    configured() { return !!(this.ctx && this.ctx.declarant); }
+};
+// ----- Fiche fournisseur -----
+function tvarsSupplierFill(id, s) {
+    const box = document.getElementById('supTvarsBox'); if (!box) return;
+    ['supAttRef', 'supAttDeliv', 'supAttPres'].forEach(e => { document.getElementById(e).value = ''; }); document.getElementById('supAttVer').value = '';
+    const draw = () => {
+        const on = !!(Tvars.ctx && !Tvars.unsupported); box.style.display = on ? '' : 'none'; if (!on) return;
+        const f = id ? Tvars.supplier(id) : null;
+        document.getElementById('supTvPers').value = f && f.personne ? f.personne : '';
+        document.getElementById('supTvIf').value = f && f.ifu ? f.ifu : '';
+        document.getElementById('supTvAss').value = f && f.assujetti != null ? (f.assujetti ? 'oui' : 'non') : '';
+        const at = id ? Tvars.attestations(id) : [];
+        document.getElementById('supTvAttList').innerHTML = at.length ? at.map(a => `${escapeHtml(a.reference)} — délivrée le ${formatDate(a.date_delivrance)}, présentée le ${formatDate(a.date_presentation)}, ${a.verifiee ? 'vérifiée' : 'non vérifiée'}`).join('<br>') : 'Aucune attestation enregistrée.';
+    };
+    draw(); Tvars.load().then(draw);
+}
+async function tvarsSupplierSave(id) {
+    if (!Tvars.ctx || Tvars.unsupported || !Fiscal.available()) return;
+    const pers = document.getElementById('supTvPers').value, ifu = document.getElementById('supTvIf').value.trim(), ass = document.getElementById('supTvAss').value;
+    const ref = document.getElementById('supAttRef').value.trim(), dl = document.getElementById('supAttDeliv').value, pr = document.getElementById('supAttPres').value, ver = document.getElementById('supAttVer').value;
+    const cur = Tvars.supplier(id);
+    const call = async (fn, args) => { for (let i = 0; i < 4; i++) { const r = await supaClient.rpc(fn, args); if (!r.error || !/FOURNISSEUR_INTROUVABLE/.test(r.error.message || '')) return r; await new Promise(res => setTimeout(res, 1500)); } return supaClient.rpc(fn, args); };
+    if (pers || ifu || ass || cur) {
+        const changed = !cur || (cur.personne || '') !== pers || (cur.ifu || '') !== ifu || (cur.assujetti == null ? '' : cur.assujetti ? 'oui' : 'non') !== ass;
+        if (changed) {
+            const { data, error } = await call('fiscal_tvars_fournisseur_save', { p_supplier_id: id, p_personne: pers || null, p_ifu: ifu || null, p_assujetti: ass ? ass === 'oui' : null, p_version: cur ? cur.version : null });
+            if (error) return showToast('Données TVARS non enregistrées : ' + fiscalErrMsg(error), 'error');
+            if (data && data.conflict) { await Tvars.load(true); return showToast('Fiche modifiée entre-temps sur un autre appareil : rouvrez la fiche.', 'error'); }
+        }
+    }
+    if (ref || dl || pr || ver) {
+        const { error } = await call('fiscal_tvars_attestation_add', { p_supplier_id: id, p_reference: ref, p_delivrance: dl || null, p_presentation: pr || null, p_verifiee: ver ? ver === 'oui' : null });
+        if (error) showToast('Attestation non enregistrée : ' + fiscalErrMsg(error), 'error');
+    }
+    await Tvars.load(true);
+}
+// ----- Règlement fournisseur -----
+let _tvSettle = null, _tvTok = 0;
+async function tvarsSettleInit(p) {
+    _tvSettle = { active: false, ev: null, purchase: p };
+    const box = document.getElementById('stTvars'); box.style.display = 'none';
+    document.getElementById('stTvNature').value = ''; document.getElementById('stTvListe').value = ''; document.getElementById('stTvListeRow').style.display = 'none'; document.getElementById('stTvResult').innerHTML = '';
+    document.getElementById('stAmount').readOnly = false;
+    if (!Fiscal.available()) return;
+    await Tvars.load();
+    if (!Tvars.ctx || Tvars.unsupported || !Tvars.configured()) return;     // module non configuré : règlement ordinaire inchangé
+    _tvSettle.active = true; box.style.display = '';
+    document.getElementById('stTvResult').innerHTML = '<p class="fiscal-hint">Choisissez la nature de l\'achat : le serveur détermine la retenue éventuelle.</p>';
+}
+async function tvarsSettleEval() {
+    if (!_tvSettle || !_tvSettle.active) return;
+    const nat = document.getElementById('stTvNature').value, row = document.getElementById('stTvListeRow'), out = document.getElementById('stTvResult');
+    row.style.display = nat === 'service' ? '' : 'none';
+    const amt = document.getElementById('stAmount'); amt.readOnly = false; _tvSettle.ev = null;
+    if (!nat) { out.innerHTML = '<p class="fiscal-hint">Choisissez la nature de l\'achat.</p>'; return; }
+    const tok = ++_tvTok;
+    const { data, error } = await supaClient.rpc('fiscal_tvars_evaluer', { p_purchase: _tvSettle.purchase.id, p_date: document.getElementById('stDate').value, p_nature: nat, p_liste: document.getElementById('stTvListe').value || null });
+    if (tok !== _tvTok) return;
+    if (error) { out.innerHTML = `<div class="notice error">${escapeHtml(fiscalErrMsg(error))}</div>`; return; }
+    _tvSettle.ev = data;
+    const ju = (data.justification || []).map(j => `<li>${escapeHtml(j.regle)} <em>(${escapeHtml(j.source)})</em></li>`).join('');
+    const av = (data.avertissements || []).map(a => `<li>${escapeHtml(a)}</li>`).join('');
+    if (data.statut === 'bloque') {
+        out.innerHTML = `<div class="notice error" role="alert"><strong>Retenue à la source : cas bloqué</strong><ul>${(data.blocages || []).map(b => `<li>${escapeHtml(b.message)}${b.correction ? ' — ' + escapeHtml(b.correction) : ''}</li>`).join('')}</ul></div>`;
+    } else if (data.statut === 'aucune_retenue') {
+        out.innerHTML = `<div class="notice success">Aucune retenue à opérer.</div><ul class="fiscal-hint">${ju}</ul>`;
+    } else {
+        amt.value = data.net_a_payer; amt.readOnly = true;
+        out.innerHTML = `<div class="notice"><strong>Retenue de TVA : ${formatCurrency(data.montant_total)}</strong> — régime ${escapeHtml(data.regime)}, ${data.taux_retenue} % de ${formatCurrency(data.tva)} de TVA. À régler au fournisseur : <strong>${formatCurrency(data.net_a_payer)}</strong> ; retenue à verser à la DGI : ${formatCurrency(data.montant_total)}.</div><ul class="fiscal-hint">${ju}${av}</ul>`;
+    }
+}
+// ----- Export TVARS -----
+let _tvPrep = null;
+function tvarsReset() { _tvPrep = null; document.getElementById('tvarsResult').innerHTML = ''; document.getElementById('tvarsDownloadBtn').style.display = 'none'; }
+async function openTvarsExport() {
+    if (!Fiscal.available()) return showToast('Export TVARS : connexion au serveur requise', 'error');
+    const t = new Date(todayISO() + 'T12:00:00'); if (!document.getElementById('tvMonth').value) document.getElementById('tvMonth').value = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0');
+    tvarsReset(); document.getElementById('tvarsModal').classList.add('active');
+    await Tvars.load(true);
+    if (Tvars.unsupported || !Tvars.ctx) { document.getElementById('tvarsResult').innerHTML = '<div class="notice error">Module TVARS indisponible sur le serveur.</div>'; return; }
+    const d = Tvars.ctx.declarant; document.getElementById('tvPayeurEtat').textContent = d ? '— renseigné' : '— à renseigner';
+    document.getElementById('tvPayeurBox').open = !d;
+    if (d) { document.getElementById('tvForme').value = d.forme; document.getElementById('tvCredit').value = d.credit_assurance ? 'oui' : 'non'; document.getElementById('tvCA').value = d.ca_dernier_exercice == null ? '' : d.ca_dernier_exercice; document.getElementById('tvCAAn').value = d.ca_exercice == null ? '' : d.ca_exercice; }
+}
+async function tvarsPayeurSave() {
+    const forme = document.getElementById('tvForme').value, cr = document.getElementById('tvCredit').value, ca = document.getElementById('tvCA').value, an = document.getElementById('tvCAAn').value, d = Tvars.ctx && Tvars.ctx.declarant;
+    if (!forme || !cr) return showToast('Renseignez votre statut et la ligne crédit / assurance', 'error');
+    const { data, error } = await supaClient.rpc('fiscal_tvars_declarant_save', { p_forme: forme, p_credit_assurance: cr === 'oui', p_ca: ca === '' ? null : Number(ca), p_ca_exercice: an === '' ? null : Number(an), p_version: d ? d.version : null });
+    if (error) return showToast(fiscalErrMsg(error), 'error');
+    if (data && data.conflict) { await Tvars.load(true); return showToast('Statut modifié entre-temps sur un autre appareil : rouvrez la fenêtre.', 'error'); }
+    await Tvars.load(true); document.getElementById('tvPayeurEtat').textContent = '— renseigné'; tvarsReset(); showToast('Statut de payeur enregistré ✓', 'success');
+}
+function tvarsPeriode() { const v = document.getElementById('tvMonth').value; const m = /^(\d{4})-(\d{2})$/.exec(v || ''); return m ? { annee: Number(m[1]), mois: Number(m[2]) } : null; }
+function tvarsErreursHtml(errs) {
+    return `<div class="notice error" role="alert"><strong>${errs.length} point(s) à corriger avant de produire le fichier</strong></div><div class="table-container"><table class="table"><thead><tr><th>Achat</th><th>Champ</th><th>Valeur</th><th>Raison</th><th>Correction attendue</th></tr></thead><tbody>${errs.map(e =>
+        `<tr><td>${escapeHtml(e.achat || '—')}</td><td>${escapeHtml(e.champ)}</td><td>${escapeHtml(e.valeur == null ? '(vide)' : e.valeur)}</td><td>${escapeHtml(e.raison)}</td><td>${escapeHtml(e.correction || '')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function tvarsControler() {
+    const p = tvarsPeriode(); if (!p) return showToast('Choisissez le mois', 'error');
+    tvarsReset();
+    const box = document.getElementById('tvarsResult'), btn = document.getElementById('tvarsCheckBtn'); btn.disabled = true; box.innerHTML = '<p>Contrôle en cours…</p>';
+    try {
+        const [pr, rp] = await Promise.all([supaClient.rpc('fiscal_tvars_preparer', { p_annee: p.annee, p_mois: p.mois }), supaClient.rpc('fiscal_tvars_rapprochement', { p_annee: p.annee, p_mois: p.mois })]);
+        if (pr.error) { box.innerHTML = `<div class="notice error">${escapeHtml(fiscalErrMsg(pr.error))}</div>`; return; }
+        const d = pr.data, r = rp.data || {}, av = (d.avertissements || []).map(a => `<li>${escapeHtml(a)}</li>`).join('');
+        const recap = `<p>Retenues : <strong>${d.retenues}</strong> · HT ${formatCurrency(d.total_ht)} · TVA ${formatCurrency(d.total_tva)} · <strong>TVA retenue ${formatCurrency(d.total_retenue)}</strong> · versement à effectuer avant le ${formatDate(d.echeance)}.</p>`;
+        const vers = r.statut === 'verse' ? `<div class="notice success">Versement enregistré : ${formatCurrency(r.verse)} le ${formatDate(r.date_versement)}.</div>`
+            : (d.total_retenue > 0 ? `<div class="form-row" style="align-items:end;"><div><label for="tvVDate">Date du versement à la DGI</label><input type="date" id="tvVDate" value="${todayISO()}"></div><div><label for="tvVAcc">Compte</label><select id="tvVAcc">${typeof cashAccountOptions === 'function' ? cashAccountOptions(cashDefaultAccount('virement')) : ''}</select></div><div><button class="btn btn-secondary" onclick="tvarsVerser()">Enregistrer le versement (${formatCurrency(d.total_retenue)})</button></div></div>` : '');
+        if (!d.ok) { box.innerHTML = ((d.erreurs || []).length ? tvarsErreursHtml(d.erreurs) : `<div class="notice">Aucune ligne à déclarer sur ce mois.</div>`) + recap + (av ? `<ul class="fiscal-hint">${av}</ul>` : ''); return; }
+        _tvPrep = d;
+        box.innerHTML = `<div class="notice success">Contrôle serveur terminé. Fichier préparé pour SIMPL-TVA, à vérifier avant le dépôt.</div>${recap}${vers}${av ? `<ul class="fiscal-hint">${av}</ul>` : ''}`;
+        document.getElementById('tvarsDownloadBtn').style.display = '';
+    } catch (e) { box.innerHTML = `<div class="notice error">Contrôle impossible : ${escapeHtml(fiscalErrMsg(e))}</div>`; } finally { btn.disabled = false; }
+}
+async function tvarsVerser() {
+    const p = tvarsPeriode(), dt = document.getElementById('tvVDate').value, acc = document.getElementById('tvVAcc').value;
+    if (!p || !_tvPrep || !acc || !dt) return showToast('Compte et date requis', 'error');
+    if (!confirm(`Enregistrer le versement de ${formatCurrency(_tvPrep.total_retenue)} à la DGI ?`)) return;
+    const { error } = await supaClient.rpc('fiscal_tvars_versement', { p_annee: p.annee, p_mois: p.mois, p_account: acc, p_date: dt, p_montant: _tvPrep.total_retenue, p_key: 'tvv:' + p.annee + '-' + p.mois + ':' + uuid() });
+    if (error) return showToast(fiscalErrMsg(error), 'error');
+    showToast('Versement enregistré ✓', 'success'); tvarsControler();
+}
+// Fichier XML TVARS à partir des lignes préparées par le serveur (balises et ordre du XSD officiel ; UTF-8). Pure.
+function tvarsXml(prep) {
+    const h = prep.entete, L = ['<?xml version="1.0" encoding="UTF-8"?>', '<VersementRetenueSources>', '<identifiantFiscal>' + xmlEsc(h.identifiantFiscal) + '</identifiantFiscal>', '<annee>' + xmlEsc(h.annee) + '</annee>',
+        '<periode>' + xmlEsc(h.periode) + '</periode>', '<regime>' + xmlEsc(h.regime) + '</regime>', '<fournisseurs>'];
+    (prep.lignes || []).forEach(r => {
+        L.push('<fournisseur><ifuFournisseur>' + xmlEsc(r.ifuFournisseur) + '</ifuFournisseur><numFacture>' + xmlEsc(r.numFacture) + '</numFacture><datePaiement>' + xmlEsc(r.datePaiement) + '</datePaiement>'
+            + '<dateOperation>' + xmlEsc(r.dateOperation) + '</dateOperation><refNatOpt>' + xmlEsc(r.refNatOpt) + '</refNatOpt><montantHT>' + xmlEsc(r.montantHT) + '</montantHT>'
+            + '<tauxTva>' + xmlEsc(r.tauxTva) + '</tauxTva><tauxRetenuSource>' + xmlEsc(r.tauxRetenuSource) + '</tauxRetenuSource></fournisseur>');
+    });
+    L.push('</fournisseurs>', '</VersementRetenueSources>');
+    return L.join('\n');
+}
+const tvarsFileStem = (h) => 'tvars_' + String(h.identifiantFiscal || '').replace(/[^A-Za-z0-9]/g, '') + '_' + h.annee + '_' + String(h.periode).padStart(2, '0');
+async function tvarsXsdValidate(xml) {
+    const [mod, buf] = await Promise.all([import(RDRS_XMLLINT_URL), fetch(TVARS_XSD_URL, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('XSD officiel introuvable'); return r.arrayBuffer(); })]);
+    if (await rdrsSha256(buf) !== TVARS_XSD_SHA256) throw new Error('XSD officiel altéré : empreinte différente');
+    const res = await mod.validateXML({ xml: [{ fileName: 'tvars.xml', contents: xml }], schema: [{ fileName: 'tvars.xsd', contents: new TextDecoder('utf-8').decode(buf) }] });
+    return { valid: res.valid === true, errors: (res.errors || []).map(e => String(e.message || e.rawMessage || e)) };
+}
+async function tvarsTelecharger() {
+    if (!_tvPrep || !_tvPrep.ok) return;
+    const btn = document.getElementById('tvarsDownloadBtn'), box = document.getElementById('tvarsResult'); btn.disabled = true;
+    try {
+        const xml = tvarsXml(_tvPrep); let v;
+        try { v = await tvarsXsdValidate(xml); } catch (e) { box.insertAdjacentHTML('beforeend', `<div class="notice error">Validation XSD impossible (${escapeHtml(e.message || String(e))}) : aucun fichier produit.</div>`); return; }
+        if (!v.valid) { box.insertAdjacentHTML('beforeend', `<div class="notice error"><strong>Fichier refusé par le XSD officiel : aucun fichier produit.</strong><ul>${v.errors.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`); return; }
+        const stem = tvarsFileStem(_tvPrep.entete);
+        dedDownload(zipStore([{ name: stem + '.xml', data: xml }]), stem + '.zip');
+        window.__tvarsLast = { xml, stem };
+        showToast('Fichier préparé pour SIMPL-TVA ✓ (XML validé par le XSD officiel, zippé)', 'success');
     } finally { btn.disabled = false; }
 }
 
