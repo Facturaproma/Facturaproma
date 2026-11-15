@@ -4712,6 +4712,7 @@
                             <p class="subtitle" id="tvaReportNote" style="margin-top: 8px;"></p>
                             <button class="btn btn-secondary" style="margin-top: 12px;" onclick="exportVatReportCSV()">⬇️ Exporter le rapport (CSV)</button>
                             <button class="btn btn-ghost" style="margin-top: 8px;" onclick="exportRasReleveCSV()">⬇️ Retenues à la source subies (CSV)</button>
+                            <button class="btn btn-ghost" style="margin-top: 8px;" onclick="openRdrsExport()" id="rdrsExportBtn">📄 Export RDRS (retenues subies)</button>
                         </div>
                         <div class="notice" id="tvaExemptNotice" style="display:none; margin-top: 12px;">
                             Les auto-entrepreneurs ne facturent pas de TVA : aucun rapport TVA à produire. Voir l'onglet IR / la page CNSS pour les déclarations de chiffre d'affaires.
@@ -5580,12 +5581,38 @@
                 <div><label for="clientRasBase">Calculé sur *</label>
                     <select id="clientRasBase"><option value="ttc">le montant TTC</option><option value="ht">le montant HT</option><option value="tva">le montant de la TVA</option></select></div>
             </div>
+            <div class="form-group" id="clientRdrsRow" style="display: none;">
+                <label for="clientRdrsType">Type de client</label>
+                <select id="clientRdrsType"></select>
+                <p class="fiscal-hint">Utilisé pour le relevé détaillé des retenues à la source (Simpl-TVA). Rien n'est déduit : sans type choisi, les retenues de ce client ne peuvent pas être exportées.</p>
+            </div>
             <div id="clientFiscalNotice"></div>
         </div>
 
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('clientModal')">Annuler</button>
             <button class="btn btn-primary" onclick="saveClient()">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ EXPORT RDRS (relevé détaillé de la retenue à la source subie) ============ -->
+<div class="modal-overlay" id="rdrsModal" onclick="closeModalIfBg(event, 'rdrsModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 760px;">
+        <h2>Export RDRS</h2>
+        <p class="fiscal-hint">Relevé détaillé des retenues à la source de TVA subies sur vos ventes, au format du cahier des charges EDI RDRS V1.0 de la DGI. Fichier préparé pour Simpl-TVA : vérifiez-le avant le dépôt.</p>
+        <p id="rdrsPeriode"></p>
+        <fieldset class="form-group" style="border: 0; padding: 0;">
+            <legend>Rattachement des retenues à la période *</legend>
+            <label style="display: block;"><input type="radio" name="rdrsCritere" value="date_paiement" onchange="rdrsReset()"> Date de paiement (date de la retenue)</label>
+            <label style="display: block;"><input type="radio" name="rdrsCritere" value="date_operation" onchange="rdrsReset()"> Date de l'opération (date de la facture)</label>
+            <p class="fiscal-hint">Ce rattachement n'est pas défini dans le cahier des charges fourni : choisissez-le avec votre comptable. Aucun choix n'est fait par défaut.</p>
+        </fieldset>
+        <div id="rdrsResult" aria-live="polite"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('rdrsModal')">Fermer</button>
+            <button class="btn btn-secondary" id="rdrsCheckBtn" onclick="rdrsControler()">Contrôler les retenues</button>
+            <button class="btn btn-primary" id="rdrsDownloadBtn" onclick="rdrsTelecharger()" style="display: none;">Télécharger le fichier (.zip)</button>
         </div>
     </div>
 </div>
@@ -10624,7 +10651,8 @@ function saveClient() {
     
     Storage.set('clients', clients);
     // régime fiscal et retenue : enregistrés sur le serveur (contrôlés et journalisés) après la fiche
-    clientFiscalSave(data.id);
+    const rdrsType = document.getElementById('clientRdrsType') ? document.getElementById('clientRdrsType').value : undefined;
+    clientFiscalSave(data.id).then(() => rdrsClientSave(data.id, rdrsType));
     closeModal('clientModal');
     showToast('Client enregistré ✓', 'success');
     
@@ -13165,6 +13193,146 @@ async function exportRasReleveCSV() {
     a.href = url; a.download = `retenues-source-${String(per.label || per.start).replace(/\s+/g, '-')}-${todayISO()}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     showToast('Relevé des retenues téléchargé ✓ (document de travail)', 'success');
+}
+
+// ============================================
+// RDRS — RELEVÉ DÉTAILLÉ DE LA RETENUE À LA SOURCE SUBIE (sql/60)
+// Source : cahier des charges EDI RDRS V1.0 (DGI), annexe 1 V1.0, exemple V1.0, XSD (Annexe 3). Le serveur prépare et contrôle les
+// lignes (fiscal_rdrs_preparer, lecture seule) ; l'application écrit le XML, le valide contre le XSD OFFICIEL (libxml2 compilé en
+// WebAssembly, xmllint-wasm 5.3.0 hébergé avec le site), puis le zippe. Aucun dépôt ni appel à la DGI. Le TVARS (retenues pratiquées
+// sur les fournisseurs) n'est pas traité ici.
+// ============================================
+const RDRS_XSD_URL = 'vendor/dgi/rdrs-v1.0-Annexe3_ReleveDetailleRetenueSource.xsd';
+const RDRS_XSD_SHA256 = 'ef47271668a619e2c24f501a96339dea485dfa37fcc290b3d7bedf14746d7cf4';   // fichier officiel fourni, octet pour octet
+const RDRS_XMLLINT_URL = './vendor/xmllint-wasm-5.3.0/index-browser.js';
+const Rdrs = {
+    ctx: null, unsupported: false, _p: null,
+    async load(force) {
+        if (!Fiscal.available()) return null;
+        if (this.ctx && !force) return this.ctx;
+        if (this._p && !force) return this._p;
+        this._p = (async () => {
+            try {
+                const { data, error } = await supaClient.rpc('fiscal_rdrs_context');
+                if (error) { if (error.code === 'PGRST202' || error.code === '42883') this.unsupported = true; return this.ctx; }
+                this.ctx = data || null; this.unsupported = false; return this.ctx;
+            } catch (e) { return this.ctx; } finally { this._p = null; }
+        })();
+        return this._p;
+    },
+    client(id) { return ((this.ctx && this.ctx.clients) || []).find(c => c.client_id === id) || null; }
+};
+// Fiche client : type de client (refTypClt) — 5 valeurs de l'annexe, aucune présélection
+function rdrsClientFill(clientId) {
+    const row = document.getElementById('clientRdrsRow'), sel = document.getElementById('clientRdrsType');
+    if (!row || !sel) return;
+    const draw = () => {
+        if (editingClientId !== clientId) return;
+        const types = (Rdrs.ctx && Rdrs.ctx.types) || [];
+        row.style.display = types.length ? '' : 'none';
+        sel.innerHTML = '<option value="">— À renseigner —</option>' + types.map(t => `<option value="${Number(t.code)}">${escapeHtml(t.label)}</option>`).join('');
+        const c = clientId ? Rdrs.client(clientId) : null;
+        sel.value = c && c.ref_typ_clt ? String(c.ref_typ_clt) : '';
+    };
+    draw();
+    Rdrs.load().then(draw);
+}
+async function rdrsClientSave(clientId, choix) {
+    if (choix === undefined || !Rdrs.ctx || Rdrs.unsupported || !Fiscal.available()) return true;
+    const v = choix ? Number(choix) : null, cur = Rdrs.client(clientId);
+    if ((cur ? cur.ref_typ_clt || null : null) === v) return true;
+    const { data, error } = await supaClient.rpc('fiscal_rdrs_client_save', { p_client_id: clientId, p_ref_typ_clt: v, p_version: cur ? cur.version : null });
+    if (error) { showToast('Type de client non enregistré : ' + fiscalErrMsg(error), 'error'); return false; }
+    if (data && data.conflict) { await Rdrs.load(true); showToast('Type de client modifié entre-temps sur un autre appareil : rouvrez la fiche.', 'error'); return false; }
+    await Rdrs.load(true);
+    return true;
+}
+// Fichier XML RDRS à partir des lignes préparées par le serveur (balises, ordre et cardinalités du XSD ; dates AAAA-MM-JJ ; UTF-8). Pure.
+function rdrsXml(prep) {
+    const h = prep.entete, L = ['<?xml version="1.0" encoding="UTF-8"?>', '<DeclarationReleveRetenueSource>',
+        '<identifiantFiscal>' + xmlEsc(h.identifiantFiscal) + '</identifiantFiscal>', '<annee>' + xmlEsc(h.annee) + '</annee>',
+        '<periode>' + xmlEsc(h.periode) + '</periode>', '<regime>' + xmlEsc(h.regime) + '</regime>', '<releveRetenuSources>'];
+    (prep.lignes || []).forEach(r => {
+        const f = r.refF || {};
+        L.push('<rrs><refTypClt>' + xmlEsc(r.refTypClt) + '</refTypClt><refNatOpt>' + xmlEsc(r.refNatOpt) + '</refNatOpt><numFacture>' + xmlEsc(r.numFacture) + '</numFacture>'
+            + '<dateOperation>' + xmlEsc(r.dateOperation) + '</dateOperation><datePaiement>' + xmlEsc(r.datePaiement) + '</datePaiement><montantHt>' + xmlEsc(r.montantHt) + '</montantHt>'
+            + '<tauxTva>' + xmlEsc(r.tauxTva) + '</tauxTva><tauxRetenu>' + xmlEsc(r.tauxRetenu) + '</tauxRetenu><refF>'
+            + (f.if ? '<if>' + xmlEsc(f.if) + '</if>' : '') + '<nom>' + xmlEsc(f.nom) + '</nom>' + (f.ice ? '<ice>' + xmlEsc(f.ice) + '</ice>' : '') + '</refF></rrs>');
+    });
+    L.push('</releveRetenuSources>', '</DeclarationReleveRetenueSource>');
+    return L.join('\n');
+}
+const rdrsFileStem = (h) => 'rdrs_' + String(h.identifiantFiscal || '').replace(/[^A-Za-z0-9]/g, '') + '_' + h.annee + '_' + String(h.periode).padStart(2, '0');
+async function rdrsSha256(buf) { const d = await crypto.subtle.digest('SHA-256', buf); return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join(''); }
+// Validation RÉELLE contre le XSD officiel (fichier vérifié par empreinte) : { valid, errors } ; toute impossibilité = refus
+async function rdrsXsdValidate(xml) {
+    const [mod, buf] = await Promise.all([import(RDRS_XMLLINT_URL), fetch(RDRS_XSD_URL, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('XSD officiel introuvable'); return r.arrayBuffer(); })]);
+    if (await rdrsSha256(buf) !== RDRS_XSD_SHA256) throw new Error('XSD officiel altéré : empreinte différente');
+    const res = await mod.validateXML({ xml: [{ fileName: 'rdrs.xml', contents: xml }], schema: [{ fileName: 'rdrs.xsd', contents: new TextDecoder('utf-8').decode(buf) }] });
+    return { valid: res.valid === true, errors: (res.errors || []).map(e => String(e.message || e.rawMessage || e)) };
+}
+let _rdrsPrep = null, _rdrsPer = null;
+function rdrsPeriodeCourante() {
+    const regime = document.getElementById('tvaRegime').value;
+    if (regime !== 'monthly' && regime !== 'quarterly') return null;
+    const year = parseInt(document.getElementById('tvaYear').value, 10);
+    const per = vatPeriods(regime, year).find(p => p.key === document.getElementById('tvaPeriod').value);
+    if (!per) return null;
+    const m = /^([MQ])(\d+)$/.exec(per.key);
+    return { per, annee: year, regime: regime === 'monthly' ? 1 : 2, periode: parseInt(m[2], 10) + 1 };
+}
+function rdrsReset() { _rdrsPrep = null; document.getElementById('rdrsResult').innerHTML = ''; document.getElementById('rdrsDownloadBtn').style.display = 'none'; }
+function openRdrsExport() {
+    if (!Fiscal.available()) return showToast('Export RDRS : connexion au serveur requise', 'error');
+    const p = rdrsPeriodeCourante();
+    if (!p) return showToast('Export RDRS : choisissez un régime mensuel ou trimestriel et une période', 'error');
+    _rdrsPer = p;
+    document.querySelectorAll('input[name="rdrsCritere"]').forEach(i => { i.checked = false; });
+    document.getElementById('rdrsPeriode').innerHTML = `<strong>${escapeHtml(p.per.label)}</strong> — régime ${p.regime === 1 ? '1 (mensuel)' : '2 (trimestriel)'}, période ${p.periode}, du ${formatDate(p.per.start)} au ${formatDate(p.per.end)}`;
+    rdrsReset();
+    document.getElementById('rdrsModal').classList.add('active');
+}
+function rdrsErreursHtml(errs) {
+    const champ = { refTypClt: 'Type de client', refNatOpt: "Nature de l'opération", numFacture: 'N° de facture', dateOperation: "Date de l'opération", datePaiement: 'Date de paiement',
+        montantHt: 'Montant HT', tauxTva: 'Taux de TVA', tauxRetenu: 'Taux de retenue', 'refF/if': 'IF du client', 'refF/nom': 'Nom du client', 'refF/ice': 'ICE du client', identifiantFiscal: 'IF de votre entreprise' };
+    return `<div class="notice error" role="alert"><strong>${errs.length} point(s) à corriger avant de produire le fichier</strong></div><div class="table-container"><table class="table"><thead><tr>
+        <th>Facture</th><th>Client</th><th>Champ</th><th>Valeur</th><th>Raison</th><th>Correction attendue</th></tr></thead><tbody>${errs.map(e => `<tr><td>${escapeHtml(e.facture || '—')}</td>
+        <td>${escapeHtml(e.client || '—')}</td><td>${escapeHtml(champ[e.champ] || e.champ)}</td><td>${escapeHtml(e.valeur == null ? '(vide)' : e.valeur)}</td><td>${escapeHtml(e.raison)}</td>
+        <td>${escapeHtml(e.correction)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function rdrsControler() {
+    const c = document.querySelector('input[name="rdrsCritere"]:checked');
+    if (!c) return showToast('Choisissez le rattachement des retenues à la période', 'error');
+    rdrsReset();
+    const box = document.getElementById('rdrsResult'), btn = document.getElementById('rdrsCheckBtn');
+    btn.disabled = true; box.innerHTML = '<p>Contrôle en cours…</p>';
+    try {
+        const { data, error } = await supaClient.rpc('fiscal_rdrs_preparer', { p_annee: _rdrsPer.annee, p_regime: _rdrsPer.regime, p_periode: _rdrsPer.periode, p_critere: c.value });
+        if (error) { box.innerHTML = `<div class="notice error">${escapeHtml(fiscalErrMsg(error))}</div>`; return; }
+        const av = (data.avertissements || []).map(a => `<li>${escapeHtml(a)}</li>`).join('');
+        if (!data.ok) {
+            box.innerHTML = ((data.erreurs || []).length ? rdrsErreursHtml(data.erreurs) : `<div class="notice">Aucune ligne à déclarer : ${data.retenues} retenue(s) sur la période.</div>`) + (av ? `<ul class="fiscal-hint">${av}</ul>` : '');
+            return;
+        }
+        _rdrsPrep = data;
+        box.innerHTML = `<div class="notice success">Contrôle serveur terminé : ${data.retenues} retenue(s), ${data.lignes.length} ligne(s) rrs. Fichier préparé pour Simpl-TVA, à vérifier avant le dépôt.</div>${av ? `<ul class="fiscal-hint">${av}</ul>` : ''}`;
+        document.getElementById('rdrsDownloadBtn').style.display = '';
+    } catch (e) { box.innerHTML = `<div class="notice error">Contrôle impossible : ${escapeHtml(fiscalErrMsg(e))}</div>`; } finally { btn.disabled = false; }
+}
+async function rdrsTelecharger() {
+    if (!_rdrsPrep || !_rdrsPrep.ok) return;
+    const btn = document.getElementById('rdrsDownloadBtn'), box = document.getElementById('rdrsResult');
+    btn.disabled = true;
+    try {
+        const xml = rdrsXml(_rdrsPrep);
+        let v;
+        try { v = await rdrsXsdValidate(xml); } catch (e) { box.insertAdjacentHTML('beforeend', `<div class="notice error">Validation XSD impossible (${escapeHtml(e.message || String(e))}) : aucun fichier produit.</div>`); return; }
+        if (!v.valid) { box.insertAdjacentHTML('beforeend', `<div class="notice error"><strong>Fichier refusé par le XSD officiel : aucun fichier produit.</strong><ul>${v.errors.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`); return; }
+        const stem = rdrsFileStem(_rdrsPrep.entete);
+        dedDownload(zipStore([{ name: stem + '.xml', data: xml }]), stem + '.zip');
+        window.__rdrsLast = { xml, stem };
+        showToast('Fichier préparé pour Simpl-TVA ✓ (XML validé par le XSD officiel, zippé)', 'success');
+    } finally { btn.disabled = false; }
 }
 
 function switchTab(tab) {
@@ -16748,6 +16916,7 @@ function clientFiscalFill(clientId) {
     document.getElementById('clientRasBase').value = (prof && prof.ras_mode === 'personnalise' && prof.ras_base) || 'ttc';
     clientAttestationForm(false);
     clientFiscalUI(prof ? prof.attestation_id : null);
+    rdrsClientFill(clientId);
 }
 function clientFiscalUI(keepAtt) {
     const reg = Fiscal.regime(document.getElementById('clientFiscalRegime').value) || {};

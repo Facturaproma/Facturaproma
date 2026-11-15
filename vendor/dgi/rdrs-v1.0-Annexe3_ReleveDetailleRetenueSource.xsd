@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+	elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:simpleType name="ST_date">
+		<xs:restriction base="xs:date" />
+	</xs:simpleType>
+
+	<xs:simpleType name="StringRequired">
+		<xs:restriction base="xs:string">
+			<xs:minLength value="1"></xs:minLength>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:element name="DeclarationReleveRetenueSource">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="identifiantFiscal">
+					<xs:simpleType>
+						<xs:restriction base="xs:string">
+							<xs:pattern value=".*"></xs:pattern>
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:element>
+
+				<xs:element name="annee">
+					<xs:simpleType>
+						<xs:restriction base="xs:string">
+							<xs:minLength value="4"></xs:minLength>
+							<xs:maxLength value="4"></xs:maxLength>
+							<xs:pattern value=".*"></xs:pattern>
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:element>
+				<xs:element name="periode">
+					<xs:simpleType>
+						<xs:restriction base="xs:short">
+							<xs:enumeration value="1"></xs:enumeration>
+							<xs:enumeration value="2"></xs:enumeration>
+							<xs:enumeration value="3"></xs:enumeration>
+							<xs:enumeration value="4"></xs:enumeration>
+							<xs:enumeration value="5"></xs:enumeration>
+							<xs:enumeration value="6"></xs:enumeration>
+							<xs:enumeration value="7"></xs:enumeration>
+							<xs:enumeration value="8"></xs:enumeration>
+							<xs:enumeration value="9"></xs:enumeration>
+							<xs:enumeration value="10"></xs:enumeration>
+							<xs:enumeration value="11"></xs:enumeration>
+							<xs:enumeration value="12"></xs:enumeration>
+							<xs:pattern value=".*"></xs:pattern>
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:element>
+				<xs:element name="regime">
+					<xs:simpleType>
+						<xs:restriction base="xs:short">
+							<xs:pattern value=".*"></xs:pattern>
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:element>
+				<xs:element ref="releveRetenuSources" />
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="releveRetenuSources">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="rrs" maxOccurs="unbounded">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="refTypClt" type="refTypCltType"/>
+							<xs:element name="refNatOpt" type="refNatOptType"/>
+							<xs:element name="numFacture" type="xs:string" />
+							<xs:element name="dateOperation" type="xs:date" minOccurs="0"/>
+							<xs:element name="datePaiement" type="xs:date" minOccurs="0"/>
+							<xs:element name="montantHt" type="xs:double" />
+							<xs:element name="tauxTva" type="tauxTvaType"/>
+							<xs:element name="tauxRetenu" type="tauxRetenuType"/>
+							<xs:element ref="refF"/>
+						</xs:sequence>
+					</xs:complexType>
+				</xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="refF">
+		<xs:complexType>
+			<xs:all>
+				<xs:element name="if"  minOccurs="0">
+					<xs:simpleType>
+						<xs:restriction base="xs:string" >
+							<xs:maxLength value="8" />
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:element>
+				<xs:element name="nom">
+					<xs:simpleType>
+						<xs:restriction base="StringRequired">
+							<xs:maxLength value="255" />
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:element>
+				<xs:element name="ice" minOccurs="0">
+					<xs:simpleType>
+						<xs:restriction base="xs:string">
+							<xs:maxLength value="16" />
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:element>
+			</xs:all>
+		</xs:complexType>
+	</xs:element>
+	<xs:simpleType name="refTypCltType">
+		<xs:restriction base="xs:long">
+			<xs:enumeration value="1" />
+			<xs:enumeration value="2" />
+			<xs:enumeration value="3" />
+			<xs:enumeration value="4" />
+			<xs:enumeration value="5" />
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="refNatOptType">
+		<xs:restriction base="xs:long">
+			<xs:enumeration value="4" />
+			<xs:enumeration value="5" />
+			<xs:enumeration value="6" />
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="tauxTvaType">
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="8" />
+			<xs:enumeration value="9" />
+			<xs:enumeration value="10" />
+			<xs:enumeration value="11" />
+			<xs:enumeration value="12" />
+			<xs:enumeration value="13" />
+			<xs:enumeration value="15" />
+			<xs:enumeration value="16" />
+			<xs:enumeration value="18" />
+			<xs:enumeration value="20" />
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="tauxRetenuType">
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="100" />
+			<xs:enumeration value="75" />
+		</xs:restriction>
+	</xs:simpleType>
+</xs:schema>
