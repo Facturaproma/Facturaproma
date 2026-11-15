@@ -9578,6 +9578,7 @@ async function createCreditFromInvoice(id) {
         notes: `Avoir relatif à la facture ${original.number}\nMotif : ${reason}`,
         paymentTerms: '0',
         returnLines,                       // [] = avoir commercial sans retour ; [{ idx, qty }] = marchandise revenue en stock
+        ...creditFiscalOf(original),       // régime fiscal de la facture d'origine (exonération, motif, attestation) recopié à l'identique
         createdAt: new Date().toISOString()
     };
     
@@ -9588,6 +9589,12 @@ async function createCreditFromInvoice(id) {
     
     showToast(`✓ Avoir ${numeroAvoir} créé`, 'success');
     renderInvoices();
+}
+
+// Un avoir suit le régime fiscal de SA facture d'origine (sql/58) : copie à l'identique, sans revérifier l'attestation à la date de l'avoir
+function creditFiscalOf(original) {
+    const f = original && original.fiscal;
+    return f && typeof f === 'object' && f.regime && f.regime !== 'normal' ? { fiscal: JSON.parse(JSON.stringify(f)) } : {};
 }
 
 // ---- Avoir partiel ---------------------------------------------------------
@@ -9721,7 +9728,7 @@ async function createPartialCredit(id) {
             clientId: original.clientId, clientName: original.clientName, clientICE: original.clientICE, clientAddress: original.clientAddress,
             date: todayISO(), dueDate: todayISO(), items: b.items, ...b.totals, status: 'sent',
             notes: `Avoir partiel relatif à la facture ${original.number}\nMotif : ${reason}`,
-            paymentTerms: '0', returnLines: b.returnLines, createdAt: new Date().toISOString()
+            paymentTerms: '0', returnLines: b.returnLines, ...creditFiscalOf(original), createdAt: new Date().toISOString()
         };
         const fresh = Storage.get('invoices', []);
         fresh.push(credit);
