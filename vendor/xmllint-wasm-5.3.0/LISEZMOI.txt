@@ -1,0 +1,5 @@
+xmllint-wasm 5.3.0 (npm, licence MIT, voir COPYING) : libxml2 compilé en WebAssembly. Utilisé par l'application pour valider le
+fichier RDRS contre le XSD officiel de la DGI (vendor/dgi/), dans le navigateur, sans envoi du fichier.
+Fichiers repris du paquet npm xmllint-wasm@5.3.0 SANS modification, sauf l'extension .mjs → .js des deux scripts (type MIME
+JavaScript garanti par l'hébergement) et, dans index-browser.js, le nom du script du worker adapté en conséquence
+('./xmllint-browser.mjs' → './xmllint-browser.js'). xmllint.wasm et xmllint-browser.js sont identiques à l'original.
