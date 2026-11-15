@@ -9438,14 +9438,14 @@ async function createCreditFromInvoice(id) {
     // Avoir COMMERCIAL ≠ retour PHYSIQUE : le stock n'est remis que si l'utilisateur déclare la marchandise revenue (quantités par ligne)
     const returnLines = await askCreditReturn(original);
     if (returnLines === null) return;      // fenêtre fermée : rien n'est créé
-    let creditNumber;
-    try { creditNumber = await getNextNumber('credit'); }
+    let numeroAvoir;
+    try { numeroAvoir = await getNextNumber('credit'); }
     catch (e) { if (e instanceof NumberingError) { showToast(e.message, 'error'); return; } throw e; }
     
     // Créer l'avoir avec items en NÉGATIF
     const credit = {
         id: uuid(),
-        number: creditNumber,
+        number: numeroAvoir,
         type: 'credit',
         relatedInvoiceId: original.id,
         relatedInvoiceNumber: original.number,
@@ -9477,7 +9477,7 @@ async function createCreditFromInvoice(id) {
     logDoc('avoir', credit, `sur ${original.number}`);
     stockOnCreditIssued(credit).catch(e => console.warn('Stock :', e));
     
-    showToast(`✓ Avoir ${creditNumber} créé`, 'success');
+    showToast(`✓ Avoir ${numeroAvoir} créé`, 'success');
     renderInvoices();
 }
 
@@ -9603,11 +9603,11 @@ async function createPartialCredit(id) {
         if (b.error) return showToast(b.error, 'error');
         if (reason.length < 3) return showToast('Indiquez le motif de l\'avoir (3 caractères minimum)', 'error');
         busy = true;
-        let creditNumber;
-        try { creditNumber = await getNextNumber('credit'); }
+        let numeroAvoir;
+        try { numeroAvoir = await getNextNumber('credit'); }
         catch (e) { busy = false; if (e instanceof NumberingError) { showToast(e.message, 'error'); return; } throw e; }
         const credit = {
-            id: uuid(), number: creditNumber, type: 'credit', partial: true,
+            id: uuid(), number: numeroAvoir, type: 'credit', partial: true,
             relatedInvoiceId: original.id, relatedInvoiceNumber: original.number,
             clientId: original.clientId, clientName: original.clientName, clientICE: original.clientICE, clientAddress: original.clientAddress,
             date: todayISO(), dueDate: todayISO(), items: b.items, ...b.totals, status: 'sent',
@@ -9620,7 +9620,7 @@ async function createPartialCredit(id) {
         logDoc('avoir', credit, `partiel sur ${original.number}`);
         modal.remove();
         stockOnCreditIssued(credit).catch(e => console.warn('Stock :', e));
-        showToast(`✓ Avoir ${creditNumber} créé (${formatCurrency(-credit.totalTTC)})`, 'success');
+        showToast(`✓ Avoir ${numeroAvoir} créé (${formatCurrency(-credit.totalTTC)})`, 'success');
         renderInvoices();
     });
     document.body.appendChild(modal);
