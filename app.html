@@ -7459,6 +7459,8 @@ const Storage = {
         // En mode cloud, la licence n'est jamais écrite par le navigateur
         if (USE_SUPABASE && baseKey === 'licenseInfo') return;
         // Équipe : chaque donnée de l'entreprise passe par sa fonction contrôlée (jamais un bloc écrasant le travail d'un autre membre)
+        // teamRoute : 'shared' | 'company' | 'blob' (fonctions d'équipe), 'local' (préférence d'un collaborateur, sur l'appareil), ou null
+        let teamRoute = null;
         if (Team.active()) {
             const tr = Team.route(baseKey);
             if (tr !== 'personal' && tr !== 'doc') {
@@ -7469,22 +7471,14 @@ const Storage = {
                     Team.reloadKey(baseKey);
                     return;
                 }
-                Team._store(baseKey, val);
-                if (tr === 'shared') Team.saveShared(baseKey, val);
-                else if (tr === 'company') Team.saveCompany(val);
-                else Team.saveBlob(baseKey, val);
-                return;
+                teamRoute = tr;
             }
             if (tr === 'doc' && !DocStoreGlue.usesDocuments()) { delete this._cache[baseKey]; DocStoreGlue.refusedToast(); return; }
             // collaborateur : ses préférences d'affichage restent sur l'appareil (son accès dépend de l'abonnement de l'entreprise, pas d'un abonnement personnel)
-            if (tr === 'personal' && Team.isCollaborator()) {
-                this._cache[baseKey] = val;
-                try { localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(val)); } catch {}
-                return;
-            }
+            if (tr === 'personal' && Team.isCollaborator()) teamRoute = 'local';
         }
         // Nouveau stockage : un seul chemin d'écriture par compte ; refus local explicite si le compte n'y est pas autorisé à écrire
-        const docRoute = DocStoreGlue.route(baseKey);
+        const docRoute = teamRoute ? null : DocStoreGlue.route(baseKey);
         if (docRoute === 'refused') { delete this._cache[baseKey]; DocStoreGlue.refusedToast(); return; }
         this._cache[baseKey] = val;
         
@@ -7493,6 +7487,11 @@ const Storage = {
             localStorage.setItem(this._buildLocalKey(key, this._currentUserId), JSON.stringify(val));
         }
         
+        if (teamRoute === 'local') return;
+        if (teamRoute === 'shared') { Team.saveShared(baseKey, val); return; }
+        if (teamRoute === 'company') { Team.saveCompany(val); return; }
+        if (teamRoute === 'blob') { Team.saveBlob(baseKey, val); return; }
+
         // Mode « documents » : opérations par document (upsert_document, record_payment, …) ; AUCUNE écriture dans user_data pour ces clés
         if (docRoute === 'documents') { DocStoreGlue.commit(baseKey, val); return; }
 
