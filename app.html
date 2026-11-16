@@ -12272,7 +12272,7 @@ function editProduct(id) {
     document.getElementById('productModal').classList.add('active');
 }
 
-function saveProduct() {
+async function saveProduct() {
     const name = document.getElementById('modalProductName').value.trim();
     const price = parseFloat(document.getElementById('modalProductPrice').value);
     
