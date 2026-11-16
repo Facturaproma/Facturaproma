@@ -12262,7 +12262,6 @@ function editProduct(id) {
     document.getElementById('modalProductUnit').value = product.unit || 'unité';
     document.getElementById('modalProductCategory').value = product.category || '';
     document.getElementById('modalProductTrack').checked = !!product.trackStock;
-    document.getElementById('modalProductAlert').value = product.stockAlert || '';
     const ap = stockAlertOf(product.id) || {};
     document.getElementById('modalStockMinPct').value = ap.min_percent ?? product.stockMinPercent ?? 30;
     document.getElementById('modalStockSalesWindow').value = ap.sales_window_days ?? product.stockSalesWindow ?? 90;
@@ -12300,7 +12299,6 @@ async function saveProduct() {
         unit: document.getElementById('modalProductUnit').value,
         category: document.getElementById('modalProductCategory').value.trim(),
         trackStock: document.getElementById('modalProductTrack').checked,
-        stockAlert: Math.max(0, parseFloat(document.getElementById('modalProductAlert').value) || 0), // compatibilité ancienne version
         stockMinPercent: Math.min(100, Math.max(0, parseFloat(document.getElementById('modalStockMinPct').value) || 30)),
         stockSalesWindow: Math.max(7, parseInt(document.getElementById('modalStockSalesWindow').value, 10) || 90),
         stockReferenceDays: Math.max(1, parseInt(document.getElementById('modalStockReferenceDays').value, 10) || 30),
