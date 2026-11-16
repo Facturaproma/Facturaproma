@@ -2,7 +2,7 @@
 
 > Logiciel de facturation pensé pour le Maroc : Auto-Entrepreneurs, Freelances et petites entreprises. FacturaPro n'est pas certifié par la DGI et ne prend pas en charge la facturation électronique DGI pour le moment.
 
-[![Status](https://img.shields.io/badge/status-pré--lancement-orange)]()
+[![Status](https://img.shields.io/badge/status-commercial-green)]()
 [![Made in Morocco](https://img.shields.io/badge/Made%20in-Morocco%20🇲🇦-red)]()
 [![Stack](https://img.shields.io/badge/stack-HTML%20%2B%20Supabase-blue)]()
 
@@ -111,7 +111,7 @@ Essai gratuit de 30 jours, sans carte bancaire. Paiement par virement, puis acti
 - [x] Période d'essai 30 jours
 - [ ] Application mobile (Capacitor)
 - [ ] Intégration paiement CMI
-- [ ] Multi-langues (Arabe RTL)
+- [x] Français + arabe RTL
 - [ ] Comptabilité de base
 - [ ] API publique
 
@@ -119,7 +119,7 @@ Essai gratuit de 30 jours, sans carte bancaire. Paiement par virement, puis acti
 
 ## 🤝 Contribution
 
-Ce projet est privé pour l'instant. Pour toute question :
+Le dépôt public contient uniquement la vitrine et le frontend publié. Le backend, les règles serveur, les scripts SQL et les procédures d’exploitation restent hors de ce dépôt. Pour toute question :
 - Le contact de support (WhatsApp, e-mail) se configure dans **Admin → Réglages** et s'affiche dans l'application, page Abonnement.
 
 ---
