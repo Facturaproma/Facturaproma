@@ -1314,6 +1314,53 @@
         .footer-col h4 { text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; }
         @media (max-width: 640px) { body .hero.hero { padding-top: 92px !important; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+        /* === RESPONSIVE MOBILE HARDENING ===
+           Short feature cards stay compact; fiscal/news cards use full width
+           so their explanatory Arabic/French content remains readable. */
+        @media (max-width: 900px) {
+            .features-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 14px !important;
+            }
+            #nouveautes .features-grid {
+                grid-template-columns: 1fr !important;
+                gap: 14px !important;
+            }
+            #nouveautes .feature {
+                padding: 20px !important;
+            }
+        }
+        @media (max-width: 600px) {
+            .features-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 10px !important;
+            }
+            .feature {
+                padding: 15px !important;
+            }
+            .feature h3 {
+                font-size: 17px;
+                line-height: 1.35;
+            }
+            .feature p {
+                font-size: 12.5px;
+                line-height: 1.55;
+            }
+            #nouveautes .feature {
+                padding: 18px !important;
+            }
+            #nouveautes .feature h3 {
+                font-size: 19px;
+            }
+            #nouveautes .feature p,
+            #nouveautes .nv-list {
+                font-size: 13px;
+            }
+            #nouveautes .nv-list li {
+                padding-top: 4px;
+                padding-bottom: 4px;
+            }
+        }
 </style>
 </head>
 <body>
@@ -1945,11 +1992,11 @@ const AR_DICT = {
 "Et la facture électronique de la DGI ?": "وماذا عن الفوترة الإلكترونية للمديرية العامة للضرائب؟",
 "La DGI a annoncé une facturation électronique progressive (d'abord entre entreprises), mais <strong>le décret d'application n'est pas encore publié</strong> : le format, les dates et les entreprises concernées ne sont pas fixés. FacturaPro ne prétend donc pas être connecté à la plateforme de la DGI aujourd'hui. Vos factures sont déjà structurées (ICE, lignes, TVA, dates) et nous suivons le dossier : nous adapterons FacturaPro dès que les textes officiels seront publiés. En attendant, vérifiez vos obligations auprès de la DGI ou de votre comptable.": "أعلنت المديرية العامة للضرائب عن فوترة إلكترونية تدريجية (بين المقاولات أولاً)، لكن <strong>المرسوم التطبيقي لم يُنشر بعد</strong> : الصيغة والتواريخ والمقاولات المعنية غير محددة. لذلك لا يدّعي FacturaPro أنه مرتبط بمنصة المديرية اليوم. فواتيرك منظّمة أصلاً (ICE والبنود والضريبة والتواريخ) ونتابع الملف : سنكيّف FacturaPro فور نشر النصوص الرسمية. في هذه الأثناء، تحقق من التزاماتك لدى المديرية العامة للضرائب أو محاسبك.",
 "Déjà abonné ?": "لديك حساب؟",
-"🚀 Essai Gratuit 30 jours": "🚀 جرّب مجاناً",
+"🚀 Essai Gratuit 30 jours": "🚀 ابدأ مجاناً",
 "🇲🇦 Pensé pour la facturation au Maroc": "🇲🇦 مصمّم للفوترة في المغرب",
 "La facturation<br>marocaine, <em>enfin simple</em>.": "الفوترة المغربية،<br><em>أخيراً بكل بساطة</em>.",
 "Le logiciel pensé par et pour les <strong>auto-entrepreneurs</strong>, <strong>freelances</strong> et <strong>SARL</strong> du Maroc. ICE, IF, RC, CNSS, TVA — tout est déjà intégré.": "برنامج مصمّم من أجل <strong>المقاولين الذاتيين</strong> و<strong>المستقلين</strong> و<strong>الشركات (SARL)</strong> في المغرب. ICE وIF وRC وCNSS والضريبة على القيمة المضافة — كل شيء مدمج.",
-"Essayer gratuitement →": "جرّب مجاناً ←",
+"Essayer gratuitement →": "ابدأ مجاناً ←",
 "Voir les tarifs": "شاهد الأسعار",
 "✓ 30 jours d'essai gratuit · sans carte bancaire": "✓ 30 يوماً تجريبياً مجاناً · بدون بطاقة بنكية",
 "✓ Nouveau produit : vos retours façonnent la suite": "✓ منتج جديد: ملاحظاتكم هي التي تحدد ما سيأتي",
