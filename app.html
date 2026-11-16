@@ -5789,9 +5789,33 @@
                 <div style="font-size: 11px; color: var(--ink-mute); margin-top: 4px;">Chaque facture émise déduira la quantité vendue.</div>
             </div>
             <div>
-                <label>Seuil d'alerte</label>
-                <input type="number" id="modalProductAlert" min="0" step="0.001" placeholder="ex. 5">
+                <label>Seuil physique minimum (%)</label>
+                <input type="number" id="modalStockMinPct" min="0" max="100" step="1" value="30">
+                <div style="font-size:11px;color:var(--ink-mute);margin-top:4px;">% du stock de référence. À ce niveau : stock critique.</div>
             </div>
+        </div>
+        <div class="form-row" id="stockAlertSettings">
+            <div>
+                <label>Historique des ventes (jours)</label>
+                <input type="number" id="modalStockSalesWindow" min="7" max="730" step="1" value="90">
+            </div>
+            <div>
+                <label>Stock de référence (jours)</label>
+                <input type="number" id="modalStockReferenceDays" min="1" max="3650" step="1" value="30">
+            </div>
+        </div>
+        <div class="form-row" id="stockCommercialSettings">
+            <div>
+                <label>Délai fournisseur (jours)</label>
+                <input type="number" id="modalStockLeadTime" min="0" max="3650" step="1" value="7">
+            </div>
+            <div>
+                <label>Stock de sécurité (jours)</label>
+                <input type="number" id="modalStockSafetyDays" min="0" max="3650" step="1" value="3">
+            </div>
+        </div>
+        <div style="font-size:11px;color:var(--ink-mute);margin:-4px 0 12px;">
+            Seuil commercial = ventes moyennes/jour × (délai fournisseur + sécurité). Il déclenche une recommandation de réapprovisionnement sans bloquer la vente.
         </div>
 
         <div class="modal-actions">
@@ -10871,7 +10895,20 @@ async function stockRefreshLevels() {
     } catch (e) { /* sql/36 absent */ }
 }
 let _stockVal = {};            // product_id -> { cmup, value, unknown } (sql/36)
+let _stockAlerts = {};         // product_id -> alert policy/calculation (sql/67)
 const stockValOf = (pid) => _stockVal[pid] || null;
+const stockAlertOf = (pid) => _stockAlerts[pid] || null;
+
+async function stockRefreshAlerts() {
+    if (!stockServer()) return;
+    try {
+        const { data, error } = await supaClient.rpc('stock_alerts');
+        if (!error && Array.isArray(data)) {
+            _stockAlerts = {};
+            data.forEach(r => { _stockAlerts[r.product_id] = r; });
+        }
+    } catch (e) { console.warn('Stock alertes :', e); }
+}
 // Enregistre des mouvements (client). Retourne 'ok' | 'queued' | 'error'.
 async function stockRecord(list) {
     if (!list.length) return 'ok';
@@ -11023,7 +11060,7 @@ async function renderStock() {
     const tok = ++_stockRenderTok;
     const products = Storage.get('products', []) || [];
     const q = (document.getElementById('stockSearch')?.value || '').toLowerCase();
-    try { await stockRefreshLevels(); } catch (e) { console.warn('Stock :', e); }
+    try { await stockRefreshLevels(); await stockRefreshAlerts(); } catch (e) { console.warn('Stock :', e); }
     if (tok !== _stockRenderTok) return;
     const tracked = products.filter(p => p.trackStock && (!q || (p.name || '').toLowerCase().includes(q)));
     const cur = document.getElementById('stockCurrent');
@@ -11032,12 +11069,18 @@ async function renderStock() {
     } else {
         const pend = stockOutbox().length;
         cur.innerHTML = (pend ? `<div style="padding:8px 16px; font-size:12px; color:var(--warning);">📶 ${pend} mouvement${pend > 1 ? 's' : ''} en attente d'envoi (connexion).</div>` : '') +
-            `<table class="tbl-act"><thead><tr><th>Produit</th><th>Stock</th><th>Coût moyen</th><th>Valeur</th><th>État</th></tr></thead><tbody>${tracked.map(p => {
-            const lv = stockLevel(p.id), alert = Number(p.stockAlert) || 0;
-            const st = lv < 0 ? '<span style="color:var(--danger);font-weight:600;">Négatif</span>' : lv === 0 ? '<span style="color:var(--danger);font-weight:600;">Rupture</span>' : (alert > 0 && lv <= alert) ? '<span style="color:var(--warning);font-weight:600;">Stock bas</span>' : '<span style="color:var(--success);">OK</span>';
+            `<table class="tbl-act"><thead><tr><th>Produit</th><th>Stock</th><th>Seuil physique</th><th>Seuil commercial</th><th>Coût moyen</th><th>Valeur</th><th>État</th></tr></thead><tbody>${tracked.map(p => {
+            const lv = stockLevel(p.id), a = stockAlertOf(p.id), legacyAlert = Number(p.stockAlert) || 0;
+            const physical = a?.physical_threshold == null ? legacyAlert : Number(a.physical_threshold);
+            const commercial = a?.commercial_threshold == null ? null : Number(a.commercial_threshold);
+            const st = lv <= 0 ? '<span style="color:var(--danger);font-weight:600;">Rupture</span>' :
+                (a?.status === 'critique' || (physical > 0 && lv <= physical)) ? '<span style="color:var(--danger);font-weight:600;">Stock critique</span>' :
+                (a?.status === 'reapprovisionnement' || (commercial !== null && lv <= commercial)) ? '<span style="color:var(--warning);font-weight:600;">Réapprovisionnement</span>' :
+                (a?.status === 'historique_insuffisant') ? '<span style="color:var(--ink-mute);font-weight:600;">Historique insuffisant</span>' :
+                '<span style="color:var(--success);">OK</span>';
             const val = stockValOf(p.id);
             const cm = val && val.cmup !== null ? formatCurrency(val.cmup) + (val.unknown ? ' <span title="Des mouvements n\'ont pas de coût saisi : valeur estimée" style="color:var(--warning);">*</span>' : '') : '<span style="color:var(--ink-mute);">—</span>';
-            return `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td><strong>${stockFmt(lv)}</strong> ${escapeHtml(p.unit || 'unité')}</td><td>${cm}</td><td>${val && val.cmup !== null ? formatCurrency(val.value) : '—'}</td><td>${st}</td></tr>`;
+            return `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td><strong>${stockFmt(lv)}</strong> ${escapeHtml(p.unit || 'unité')}</td><td>${physical > 0 ? stockFmt(physical) : '—'}</td><td>${commercial !== null ? stockFmt(commercial) : '—'}</td><td>${cm}</td><td>${val && val.cmup !== null ? formatCurrency(val.value) : '—'}</td><td>${st}</td></tr>`;
         }).join('')}</tbody></table>` + (() => {
             const vals = tracked.map(p => stockValOf(p.id)).filter(Boolean), tot = vals.reduce((t, v) => t + (v.value || 0), 0), unk = vals.some(v => v.unknown) || tracked.some(p => { const v = stockValOf(p.id); return stockLevel(p.id) > 0 && (!v || v.cmup === null); });
             return Object.keys(_stockVal).length ? `<div style="padding:10px 16px; font-size:13px;">Valeur totale du stock (coût moyen pondéré) : <strong>${formatCurrency(tot)}</strong>${unk ? ' <span style="color:var(--warning);">— * certaines entrées n\'ont pas de coût saisi : valeur estimée ou incomplète</span>' : ''}</div>` : '';
@@ -12219,11 +12262,16 @@ function editProduct(id) {
     document.getElementById('modalProductUnit').value = product.unit || 'unité';
     document.getElementById('modalProductCategory').value = product.category || '';
     document.getElementById('modalProductTrack').checked = !!product.trackStock;
-    document.getElementById('modalProductAlert').value = product.stockAlert || '';
+    const ap = stockAlertOf(product.id) || {};
+    document.getElementById('modalStockMinPct').value = ap.min_percent ?? product.stockMinPercent ?? 30;
+    document.getElementById('modalStockSalesWindow').value = ap.sales_window_days ?? product.stockSalesWindow ?? 90;
+    document.getElementById('modalStockReferenceDays').value = ap.reference_days ?? product.stockReferenceDays ?? 30;
+    document.getElementById('modalStockLeadTime').value = ap.lead_time_days ?? product.stockLeadTimeDays ?? 7;
+    document.getElementById('modalStockSafetyDays').value = ap.safety_days ?? product.stockSafetyDays ?? 3;
     document.getElementById('productModal').classList.add('active');
 }
 
-function saveProduct() {
+async function saveProduct() {
     const name = document.getElementById('modalProductName').value.trim();
     const price = parseFloat(document.getElementById('modalProductPrice').value);
     
@@ -12251,7 +12299,11 @@ function saveProduct() {
         unit: document.getElementById('modalProductUnit').value,
         category: document.getElementById('modalProductCategory').value.trim(),
         trackStock: document.getElementById('modalProductTrack').checked,
-        stockAlert: Math.max(0, parseFloat(document.getElementById('modalProductAlert').value) || 0),
+        stockMinPercent: Math.min(100, Math.max(0, parseFloat(document.getElementById('modalStockMinPct').value) || 30)),
+        stockSalesWindow: Math.max(7, parseInt(document.getElementById('modalStockSalesWindow').value, 10) || 90),
+        stockReferenceDays: Math.max(1, parseInt(document.getElementById('modalStockReferenceDays').value, 10) || 30),
+        stockLeadTimeDays: Math.max(0, parseInt(document.getElementById('modalStockLeadTime').value, 10) || 7),
+        stockSafetyDays: Math.max(0, parseInt(document.getElementById('modalStockSafetyDays').value, 10) || 3),
         createdAt: editingProductId ? products.find(p => p.id === editingProductId)?.createdAt : new Date().toISOString()
     };
     
@@ -12263,6 +12315,26 @@ function saveProduct() {
     }
     
     Storage.set('products', products);
+    if (data.trackStock && stockServer()) {
+        try {
+            const { error } = await supaClient.rpc('stock_alert_policy_set', {
+                p_product_id: data.id,
+                p_policy: {
+                    min_percent: data.stockMinPercent,
+                    sales_window_days: data.stockSalesWindow,
+                    reference_days: data.stockReferenceDays,
+                    lead_time_days: data.stockLeadTimeDays,
+                    safety_days: data.stockSafetyDays,
+                    reference_mode: 'auto'
+                }
+            });
+            if (error) throw error;
+            await stockRefreshAlerts();
+        } catch (e) {
+            console.warn('Politique stock non enregistrée côté serveur :', e);
+            showToast('Produit enregistré, mais la politique d’alerte stock n’a pas pu être synchronisée.', 'warning');
+        }
+    }
     closeModal('productModal');
     showToast('Produit enregistré ✓', 'success');
     renderProducts();
