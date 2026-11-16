@@ -1,10 +1,10 @@
-# Plan de lancement — premier groupe de professionnels marocains
+# Plan commercial — FacturaPro
 
-**Statut :** proposition à valider. Aucune action commerciale ni technique n'est engagée. Tous les chiffres d'objectif ci-dessous sont des **hypothèses à calibrer**, pas des prévisions.
+**Statut :** FacturaPro est en phase commerciale. Les fonctionnalités, règles serveur et modules fiscaux déjà validés en production ne doivent pas être modifiés dans le cadre de ce document. Les objectifs ci-dessous sont des **hypothèses de pilotage**, pas des prévisions.
 
-## 1. Conditions avant d'ouvrir à des clients payants (non négociables)
+## 1. Conditions de commercialisation
 
-- Dépôt `main` inchangé tant que vous n'avez pas donné l'accord ; mise en production dans l'ordre : sauvegarde → SQL 14 → vérification en préproduction (voir `PREPRODUCTION_SUPABASE.md`) → application.
+- Toute évolution du backend, des règles serveur ou du fiscal doit rester hors de ce chantier commercial et suivre la procédure de validation dédiée.
 - Mentions légales et conditions sans espace réservé ; adresse de support réelle ; e-mail d'envoi sous votre domaine ; captcha actif ; comptes de test supprimés.
 - Aucune mention « certifié DGI », « conforme facturation électronique » ou équivalent. Formulation à utiliser : « Factures avec les mentions usuelles, numérotation séquentielle non modifiable. La facturation électronique DGI n'est pas prise en charge pour le moment ; vérifiez le calendrier qui vous concerne auprès de la DGI ou de votre comptable. » Je n'ai trouvé aucune source officielle accessible (le site de la DGI était inaccessible aux outils) : seules des sources secondaires (éditeurs, presse) indiquent un calendrier non définitif.
 - Un parcours support clair : où écrire, délai de réponse promis (ex. 24 h ouvrées).
@@ -13,7 +13,7 @@
 
 **Auto-entrepreneurs et petits prestataires de services** (formateurs, consultants, artisans-prestataires, développeurs, photographes, coachs) **qui facturent depuis leur téléphone**, 5 à 30 factures par mois, en français avec une partie de clients en arabe.
 
-Pourquoi eux d'abord : besoins fiscaux simples ; décision d'achat immédiate sans comité ; le prix de 49 DH/mois se compare à 124 DH/mois (Hisab Starter) et 199 DH/mois (Mafactu Starter), relevés sur leurs pages publiques le 21 octobre 2026 ; leurs concurrents ciblent plutôt les PME. À réévaluer : ce sont des constats de prix publics, pas une étude de marché ; la préférence réelle des clients reste à mesurer.
+Pourquoi eux d’abord : besoin immédiat de facturation, usage mobile, décision d’achat courte et intérêt pour les fonctions adaptées au contexte marocain. Les prix et la cible seront réévalués à partir des retours clients réels.
 
 Hors cible pour l'instant : PME avec retenue à la source ou acomptes complexes, fiduciaires multi-clients, entreprises soumises dès 2026 à la facturation électronique (si le calendrier officiel les concerne).
 
@@ -25,7 +25,7 @@ Hors cible pour l'instant : PME avec retenue à la source ou acomptes complexes,
 
 À ne pas promettre : facturation électronique DGI, signature électronique, comptabilité complète.
 
-## 4. Prix à tester (en MAD, TTC non précisé : à fixer avec votre statut fiscal)
+## 4. Prix commercial actuel (TTC)
 
 | Offre | Prix | Rôle dans le test |
 |---|---|---|
@@ -57,7 +57,7 @@ Canaux à ne pas surévaluer : publicité payante (budget 300 MAD/mois, peu de m
 | Rétention à 30 jours | Payants encore actifs 30 jours après | ≥ 80 % |
 | Fiabilité | Incidents de numérotation / perte de données | 0 |
 | Support | Délai médian de première réponse | ≤ 24 h |
-| Objectif de revenu (hypothèse) | 20 payants × 49 DH | ≈ 980 DH/mois |
+| Objectif de revenu (hypothèse) | 20 payants | À calibrer selon la répartition Essentielle/Pro |
 
 Ces seuils sont des points de départ de bon sens, pas des références de marché vérifiées.
 
