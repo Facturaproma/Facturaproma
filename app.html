@@ -8070,11 +8070,11 @@ function jsArg(v) {
     return "'" + String(v == null ? '' : v).replace(/[^A-Za-z0-9_.:@ -]/g, (c) => { const n = c.charCodeAt(0); return n < 256 ? '\\x' + ('0' + n.toString(16)).slice(-2) : '\\u' + ('000' + n.toString(16)).slice(-4); }) + "'";
 }
 
-function showToast(message, type = '') {
+function showToast(message, type = '', duration = 3000) {
     const toast = document.getElementById('toast');
     toast.textContent = message;
     toast.className = 'toast show ' + type;
-    setTimeout(() => toast.classList.remove('show'), 3000);
+    setTimeout(() => toast.classList.remove('show'), duration);
 }
 
 // ---- Calculs (arrondi à 2 décimales, ligne par ligne) -------------------
@@ -10250,6 +10250,10 @@ async function _persistEditor(forceStatus = null) {
             // Période clôturée (sql/40) : une facture ne peut pas être émise à une date clôturée (aucun numéro n'est consommé)
             await finLoadLock();
             if (finIsClosed(document.getElementById('editorDate').value)) { showToast(finClosedMsg(), 'error'); return null; }
+            // Stock physique (sql/66) : si une sortie est impossible, la facture n'est pas émise et aucun numéro n'est consommé.
+            const lacks = await stockShortages({ items, date: document.getElementById('editorDate').value });
+            if (lacks === null) { showToast(stockT('Impossible de vérifier votre stock pour le moment : vérifiez la connexion puis réessayez. La facture n\'a pas été émise.', 'تعذّر التحقق من مخزونكم حاليا: تحقّقوا من الاتصال ثم أعيدوا المحاولة. لم يتم إصدار الفاتورة.'), 'error', 6000); return null; }
+            if (lacks.length) { showToast(stockShortagesText(lacks), 'error', 8000); return null; }
             // Émission : le numéro officiel vient du serveur. Sans serveur, on reste en brouillon.
             try { number = await getNextNumber('invoice'); justIssued = true; }
             catch (e) {
@@ -10832,6 +10836,34 @@ const stockToServer = (m) => ({ product_id: m.productId, product_name: m.product
     ...(m.unitCost !== undefined && m.unitCost !== null && m.unitCost !== '' ? { unit_cost: Number(m.unitCost) } : {}), ...(m.returnOf ? { return_of: m.returnOf } : {}) });   // sql/36 : coût d'entrée, retour au coût de la sortie d'origine
 const STOCK_SRC_LABEL = { invoice: 'Facture', credit: 'Avoir', manual: 'Manuel', purchase: 'Achat', delivery: 'BL' };
 const STOCK_FATAL = /(_INVALIDE|TROP_DE_MOUVEMENTS|LIMITE_STOCK|PRODUIT_INVALIDE)/;
+// STOCK_INSUFFISANT (sql/66) : refus métier définitif (jamais une erreur réseau) → jamais mis en file d'attente.
+const STOCK_SHORT = /STOCK_INSUFFISANT/;
+const stockT = (fr, ar) => (typeof I18n !== 'undefined' && I18n.currentLang === 'ar') ? ar : fr;
+function stockShortText(msg, name) {
+    const m = /disponible=(-?[\d.]+), demande=([\d.]+)/.exec(String(msg || ''));
+    const av = m ? stockFmt(m[1]) : null, wa = m ? stockFmt(m[2]) : null;
+    return stockT(
+        `Stock insuffisant${name ? ' pour « ' + name + ' »' : ''}${m ? ` : ${av} disponible(s), ${wa} demandé(s)` : ''}. Rien n'a été enregistré : ajustez la quantité ou enregistrez d'abord une entrée de stock.`,
+        `المخزون غير كافٍ${name ? ' للمنتج «' + name + '»' : ''}${m ? `: المتوفر ${av} والمطلوب ${wa}` : ''}. لم يتم تسجيل أي شيء: عدّلوا الكمية أو سجّلوا أولاً دخولاً للمخزون.`);
+}
+// Avant d'émettre une facture : quantités demandées (produits suivis, hors lignes déjà sorties par un BL) contre le stock du serveur.
+// Retourne [] (rien à signaler), une liste de manques, ou null si le stock n'a pas pu être vérifié.
+async function stockShortages(doc) {
+    const lines = stockLines(doc, 'out', 'inv');
+    if (!lines.length || !stockServer()) return [];
+    const need = {};
+    lines.forEach(m => { const n = need[m.productId] || (need[m.productId] = { name: m.productName, wanted: 0 }); n.wanted = stockRound(n.wanted + m.qty); });
+    const { data, error } = await supaClient.rpc('stock_levels');
+    if (error || !Array.isArray(data)) return null;
+    const lv = {}; data.forEach(r => { lv[r.product_id] = Number(r.level) || 0; });
+    return Object.keys(need).filter(id => stockRound(lv[id] || 0) < need[id].wanted).map(id => ({ name: need[id].name, available: stockRound(lv[id] || 0), wanted: need[id].wanted }));
+}
+function stockShortagesText(list) {
+    const fr = list.map(x => `${x.name} (${stockFmt(x.available)} disponible(s), ${stockFmt(x.wanted)} demandé(s))`).join(' ; ');
+    const ar = list.map(x => `${x.name} (المتوفر ${stockFmt(x.available)}، المطلوب ${stockFmt(x.wanted)})`).join(' ؛ ');
+    return stockT(`Stock insuffisant : ${fr}. La facture n'a pas été émise et aucun numéro n'a été utilisé. Ajustez les quantités ou enregistrez d'abord un achat ou une entrée de stock.`,
+                  `المخزون غير كافٍ: ${ar}. لم يتم إصدار الفاتورة ولم يُستهلك أي رقم. عدّلوا الكميات أو سجّلوا أولاً عملية شراء أو دخولاً للمخزون.`);
+}
 // File d'attente : mouvements non envoyés (réseau coupé). Rejouables : le serveur ignore les clés déjà enregistrées.
 function stockOutbox() { const o = Storage.get('stockOutbox', []); return Array.isArray(o) ? o : []; }
 async function stockSend(payloads) {
@@ -10849,6 +10881,16 @@ async function stockFlush() {
     const q = stockOutbox();
     if (q.length) { try { await stockSend(q); Storage.set('stockOutbox', []); } catch (e) {
         if (STOCK_FATAL.test(e.message || '')) { console.warn('Stock : mouvements invalides abandonnés', e.message); Storage.set('stockOutbox', []); }
+        else if (STOCK_SHORT.test(e.message || '')) {
+            // Un seul mouvement insuffisant faisait échouer tout le lot à chaque rejeu : on les rejoue un par un ; les refus partent à part.
+            const kept = [], refused = [];
+            for (const m of q) { try { await stockSend([m]); } catch (e2) { (STOCK_SHORT.test(e2.message || '') ? refused : kept).push(m); } }
+            Storage.set('stockOutbox', kept);
+            if (refused.length) {
+                Storage.set('stockOutboxRefused', (Storage.get('stockOutboxRefused', []) || []).concat(refused).slice(-500));
+                showToast(stockT(`Stock insuffisant : ${refused.length} sortie(s) en attente n'ont pas pu être enregistrées. Vérifiez votre stock réel.`, `المخزون غير كافٍ: تعذّر تسجيل ${refused.length} عملية خروج معلّقة. تحقّقوا من مخزونكم الفعلي.`), 'warning', 6000);
+            }
+        }
         else if (/PERIODE_CLOTUREE/.test(e.message || '')) {
             // Mouvements hors ligne datés dans une période clôturée depuis : mis de côté (copie locale), les autres sont renvoyés.
             const lock = await finLoadLock(true), late = q.filter(m => lock && String(m.date).slice(0, 10) <= lock), rest = q.filter(m => !late.includes(m));
@@ -10872,7 +10914,7 @@ async function stockRefreshLevels() {
 }
 let _stockVal = {};            // product_id -> { cmup, value, unknown } (sql/36)
 const stockValOf = (pid) => _stockVal[pid] || null;
-// Enregistre des mouvements (client). Retourne 'ok' | 'queued' | 'error'.
+// Enregistre des mouvements (client). Retourne 'ok' | 'queued' | 'error' | 'insufficient' (STOCK_INSUFFISANT : refus définitif, jamais mis en file).
 async function stockRecord(list) {
     if (!list.length) return 'ok';
     if (!stockServer()) {
@@ -10883,6 +10925,7 @@ async function stockRecord(list) {
     catch (e) {
         const msg = e.message || '';
         if (STOCK_FATAL.test(msg)) { showToast('Stock : mouvement refusé (' + msg + ')', 'error'); return 'error'; }
+        if (STOCK_SHORT.test(msg)) { showToast(stockShortText(msg, list.length === 1 ? list[0].productName : ''), 'error', 6000); return 'insufficient'; }
         if (/LICENCE_INACTIVE/.test(msg)) { showToast('🔒 Licence inactive : le stock n\'a pas été modifié.', 'error'); return 'error'; }
         if (/PERIODE_CLOTUREE/.test(msg)) { showToast('🔒 Stock : mouvement daté dans une période clôturée, refusé.', 'error'); return 'error'; }
         Storage.set('stockOutbox', stockOutbox().concat(list.map(stockToServer)));
@@ -10925,6 +10968,12 @@ async function stockOnInvoiceIssued(inv) {
     if (!stockServer()) { const ex = new Set(stockLocalMoves().map(m => m.key).filter(Boolean)); add = add.filter(m => !ex.has(m.key)); }
     if (!add.length) return [];
     const r = await stockRecord(add);
+    if (r === 'insufficient') {
+        // Course rarissime (le stock a baissé entre le contrôle et l'enregistrement) : la facture est émise, la sortie est mise de côté (jamais en file).
+        Storage.set('stockOutboxRefused', (Storage.get('stockOutboxRefused', []) || []).concat(add.map(stockToServer)).slice(-500));
+        showToast(stockT(`La facture ${dn(inv.number)} est émise, mais le stock ne permettait plus la sortie : elle n'a pas été déduite. Vérifiez votre stock réel dans Stock.`, `تم إصدار الفاتورة ${dn(inv.number)} لكن المخزون لم يعد يسمح بالخروج: لم يتم خصمه. تحقّقوا من مخزونكم الفعلي في صفحة المخزون.`), 'warning', 8000);
+        return [];
+    }
     if (r === 'error') return [];
     const short = [];
     add.forEach(m => { if (stockLevel(m.productId) < 0 && !short.includes(m.productName)) short.push(m.productName); });
@@ -10938,7 +10987,7 @@ async function stockOnCreditIssued(credit) {
     if (!stockServer()) { const ex = new Set(stockLocalMoves().map(m => m.key).filter(Boolean)); add = add.filter(m => !ex.has(m.key)); }
     if (!add.length) return [];
     const r = await stockRecord(add);
-    if (r !== 'error') showToast(`📦 Stock remis à jour (${add.length} ligne${add.length > 1 ? 's' : ''})`, 'success');
+    if (r !== 'error' && r !== 'insufficient') showToast(`📦 Stock remis à jour (${add.length} ligne${add.length > 1 ? 's' : ''})`, 'success');
     return add;
 }
 async function openStockMove(type) {
@@ -10973,7 +11022,7 @@ async function saveStockMove() {
     if (finIsClosed(date)) return showToast(finClosedMsg(), 'error');
     const r = await stockRecord([{ key: 'man:' + uuid(), productId: p.id, productName: p.name, unit: p.unit || 'unité', type, qty, ...(unitCost !== undefined ? { unitCost } : {}), date, source: 'manual', ref: '', refId: '', note: document.getElementById('stockMoveNote').value.trim().slice(0, 200) }]);
     closeModal('stockMoveModal');
-    if (r !== 'error') showToast(type === 'in' ? 'Entrée enregistrée ✓' : 'Sortie enregistrée ✓', 'success');
+    if (r !== 'error' && r !== 'insufficient') showToast(type === 'in' ? 'Entrée enregistrée ✓' : 'Sortie enregistrée ✓', 'success');
     renderStock();
 }
 function initStockPeriod() {
@@ -11289,7 +11338,7 @@ const FIN_ERRORS = { LICENCE_INACTIVE: '🔒 Licence inactive : rien n\'a été 
     MOTIF_OBLIGATOIRE: 'Motif obligatoire.', SEULE_LA_DERNIERE_CLOTURE: 'Seule la dernière clôture peut être rouverte.',
     MARCHANDISE_SANS_PRODUIT: 'Une ligne « Marchandise » doit porter un produit.', CATEGORIE_OBLIGATOIRE: 'Une ligne « Charge » doit avoir une catégorie.',
     ACHAT_REGLE: 'Cet achat a des règlements : annulez-les d\'abord (Trésorerie).', DATE_INVALIDE: 'Date invalide.', ECHEANCE_INVALIDE: 'Échéance invalide (avant la date de la pièce ?).' };
-function finErrorText(msg) { const k = Object.keys(FIN_ERRORS).find(x => String(msg || '').includes(x)); return k ? FIN_ERRORS[k] : 'Rien n\'a été enregistré (' + (String(msg || '').slice(0, 120) || 'connexion') + '). Réessayez.'; }
+function finErrorText(msg) { if (STOCK_SHORT.test(String(msg || ''))) return stockShortText(msg); const k = Object.keys(FIN_ERRORS).find(x => String(msg || '').includes(x)); return k ? FIN_ERRORS[k] : 'Rien n\'a été enregistré (' + (String(msg || '').slice(0, 120) || 'connexion') + '). Réessayez.'; }
 let _purSaving = false;
 async function savePurchase() {
     if (_purSaving) return;
