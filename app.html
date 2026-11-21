@@ -11338,7 +11338,7 @@ const FIN_ERRORS = { LICENCE_INACTIVE: '🔒 Licence inactive : rien n\'a été 
     MOTIF_OBLIGATOIRE: 'Motif obligatoire.', SEULE_LA_DERNIERE_CLOTURE: 'Seule la dernière clôture peut être rouverte.',
     MARCHANDISE_SANS_PRODUIT: 'Une ligne « Marchandise » doit porter un produit.', CATEGORIE_OBLIGATOIRE: 'Une ligne « Charge » doit avoir une catégorie.',
     ACHAT_REGLE: 'Cet achat a des règlements : annulez-les d\'abord (Trésorerie).', DATE_INVALIDE: 'Date invalide.', ECHEANCE_INVALIDE: 'Échéance invalide (avant la date de la pièce ?).' };
-function finErrorText(msg) { if (STOCK_SHORT.test(String(msg || ''))) return stockShortText(msg); const k = Object.keys(FIN_ERRORS).find(x => String(msg || '').includes(x)); return k ? FIN_ERRORS[k] : 'Rien n\'a été enregistré (' + (String(msg || '').slice(0, 120) || 'connexion') + '). Réessayez.'; }
+function finErrorText(msg) { if (STOCK_SHORT.test(String(msg || ''))) return stockShortText(msg); if (/LIGNES_INVALIDES/.test(String(msg || ''))) return stockT('Ajoutez au moins une ligne avant d\'enregistrer : rien n\'a été enregistré.', 'أضيفوا سطرا واحدا على الأقل قبل التسجيل: لم يتم تسجيل أي شيء.'); const k = Object.keys(FIN_ERRORS).find(x => String(msg || '').includes(x)); return k ? FIN_ERRORS[k] : 'Rien n\'a été enregistré (' + (String(msg || '').slice(0, 120) || 'connexion') + '). Réessayez.'; }
 let _purSaving = false;
 async function savePurchase() {
     if (_purSaving) return;
