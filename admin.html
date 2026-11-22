@@ -2891,6 +2891,7 @@ async function loadAllData() {
     if (isStaffMode()) return loadStaffData();
     showToast('Chargement...', 'info');
     refreshAdminMsgBadge();
+    await refreshDeletePermission();
     
     // Load codes
     try {
@@ -2985,6 +2986,25 @@ function updateRequestsBadge() {
 // COMPTES (vraies données serveur : sql/08_admin_comptes.sql)
 // ============================================
 let allAccounts = [];
+// Suppression de compte : réservée à l'owner. Valeur d'AFFICHAGE seulement (le serveur re-vérifie à chaque appel : admin_can_delete_accounts / admin_delete_account).
+let canDeleteAccounts = false;
+let adminEmailsLower = [];
+async function refreshDeletePermission() {
+    canDeleteAccounts = false; adminEmailsLower = [];
+    try {
+        const { data, error } = await supaClient.rpc('admin_can_delete_accounts');
+        canDeleteAccounts = !error && data === true;
+        if (canDeleteAccounts) {
+            const r = await supaClient.from('admins').select('email');
+            adminEmailsLower = (r.data || []).map(x => String(x.email || '').toLowerCase());
+        }
+    } catch (e) { canDeleteAccounts = false; }
+}
+function showDeleteFor(a) {
+    if (!canDeleteAccounts || !a) return false;
+    const em = String(a.email || '').toLowerCase();
+    return em !== String((currentAdmin && currentAdmin.email) || '').toLowerCase() && adminEmailsLower.indexOf(em) < 0;
+}
 let accountsAvailable = false;
 let accountsError = '';
 const PAID_TYPES = ['monthly', 'semestrial', 'annual', 'business', 'lifetime'];
@@ -3669,7 +3689,7 @@ function renderUsers() {
         const actions = st === 'staff' ? '—' : `
             <button class="btn btn-secondary btn-sm" onclick="openLicenseModal(${jsArg(a.user_id)})">⚙️ Licence</button>
             <button class="btn ${st === 'suspended' ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleSuspend(${jsArg(a.user_id)})">${st === 'suspended' ? '▶️ Réactiver' : '⏸️ Suspendre'}</button>
-            <button class="btn btn-danger btn-sm" title="Supprimer définitivement" onclick="deleteAccount(${jsArg(a.user_id)})">🗑️ Supprimer</button>`;
+            ${showDeleteFor(a) ? `<button class="btn btn-danger btn-sm" title="Supprimer le compte" onclick="deleteAccount(${jsArg(a.user_id)})">🗑️ Supprimer le compte</button>` : ''}`;
         return head + `
             <tr>
                 <td><strong>${esc(a.email)}</strong>${k === 'team' ? ` <span class="badge badge-mute">${esc(TEAM_ROLE_LABEL[a.team.role] || a.team.role)}${a.team.status === 'disabled' ? ' · désactivé' : ''}</span>` : ''}${k === 'team' ? `<div style="font-size:12px; color:var(--ink-mute);">${a.team.role === 'owner' ? '(titulaire du compte : le patron)' : '(collaborateur ajouté' + (teamOwnerEmail(a) ? ' par ' + esc(teamOwnerEmail(a)) : '') + ')'}</div>` : ''}${a.company_name ? `<div style="font-size:12px; color:var(--ink-mute);">🏢 ${esc(a.company_name)}</div>` : ''}</td>
@@ -3838,26 +3858,27 @@ async function toggleSuspend(uid) {
 
 async function deleteAccount(uid) {
     const a = allAccounts.find(x => x.user_id === uid);
-    if (!a) return;
-    const typed = prompt(`SUPPRESSION DÉFINITIVE de ${a.email}\n\nCompte, données, licence, codes, paiements enregistrés et demandes seront effacés. Impossible d'annuler.\n\nPour confirmer, retape l'e-mail exact :`);
-    if (typed === null) return;
-    if (typed.trim().toLowerCase() !== String(a.email).toLowerCase()) {
-        showToast('E-mail différent : suppression annulée', 'error');
-        return;
-    }
+    if (!a || !showDeleteFor(a)) return;
     try {
-        const { data, error } = await supaClient.rpc('admin_delete_account', { p_user: uid });
+        const pv = await supaClient.rpc('admin_delete_account_preview', { p_user: uid });
+        if (pv.error) throw pv.error;
+        const p = pv.data;
+        if (!p || !p.ok) throw new Error(deleteReasonText(p && p.reason));
+        const typed = prompt(`SUPPRESSION DÉFINITIVE du compte\n\nE-mail : ${p.email}\nSociété : ${p.company || '—'}\nDocuments : ${p.documents} (dont ${p.invoices} facture(s))\nBons de livraison : ${p.deliveries}\nPaiements : ${p.payments}\nLicence : ${p.license || '—'}\nMouvements de stock : ${p.stock_movements}\n\nLes paiements d'administration encaissés et leurs documents sont conservés. Impossible d'annuler.\n\nPour confirmer, tape exactement : SUPPRIMER`);
+        if (typed === null) return;
+        if (typed !== 'SUPPRIMER') { showToast('Texte différent de SUPPRIMER : suppression annulée', 'error'); return; }
+        const { data, error } = await supaClient.rpc('admin_delete_account', { p_user: uid, p_expected_email: a.email, p_confirm: typed });
         if (error) throw error;
-        if (!data || !data.ok) {
-            const why = { self: 'tu ne peux pas supprimer ton propre compte', is_admin: 'un administrateur ne peut pas être supprimé ici', unknown_user: 'compte introuvable' }[data && data.reason] || (data && data.reason) || 'refusé';
-            throw new Error(why);
-        }
+        if (!data || !data.ok) throw new Error(deleteReasonText(data && data.reason));
         showToast(`Compte supprimé : ${a.email}`, 'success');
         await loadAllData();
     } catch (err) {
         const m = String(err.message || err);
-        showToast(/admin_delete_account|function/i.test(m) ? 'Exécute sql/12_admin_supprimer_compte.sql dans Supabase' : 'Erreur : ' + m, 'error');
+        showToast(/forbidden/i.test(m) ? 'Suppression réservée à l\'owner' : /admin_delete_account|function/i.test(m) ? 'Exécute sql/70_owner_supprime_comptes.sql dans Supabase' : 'Erreur : ' + m, 'error');
     }
+}
+function deleteReasonText(r) {
+    return { self: 'tu ne peux pas supprimer ton propre compte', is_admin: 'un administrateur ne peut pas être supprimé', protected: 'compte protégé', team: 'compte lié à une équipe', unknown_user: 'compte introuvable', confirmation: 'confirmation invalide', email_mismatch: 'e-mail différent' }[r] || r || 'refusé';
 }
 
 function exportAccountsCSV() {
